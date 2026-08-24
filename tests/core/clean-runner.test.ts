@@ -6,6 +6,9 @@ import * as XLSX from 'xlsx';
 import type Database from 'better-sqlite3';
 import { openDatabase } from '../../src/core/db/database';
 import { runCleanPipeline } from '../../src/core/pipeline/clean-runner';
+import { logger } from '../../src/core/logging';
+import { arraySink } from '../../src/core/logging/sinks';
+import type { LogEntry } from '../../src/core/logging/logger';
 import type { CleanPipelineConfig } from '../../src/core/pipeline/config';
 import type { BigTableConfig } from '../../src/core/bigtable/schema';
 
@@ -45,6 +48,7 @@ describe('clean pipeline runner', () => {
   });
 
   afterEach(() => {
+    logger.clearSinks();
     db.close();
     rmSync(dir, { recursive: true, force: true });
   });
@@ -84,5 +88,13 @@ describe('clean pipeline runner', () => {
       sourceDir: join(dir, 'empty'),
     };
     await expect(runCleanPipeline(db, empty, bigTable)).rejects.toThrow();
+  });
+
+  it('logs clean start and complete (logging wired)', async () => {
+    const out: LogEntry[] = [];
+    logger.addSink(arraySink(out));
+    await runCleanPipeline(db, cfg, bigTable);
+    expect(out.some((e) => e.level === 'info' && e.message === 'clean start')).toBe(true);
+    expect(out.some((e) => e.level === 'info' && e.message === 'clean complete')).toBe(true);
   });
 });

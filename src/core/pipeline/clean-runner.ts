@@ -7,8 +7,11 @@ import { applyMapping, dbTypeFor } from '../etl/transform';
 import { writeBigTable } from '../etl/writer';
 import { attachLineage, lineageColumnNames } from '../lineage';
 import { AppError } from '../errors';
+import { logger } from '../logging';
 import type { CleanPipelineConfig } from './config';
 import type { BigTableConfig } from '../bigtable/schema';
+
+const MODULE = 'pipeline/clean';
 
 export interface CleanResult {
   pipelineId: string;
@@ -31,6 +34,11 @@ export async function runCleanPipeline(
 ): Promise<CleanResult> {
   onProgress?.({ stage: 'scan', percent: 0 });
   const files = scanSourceDir(cfg.sourceDir);
+  logger.info(MODULE, 'clean start', {
+    pipelineId: cfg.id,
+    sourceDir: cfg.sourceDir,
+    files: files.length,
+  });
   if (files.length === 0) {
     throw new AppError({
       module: 'pipeline/clean',
@@ -80,6 +88,12 @@ export async function runCleanPipeline(
   onProgress?.({ stage: 'write', percent: 70 });
   const result = await writeBigTable(db, bigTable.tableName, colDefs, allRows, (p) => {
     onProgress?.({ stage: 'write', percent: 70 + Math.round(p.percent * 0.3) });
+  });
+
+  logger.info(MODULE, 'clean complete', {
+    pipelineId: cfg.id,
+    rows: result.rowsInserted,
+    files: files.length,
   });
 
   return {
