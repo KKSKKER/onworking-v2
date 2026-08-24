@@ -87,14 +87,14 @@ export class PipelineEngine {
         const db = this.bigTableDb(cfg.bigTableFolder);
         let result;
         try {
-          result = await runCleanPipeline(db, cfg, bigTable, onProgress);
+          result = await runCleanPipeline(this.ws, db, cfg, bigTable, onProgress);
         } finally {
           db.close();
         }
         const st = new ProjectState(this.ws);
         st.setPhase(cfg.bigTableFolder, 'cleaned');
         st.registerFiles(cfg.bigTableFolder, result.files);
-        st.registerMapping(cfg.bigTableFolder, cfg.mappings.length);
+        st.registerMapping(cfg.bigTableFolder, cfg.mappings?.length ?? 0);
         st.save();
         commitWorkspaceChanges(this.ws, `pipeline ${id} (clean) ran`);
         logger.info(MODULE, 'run ok', { pipelineId: id, kind: 'clean', rows: result.rowsInserted });

@@ -40,8 +40,9 @@ describe('pipeline config', () => {
   it('validates a clean pipeline', () => {
     expect(validatePipeline(cleanCfg())).toEqual([]);
     expect(validatePipeline({ ...cleanCfg(), id: '' })).toContain('id');
-    expect(validatePipeline({ ...cleanCfg(), mappings: [] })).toContain('mappings');
-    expect(validatePipeline({ ...cleanCfg(), headerRow: 0 })).toContain('headerRow');
+    expect(validatePipeline({ ...cleanCfg(), sourceDir: '' })).toContain('sourceDir');
+    // headerRow/mappings 可选(规则驱动),但 bigTableFolder 必填
+    expect(validatePipeline({ ...cleanCfg(), bigTableFolder: '' })).toContain('bigTableFolder');
   });
 
   it('validates a query pipeline', () => {

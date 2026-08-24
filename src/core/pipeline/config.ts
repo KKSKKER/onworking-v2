@@ -13,9 +13,10 @@ export interface CleanPipelineConfig {
   /** 源文件目录(输入)。 */
   sourceDir: string;
   sheetName?: string;
-  /** 表头行(1-based)。 */
-  headerRow: number;
-  mappings: FieldMapping[];
+  /** 表头行(1-based)。规则驱动时省略,由规则 sources 提供。 */
+  headerRow?: number;
+  /** 字段映射。规则驱动时省略,由规则 fields 提供。 */
+  mappings?: FieldMapping[];
   createdAt: string;
 }
 
@@ -52,8 +53,7 @@ export function validatePipeline(cfg: PipelineConfig): string[] {
   if (cfg.kind === 'clean') {
     if (!cfg.bigTableFolder || !cfg.bigTableFolder.trim()) errors.push('bigTableFolder');
     if (!cfg.sourceDir || !cfg.sourceDir.trim()) errors.push('sourceDir');
-    if (!(cfg.headerRow >= 1)) errors.push('headerRow');
-    if (!cfg.mappings || cfg.mappings.length === 0) errors.push('mappings');
+    // headerRow/mappings 可选:可由规则 YAML 驱动
   } else if (cfg.kind === 'sql-clean') {
     if (!cfg.sql || !cfg.sql.trim()) errors.push('sql');
     if (!cfg.resultTable || !cfg.resultTable.trim()) errors.push('resultTable');

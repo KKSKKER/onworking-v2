@@ -19,6 +19,9 @@ import { loadTemplate, applyTemplateToSheet } from '../template/store';
 import type { FieldMapping } from '../etl/transform';
 import { openDatabase } from '../db/database';
 import { AppError } from '../errors';
+import { saveRule } from '../rule/store';
+import type { RuleYaml } from '../rule/rule';
+import { transformToKind } from '../rule/compile';
 
 /** tool: 打开/初始化工作区。 */
 export function toolOpenWorkspace(path: string): Workspace {
@@ -70,14 +73,30 @@ export function toolImportFiles(ws: Workspace, bigTableFolder: string, sourceDir
   return files;
 }
 
-/** tool: 设置映射 → 建清洗管线(源目录+表头行+字段映射)。 */
+/** tool: 设置映射 → 写 YAML 规则 + 建清洗管线(规则驱动,参考 V1)。 */
 export function toolSetupMapping(
   ws: Workspace,
   bigTableFolder: string,
   sourceDir: string,
   headerRow: number,
   mappings: FieldMapping[],
-): { pipelineId: string } {
+): { pipelineId: string; ruleFile: string } {
+  // 写 YAML 规则(源→大表映射的唯一真源)
+  const rule: RuleYaml = {
+    name: `${bigTableFolder}_rule`,
+    display: `提取规则: ${bigTableFolder}`,
+    version: 1,
+    sources: [{ pattern: '**/*', headerRow }],
+    fields: mappings.map((m, i) => ({
+      sourceHeader: m.sourceHeader,
+      outputName: m.outputName,
+      included: true,
+      order: i + 1,
+      transforms: [{ kind: transformToKind(m.transform) }],
+    })),
+  };
+  const ruleFile = saveRule(ws, bigTableFolder, rule);
+
   const pipelineId = `c_${Date.now()}`;
   savePipeline(ws, {
     kind: 'clean',
@@ -85,11 +104,9 @@ export function toolSetupMapping(
     label: `${bigTableFolder}清洗`,
     bigTableFolder,
     sourceDir,
-    headerRow,
-    mappings,
     createdAt: new Date().toISOString(),
   });
-  return { pipelineId };
+  return { pipelineId, ruleFile };
 }
 
 /** tool: 引用模板套用映射。 */
