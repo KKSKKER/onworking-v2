@@ -41,6 +41,14 @@
 | 重算编排引擎 | `src/core/pipeline/engine.ts` | `tests/core/pipeline-engine.test.ts` | 单/多/全/**按依赖自动重算**(拓扑序,更新状态机) |
 | 集成+性能 | `scripts/demo-import.ts` | `tests/core/pipeline-integration.test.ts` | **真实序时账 11,110 行 295ms(3.8 万行/秒)** |
 
+## 代码审计修复(2026-08-24)
+
+做前端前审计发现并修复:
+- **git 版本追踪接入**:`versioning/workspace-vcs.ts`(忽略 db/ 二进制),engine 运行后自动提交 `.onworking` 配置变更。
+- **日志全模块接入**:clean/query runner + engine 记开始/完成。
+- **表头检测+模板接入核心**:`pipeline/setup.ts`(`detectSourceConfig` / `applyMappingTemplate`),P2 映射视图直接复用。
+- **i18n 裁决(方案1)**:核心错误信息英文 + 稳定 `code`;UI 文案 P2 走 i18n。
+
 ## 尚未做(等你确认后继续)
 
 - **P2 前端外壳 + 五视图**(Electron + React + dockview)。
