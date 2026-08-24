@@ -72,11 +72,15 @@ body { font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", san
 /* dockview 浅色主题下确保文字可读 */
 .dockview-theme-light { background: #fff; color: #1f2328; }
 
-/* 底部面板 */
+/* 底部面板(高度由外层 ResizablePanel 控制) */
 .bottom-panel {
-  height: 130px; border-top: 1px solid #d0d7de;
-  display: flex; flex-direction: column; flex-shrink: 0;
+  height: 100%; border-top: 1px solid #d0d7de;
+  display: flex; flex-direction: column;
 }
+
+/* 可拖动面板的拖动手柄 */
+.resize-handle { flex-shrink: 0; background: transparent; }
+.resize-handle:hover { background: #0969da; opacity: 0.5; }
 .bottom-tabs { display: flex; gap: 4px; padding: 4px 8px 0; }
 .bottom-tabs button {
   background: transparent; border: 1px solid transparent; border-radius: 4px 4px 0 0;

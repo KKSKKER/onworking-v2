@@ -6,7 +6,7 @@ import { TopBar, type ShellMode } from './shell/TopBar';
 import { SidebarLeft } from './shell/SidebarLeft';
 import { SidebarRight } from './shell/SidebarRight';
 import { BottomPanel } from './shell/BottomPanel';
-import { ResizableSidebar } from './shell/ResizableSidebar';
+import { ResizablePanel } from './shell/ResizableSidebar';
 import { SelectionProvider } from './state/SelectionContext';
 import { dockviewComponents, VIEWS } from './views/registry';
 import './styles.css';
@@ -42,9 +42,9 @@ export function App() {
       <div className="app">
         <TopBar mode={mode} onModeChange={setMode} onAddView={addView} />
         <div className="body">
-          <ResizableSidebar initialWidth={240} minWidth={140} maxWidth={500} side="left">
+          <ResizablePanel axis="x" initial={240} min={140} max={500} dragEdge="right">
             <SidebarLeft mode={mode} />
-          </ResizableSidebar>
+          </ResizablePanel>
           <main className="view-area">
             <DockviewReact
               className="dockview-theme-light"
@@ -52,11 +52,13 @@ export function App() {
               onReady={onReady}
             />
           </main>
-          <ResizableSidebar initialWidth={220} minWidth={140} maxWidth={500} side="right">
+          <ResizablePanel axis="x" initial={220} min={140} max={500} dragEdge="left">
             <SidebarRight />
-          </ResizableSidebar>
+          </ResizablePanel>
         </div>
-        <BottomPanel />
+        <ResizablePanel axis="y" initial={130} min={60} max={400} dragEdge="top">
+          <BottomPanel />
+        </ResizablePanel>
       </div>
     </SelectionProvider>
   );
