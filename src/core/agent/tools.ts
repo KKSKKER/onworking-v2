@@ -161,6 +161,24 @@ export function toolCreateQueryPipeline(
   return { pipelineId: id };
 }
 
+/** tool: 创建 SQL 清洗管线(大表 → 总表,泳道图「清洗导到 master」)。 */
+export function toolCreateSqlCleanPipeline(
+  ws: Workspace,
+  id: string,
+  opts: { bigTables: string[]; sql: string; resultTable: string },
+): { pipelineId: string } {
+  savePipeline(ws, {
+    kind: 'sql-clean',
+    id,
+    label: id,
+    bigTables: opts.bigTables,
+    sql: opts.sql,
+    resultTable: opts.resultTable,
+    createdAt: new Date().toISOString(),
+  });
+  return { pipelineId: id };
+}
+
 /** tool: 运行查询管线(SQL → 物化结果表,总表 DB)。 */
 export async function toolRunQueryPipeline(ws: Workspace, id: string): Promise<RunSummary> {
   const eng = new PipelineEngine(ws);

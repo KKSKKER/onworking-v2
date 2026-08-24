@@ -4,3 +4,4 @@ dist/
 *.tsbuildinfo
 release/
 demo-workspace/
+task-workspace/

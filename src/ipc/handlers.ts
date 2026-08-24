@@ -1,31 +1,42 @@
 // src/ipc/handlers.ts
-// API handlers:命令 → 核心调用,统一返回 ApiResult。
-// 主进程把 ipcMain.handle 接到 dispatch;渲染层经 window.onw.invoke 调用。
+// API handlers:命令 → 工具函数层(前端与 AI 走同一套封装函数),统一返回 ApiResult。
+// 操作类命令委托给 src/core/agent/tools.ts 的 tool* 函数;读类命令直接走核心。
 import type { Workspace } from '../core/workspace/workspace';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { listBigTables, loadBigTableConfig, saveBigTableConfig } from '../core/bigtable/store';
-import { listPipelines, savePipeline, deletePipeline } from '../core/pipeline/store';
+import { listBigTables, loadBigTableConfig } from '../core/bigtable/store';
+import { listPipelines, deletePipeline, loadPipeline } from '../core/pipeline/store';
 import { scanSourceDir } from '../core/ingest/scanner';
 import { parseCsvFile, parseExcelFile } from '../core/ingest/parser';
 import { PipelineEngine } from '../core/pipeline/engine';
-import { detectSourceConfig } from '../core/pipeline/setup';
 import {
   listTemplates,
   saveTemplate,
   loadTemplate,
   applyTemplateToSheet,
 } from '../core/template/store';
-import { ProjectState } from '../core/state/project';
 import { gitStatus } from '../core/versioning/git';
 import { ensureWorkspaceVcs } from '../core/versioning/workspace-vcs';
 import { AppError, captureError } from '../core/errors';
 import type { ApiCommand, ApiResult } from './contracts';
+import {
+  toolCreateBigTable,
+  toolGetFileHeaders,
+  toolSetupMapping,
+  toolCreateSqlCleanPipeline,
+  toolCreateQueryPipeline,
+  toolRunCleaning,
+  toolBuildMasterTable,
+  toolRunQueryPipeline,
+  toolQuery,
+  toolGetProjectState,
+} from '../core/agent/tools';
+import type { PipelineConfig } from '../core/pipeline/config';
 
 export interface ApiContext {
   ws: Workspace;
   dbPath: string;
-  /** 惰性获取 PipelineEngine(主进程缓存单例;测试可每次新建)。 */
+  /** 惰性获取 PipelineEngine(读表/重算等核心能力)。 */
   getEngine(): PipelineEngine;
   /** 进度事件回调(主进程转发到渲染层)。 */
   emitProgress?(payload: unknown): void;
@@ -40,34 +51,52 @@ const handlers: Record<string, Handler> = {
   'bigtable.list': async (ctx) => listBigTables(ctx.ws),
   'bigtable.get': async (_ctx, p) => loadBigTableConfig(_ctx.ws, String(p.folder)),
   'bigtable.save': async (ctx, p) => {
-    saveBigTableConfig(ctx.ws, String(p.folder), p.config as never);
+    // 前端保存大表配置 → 工具函数
+    toolCreateBigTable(ctx.ws, String(p.folder), p.config as never);
     return { saved: p.folder };
   },
   'bigtable.sourceFiles': async (ctx, p) => {
-    // 大表源目录:.onworking/bigtables/<folder>/source/(不存在返回空)
     const dir = join(ctx.ws.onworkingDir, 'bigtables', String(p.folder), 'source');
     return existsSync(dir) ? scanSourceDir(dir).map((f) => f.path) : [];
   },
 
   'pipeline.list': async (ctx) => listPipelines(ctx.ws),
   'pipeline.save': async (ctx, p) => {
-    savePipeline(ctx.ws, p.config as never);
-    return { saved: (p.config as { id: string }).id };
+    // 前端保存管线 → 按类型分发到工具函数
+    const config = p.config as PipelineConfig;
+    if (config.kind === 'query') {
+      return toolCreateQueryPipeline(ctx.ws, config.id, {
+        sql: config.sql,
+        dependencies: config.dependencies,
+        resultTable: config.resultTable,
+      });
+    }
+    if (config.kind === 'sql-clean') {
+      return toolCreateSqlCleanPipeline(ctx.ws, config.id, {
+        bigTables: config.bigTables,
+        sql: config.sql,
+        resultTable: config.resultTable,
+      });
+    }
+    return toolSetupMapping(ctx.ws, config.bigTableFolder, config.sourceDir, config.headerRow ?? 1, config.mappings ?? []);
   },
   'pipeline.delete': async (ctx, p) => {
     deletePipeline(ctx.ws, String(p.id));
     return { deleted: p.id };
   },
-  'pipeline.run': async (ctx, p) =>
-    ctx.getEngine().run(String(p.id), (prog) =>
-      ctx.emitProgress?.({ pipelineId: p.id, progress: prog }),
-    ),
+  'pipeline.run': async (ctx, p) => {
+    // 前端运行管线 → 按类型分发到工具函数
+    const id = String(p.id);
+    const cfg = loadPipeline(ctx.ws, id);
+    if (cfg.kind === 'clean') return toolRunCleaning(ctx.ws, id);
+    if (cfg.kind === 'sql-clean') return toolBuildMasterTable(ctx.ws, id);
+    return toolRunQueryPipeline(ctx.ws, id);
+  },
   'pipeline.recomputeAll': async (ctx) => ctx.getEngine().recomputeAll(),
   'pipeline.recomputeByDependency': async (ctx, p) =>
     ctx.getEngine().recomputeByDependency(String(p.trigger)),
 
-  'setup.detectSource': async (_ctx, p) =>
-    detectSourceConfig(String(p.filePath), p.sheetName ? String(p.sheetName) : undefined),
+  'setup.detectSource': async (_ctx, p) => toolGetFileHeaders(String(p.filePath)).detected,
   'setup.sheets': async (_ctx, p) => {
     const filePath = String(p.filePath);
     const sheets = filePath.toLowerCase().endsWith('.csv') ? parseCsvFile(filePath) : parseExcelFile(filePath);
@@ -106,10 +135,10 @@ const handlers: Record<string, Handler> = {
         data: { sql },
       });
     }
-    return ctx.getEngine().query(sql, Number(p.limit ?? 500));
+    return toolQuery(ctx.ws, sql); // 前端查询 → 工具函数
   },
 
-  'state.summary': async (ctx) => new ProjectState(ctx.ws).getSummary(),
+  'state.summary': async (ctx) => toolGetProjectState(ctx.ws),
 
   'vcs.status': async (ctx) => {
     ensureWorkspaceVcs(ctx.ws);
