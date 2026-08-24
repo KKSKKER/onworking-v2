@@ -3,6 +3,9 @@ import Database from 'better-sqlite3';
 import { applyMapping, centsToInt, normalizeDate, type FieldMapping } from '../../src/core/etl/transform';
 import { openDatabase } from '../../src/core/db/database';
 import { writeBigTable } from '../../src/core/etl/writer';
+import { logger } from '../../src/core/logging';
+import { arraySink } from '../../src/core/logging/sinks';
+import type { LogEntry } from '../../src/core/logging/logger';
 import type { ParsedSheet } from '../../src/core/ingest/parser';
 
 describe('transform', () => {
@@ -65,6 +68,19 @@ describe('writer', () => {
     expect(t).toBe('integer');
     const ta = (db.prepare('SELECT typeof(a) AS t FROM big LIMIT 1').get() as { t: string }).t;
     expect(ta).toBe('text');
+    db.close();
+  });
+
+  it('captures a failed insert into the log (error capture wired)', async () => {
+    const db = openDatabase(':memory:');
+    const out: LogEntry[] = [];
+    logger.addSink(arraySink(out));
+    const rows = [{ a: null }]; // a 是 NOT NULL
+    await expect(
+      writeBigTable(db, 't', [{ name: 'a', sqlType: 'TEXT NOT NULL' }], rows),
+    ).rejects.toThrow();
+    expect(out.some((e) => e.level === 'error' && e.module === 'etl/writer')).toBe(true);
+    logger.clearSinks();
     db.close();
   });
 });
