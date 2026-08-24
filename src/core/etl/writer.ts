@@ -1,14 +1,14 @@
 // src/core/etl/writer.ts
 // 批量写入大表:按 5000 行/批 insertBatch(事务),每批回报进度。
-// 列定义带 SQL 类型,保证金额列(INTEGER)原生整数分存储。
+// 列类型直接用 SQLite 原生类型字符串(不用自造类型枚举)。
+// 金额列声明 INTEGER —— 实测 better-sqlite3 v13 无类型列会把整数存成 REAL,
+// 必须声明 INTEGER 才能保证「金额整数分」硬约束。
 import type Database from 'better-sqlite3';
 import { createTableIfNotExists, insertBatch } from '../db/database';
 
-export type SqlType = 'TEXT' | 'INTEGER' | 'REAL';
-
 export interface ColumnDef {
   name: string;
-  sqlType: SqlType;
+  sqlType: string; // SQLite 原生列类型,如 'TEXT' | 'INTEGER' | 'REAL'
 }
 
 export interface WriteProgress {

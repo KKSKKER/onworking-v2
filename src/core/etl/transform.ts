@@ -75,3 +75,17 @@ export function toText(v: unknown): string | null {
   const s = String(v).trim();
   return s === '' ? null : s;
 }
+
+/** 语义类型 → SQLite 原生列类型。金额→INTEGER(整数分),数字→REAL,文本/日期→TEXT。 */
+export function dbTypeFor(type: FieldType): string {
+  switch (type) {
+    case 'cents':
+      return 'INTEGER';
+    case 'number':
+      return 'REAL';
+    case 'text':
+      return 'TEXT';
+    case 'date':
+      return 'TEXT';
+  }
+}

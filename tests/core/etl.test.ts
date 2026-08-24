@@ -42,7 +42,7 @@ describe('transform', () => {
 });
 
 describe('writer', () => {
-  it('batch-writes rows, stores cents as INTEGER, reports progress to 100', async () => {
+  it('batch-writes rows with DB-native column types; INTEGER col stores integer', async () => {
     const db = openDatabase(':memory:');
     const rows = Array.from({ length: 12000 }, (_, i) => ({ a: `r${i}`, b: i }));
     const progress: number[] = [];
@@ -60,8 +60,11 @@ describe('writer', () => {
     expect(progress[progress.length - 1]).toBe(100);
     const n = (db.prepare('SELECT COUNT(*) AS n FROM big').get() as { n: number }).n;
     expect(n).toBe(12000);
+    // 用数据库原生类型:INTEGER 列存整数,TEXT 列存文本
     const t = (db.prepare('SELECT typeof(b) AS t FROM big LIMIT 1').get() as { t: string }).t;
-    expect(t).toBe('integer'); // INTEGER 列原生整数存储
+    expect(t).toBe('integer');
+    const ta = (db.prepare('SELECT typeof(a) AS t FROM big LIMIT 1').get() as { t: string }).t;
+    expect(ta).toBe('text');
     db.close();
   });
 });
