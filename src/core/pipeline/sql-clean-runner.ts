@@ -51,15 +51,16 @@ export async function runSqlCleanPipeline(
   const rows = masterDb.prepare(cfg.sql).all() as Record<string, unknown>[];
   const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
 
-  // 3. 物化到总表(覆盖式)
-  masterDb.exec(`DROP TABLE IF EXISTS "${qt(cfg.resultTable)}"`);
+  // 3. 物化到总表(覆盖式)。显式 "main". 限定,避免误删附加库(大表)的同名表。
+  const mainTable = `main."${qt(cfg.resultTable)}"`;
+  masterDb.exec(`DROP TABLE IF EXISTS ${mainTable}`);
   if (columns.length === 0) {
-    masterDb.exec(`CREATE TABLE "${qt(cfg.resultTable)}" (empty INTEGER)`);
+    masterDb.exec(`CREATE TABLE ${mainTable} (empty INTEGER)`);
   } else {
     const colDefs = columns.map((c) => `"${qt(c)}"`).join(', ');
-    masterDb.exec(`CREATE TABLE "${qt(cfg.resultTable)}" (${colDefs})`);
+    masterDb.exec(`CREATE TABLE ${mainTable} (${colDefs})`);
     const insert = masterDb.prepare(
-      `INSERT INTO "${qt(cfg.resultTable)}" VALUES (${columns.map(() => '?').join(', ')})`,
+      `INSERT INTO ${mainTable} VALUES (${columns.map(() => '?').join(', ')})`,
     );
     const tx = masterDb.transaction((batch: Record<string, unknown>[]) => {
       for (const r of batch) insert.run(columns.map((c) => (r[c] === undefined ? null : r[c])));
