@@ -1,17 +1,18 @@
 // src/core/pipeline/clean-runner.ts
 // 清洗管线执行器:源目录 → 扫描 → 解析(表头行)→ 字段映射 → 行级血缘 → 批量写入大表(独立 DB)。
-// 映射来源:优先读该大表的规则 YAML(规则驱动);无规则则回退 cfg.headerRow + cfg.mappings。
+// 表结构按「映射输出列」建(类型取大表字段,默认 TEXT),保证与插入数据一致,不因旧表漂移报错。
+// 合并 = 重建大表(先 DROP 再写),重复运行不追加。
 import type Database from 'better-sqlite3';
 import type { Workspace } from '../workspace/workspace';
 import { scanSourceDir } from '../ingest/scanner';
 import { parseCsvFile, parseExcelFile } from '../ingest/parser';
-import { applyMapping } from '../etl/transform';
-import { writeBigTable } from '../etl/writer';
+import { applyMapping, type FieldMapping } from '../etl/transform';
+import { writeBigTable, type ColumnDef } from '../etl/writer';
 import { attachLineage, lineageColumnNames } from '../lineage';
 import { AppError } from '../errors';
 import { logger } from '../logging';
 import { loadRules } from '../rule/store';
-import { compileRule } from '../rule/compile';
+import { compileRule, type CompiledSource } from '../rule/compile';
 import type { CleanPipelineConfig } from './config';
 import type { BigTableConfig } from '../bigtable/schema';
 
@@ -38,7 +39,7 @@ function patternToRegex(pattern: string): RegExp {
     const c = pattern[i];
     if (c === '*' && pattern[i + 1] === '*') {
       if (pattern[i + 2] === '/') {
-        re += '(?:.*/)?'; // 双星斜杠 → 任意层目录(含零层)
+        re += '(?:.*/)?';
         i += 3;
       } else {
         re += '.*';
@@ -56,6 +57,20 @@ function patternToRegex(pattern: string): RegExp {
     }
   }
   return new RegExp(`^${re}$`);
+}
+
+/** 列定义按映射输出列建(类型取大表字段,默认 TEXT)+ 血缘列。 */
+function buildColDefs(mappings: FieldMapping[], bigTable: BigTableConfig): ColumnDef[] {
+  const fieldType = new Map(bigTable.fields.map((f) => [f.name, f.type]));
+  const fieldCols = mappings.map((m) => ({
+    name: m.outputName,
+    sqlType: fieldType.get(m.outputName) ?? 'TEXT',
+  }));
+  const lineageCols = lineageColumnNames().map((c) => ({
+    name: c,
+    sqlType: c === '__source_row' ? 'INTEGER' : 'TEXT',
+  }));
+  return [...fieldCols, ...lineageCols];
 }
 
 export async function runCleanPipeline(
@@ -81,70 +96,18 @@ export async function runCleanPipeline(
     });
   }
 
-  const fieldCols = bigTable.fields
-    .slice()
-    .sort((a, b) => a.order - b.order)
-    .map((f) => ({ name: f.name, sqlType: f.type }));
-  const lineageCols = lineageColumnNames().map((c) => ({
-    name: c,
-    sqlType: c === '__source_row' ? 'INTEGER' : 'TEXT',
-  }));
-  const colDefs = [...fieldCols, ...lineageCols];
-
-  const extractedAt = new Date().toISOString();
-  const allRows: Record<string, unknown>[] = [];
-
-  // 优先规则驱动:读该大表 rules/*.yaml
+  // 确定有效映射与来源(优先规则 YAML,否则 cfg)
   const rules = loadRules(ws, cfg.bigTableFolder);
+  let mappings: FieldMapping[] | null = null;
+  let sources: CompiledSource[] | null = null;
   if (rules.length > 0) {
-    let processedFiles = 0;
-    for (const rule of rules) {
-      const compiled = compileRule(rule);
-      for (const source of compiled.sources) {
-        const re = patternToRegex(source.pattern);
-        const matched = files.filter((f) => re.test(f.relPath) || re.test(f.path));
-        for (const file of matched) {
-          processedFiles++;
-          onProgress?.({ stage: 'parse', percent: Math.round((processedFiles / files.length) * 40) });
-          const sheets =
-            file.path.toLowerCase().endsWith('.csv')
-              ? parseCsvFile(file.path, { headerRow: source.headerRow })
-              : parseExcelFile(file.path, { headerRow: source.headerRow });
-          const target = source.sheetName
-            ? sheets.filter((s) => s.sheetName === source.sheetName)
-            : sheets.slice(0, 1);
-          for (const sheet of target) {
-            const mapped = applyMapping(sheet, compiled.mappings);
-            attachLineage(
-              mapped,
-              { sourceFile: file.path, sourceRow: source.headerRow + 1 },
-              extractedAt,
-            );
-            allRows.push(...mapped);
-          }
-        }
-      }
-    }
+    const compiled = compileRule(rules[0]);
+    mappings = compiled.mappings;
+    sources = compiled.sources;
   } else if (cfg.headerRow && cfg.mappings) {
-    // 回退:cfg 驱动(无规则)
-    const headerRow = cfg.headerRow;
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      onProgress?.({ stage: 'parse', percent: Math.round((i / files.length) * 40) });
-      const sheets =
-        file.path.toLowerCase().endsWith('.csv')
-          ? parseCsvFile(file.path, { headerRow })
-          : parseExcelFile(file.path, { headerRow });
-      const target = cfg.sheetName
-        ? sheets.filter((s) => s.sheetName === cfg.sheetName)
-        : sheets.slice(0, 1);
-      for (const sheet of target) {
-        const mapped = applyMapping(sheet, cfg.mappings);
-        attachLineage(mapped, { sourceFile: file.path, sourceRow: headerRow + 1 }, extractedAt);
-        allRows.push(...mapped);
-      }
-    }
-  } else {
+    mappings = cfg.mappings;
+  }
+  if (!mappings || mappings.length === 0) {
     throw new AppError({
       module: 'pipeline/clean',
       code: 'CLEAN_NO_RULE_OR_MAPPING',
@@ -153,10 +116,65 @@ export async function runCleanPipeline(
     });
   }
 
+  // 表结构按映射输出列建 → 与插入数据一致,不因旧表列名漂移报错
+  const colDefs = buildColDefs(mappings, bigTable);
+
+  const extractedAt = new Date().toISOString();
+  const allRows: Record<string, unknown>[] = [];
+
+  if (sources) {
+    // 规则驱动:按规则 sources 处理
+    let processedFiles = 0;
+    for (const source of sources) {
+      const re = patternToRegex(source.pattern);
+      const matched = files.filter((f) => re.test(f.relPath) || re.test(f.path));
+      for (const file of matched) {
+        processedFiles++;
+        onProgress?.({ stage: 'parse', percent: Math.round((processedFiles / files.length) * 40) });
+        const sheets =
+          file.path.toLowerCase().endsWith('.csv')
+            ? parseCsvFile(file.path, { headerRow: source.headerRow })
+            : parseExcelFile(file.path, { headerRow: source.headerRow });
+        const target = source.sheetName
+          ? sheets.filter((s) => s.sheetName === source.sheetName)
+          : sheets.slice(0, 1);
+        for (const sheet of target) {
+          const mapped = applyMapping(sheet, mappings);
+          attachLineage(mapped, { sourceFile: file.path, sourceRow: source.headerRow + 1 }, extractedAt);
+          allRows.push(...mapped);
+        }
+      }
+    }
+  } else {
+    // cfg 驱动(无规则)
+    const headerRow = (cfg.headerRow as number) ?? 1;
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      onProgress?.({ stage: 'parse', percent: Math.round((i / files.length) * 40) });
+      const sheets =
+        file.path.toLowerCase().endsWith('.csv')
+          ? parseCsvFile(file.path, { headerRow })
+          : parseExcelFile(file.path, { headerRow });
+      const target = cfg.sheetName ? sheets.filter((s) => s.sheetName === cfg.sheetName) : sheets.slice(0, 1);
+      for (const sheet of target) {
+        const mapped = applyMapping(sheet, mappings);
+        attachLineage(mapped, { sourceFile: file.path, sourceRow: headerRow + 1 }, extractedAt);
+        allRows.push(...mapped);
+      }
+    }
+  }
+
   onProgress?.({ stage: 'write', percent: 70 });
-  const result = await writeBigTable(db, bigTable.tableName, colDefs, allRows, (p) => {
-    onProgress?.({ stage: 'write', percent: 70 + Math.round(p.percent * 0.3) });
-  });
+  const result = await writeBigTable(
+    db,
+    bigTable.tableName,
+    colDefs,
+    allRows,
+    (p) => {
+      onProgress?.({ stage: 'write', percent: 70 + Math.round(p.percent * 0.3) });
+    },
+    { dropExisting: true }, // 合并 = 重建大表
+  );
 
   logger.info(MODULE, 'clean complete', {
     pipelineId: cfg.id,

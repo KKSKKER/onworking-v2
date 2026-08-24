@@ -85,6 +85,21 @@ describe('clean pipeline runner', () => {
     expect(stages.join(',')).toMatch(/write:100/);
   });
 
+  it('re-runs with a different mapping rebuilds the table (no schema drift)', async () => {
+    await runCleanPipeline(workspace, db, cfg, bigTable); // 首次:date/debit/note
+    // 换映射:只留 date
+    const cfg2: CleanPipelineConfig = { ...cfg, id: 'c2', mappings: [cfg.mappings![0]] };
+    await runCleanPipeline(workspace, db, cfg2, bigTable);
+    const cols = db.prepare('PRAGMA table_info(seq)').all() as { name: string }[];
+    const names = cols.map((c) => c.name);
+    expect(names).toContain('date');
+    expect(names).not.toContain('debit');
+    expect(names).not.toContain('note');
+    // 行数仍是 2(不重复追加)
+    const n = (db.prepare('SELECT COUNT(*) AS n FROM seq').get() as { n: number }).n;
+    expect(n).toBe(2);
+  });
+
   it('throws when the source dir has no supported files', async () => {
     const empty: CleanPipelineConfig = {
       ...cfg,

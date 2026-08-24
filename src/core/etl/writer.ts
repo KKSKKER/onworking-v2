@@ -34,7 +34,10 @@ export async function writeBigTable(
   colDefs: ColumnDef[],
   rows: Record<string, unknown>[],
   onProgress?: (p: WriteProgress) => void,
+  opts?: { dropExisting?: boolean },
 ): Promise<WriteResult> {
+  // 重建语义:先 DROP 再建(列名随当前映射,避免旧表结构漂移/重复追加)
+  if (opts?.dropExisting) db.exec(`DROP TABLE IF EXISTS "${tableName}"`);
   const columns = colDefs.map((c) => c.name);
   const colDefsSql = colDefs.map((c) => `"${c.name}" ${c.sqlType}`);
   logger.info(MODULE, 'write start', { table: tableName, rows: rows.length });
