@@ -4,7 +4,7 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import { join } from 'node:path';
 import { dispatch, type ApiContext } from '../ipc/handlers';
 import { createContext } from './context';
-import { useConsoleLogging } from '../core/logging';
+import { useConsoleLogging, logger } from '../core/logging';
 
 useConsoleLogging('info');
 
@@ -26,6 +26,11 @@ function createWindow(): void {
   } else {
     win.loadFile(join(__dirname, '../../renderer/index.html'));
   }
+
+  // 核心日志转发到渲染层日志栏(onw:log 事件)
+  logger.addSink((entry) => {
+    if (!win.isDestroyed()) win.webContents.send('onw:log', entry);
+  });
 }
 
 ipcMain.handle('onw:invoke', async (_event, command: { cmd: string; [k: string]: unknown }) => {

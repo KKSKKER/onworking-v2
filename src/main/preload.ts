@@ -10,4 +10,9 @@ contextBridge.exposeInMainWorld('onw', {
     ipcRenderer.on('onw:progress', listener);
     return () => ipcRenderer.removeListener('onw:progress', listener);
   },
+  onLog: (cb: (entry: unknown) => void): (() => void) => {
+    const listener = (_e: unknown, entry: unknown): void => cb(entry);
+    ipcRenderer.on('onw:log', listener);
+    return () => ipcRenderer.removeListener('onw:log', listener);
+  },
 });

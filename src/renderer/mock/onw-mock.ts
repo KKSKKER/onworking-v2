@@ -11,6 +11,7 @@ export function installMockOnw(): void {
   w.onw = {
     invoke: (command: ApiCommand): Promise<ApiResult<unknown>> => mockDispatch(command),
     onProgress: () => () => {},
+    onLog: () => () => {},
   };
 }
 
