@@ -75,13 +75,14 @@ const handlers: Record<string, Handler> = {
   },
   'setup.preview': async (_ctx, p) => {
     const filePath = String(p.filePath);
+    const offset = Number(p.offset ?? 0);
     const limit = Number(p.limit ?? 100);
     const sheets = filePath.toLowerCase().endsWith('.csv') ? parseCsvFile(filePath) : parseExcelFile(filePath);
     const sheet = (p.sheetName ? sheets.find((s) => s.sheetName === p.sheetName) : undefined) ?? sheets[0];
     const headerRow = Number(p.headerRow ?? 1);
     const full = [sheet.headers, ...sheet.rows];
     const headers = (full[headerRow - 1] ?? []).map((c) => String(c));
-    const rows = full.slice(headerRow).slice(0, limit);
+    const rows = full.slice(headerRow).slice(offset, offset + limit);
     return { sheetName: sheet.sheetName, headerRow, headers, rows, total: full.length - headerRow };
   },
 

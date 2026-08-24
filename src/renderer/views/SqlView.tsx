@@ -1,6 +1,9 @@
 // 视图:SQL 工作台。表浏览器 + SQL 编辑器 + 真实查询执行(query.run)。
+// 结果表用 DataTable(可拖列宽)+ PaginationBar(分页)。
 import { useState } from 'react';
 import { useApi } from './useApi';
+import { DataTable } from '../components/DataTable';
+import { PaginationBar } from '../components/PaginationBar';
 
 interface TableInfo {
   name: string;
@@ -12,10 +15,13 @@ interface QueryResult {
   rowCount: number;
 }
 
+const PAGE_SIZE = 100;
+
 export function SqlView() {
   const { data: tables, reload } = useApi<TableInfo[]>({ cmd: 'schema.tables' });
   const [sql, setSql] = useState('SELECT date, debit FROM seq LIMIT 100');
   const [result, setResult] = useState<QueryResult | null>(null);
+  const [page, setPage] = useState(0);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -30,6 +36,7 @@ export function SqlView() {
       return;
     }
     setResult(res.data as QueryResult);
+    setPage(0);
   }
 
   async function handleCopyStructure() {
@@ -43,7 +50,7 @@ export function SqlView() {
 
   return (
     <div style={{ padding: 12 }}>
-      <div style={{ display: 'flex', gap: 12 }}>
+      <div style={{ display: 'flex', gap: 12, height: '100%' }}>
         <div style={{ minWidth: 160 }}>
           <b>🗂 表</b>
           <ul style={{ listStyle: 'none', padding: 0, margin: '4px 0' }}>
@@ -54,12 +61,12 @@ export function SqlView() {
           <button onClick={handleCopyStructure}>复制表结构</button>
           <button onClick={reload}>刷新</button>
         </div>
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <textarea
             value={sql}
             onChange={(e) => setSql(e.target.value)}
             rows={4}
-            style={{ width: '100%', fontFamily: 'monospace' }}
+            style={{ width: '100%', fontFamily: 'monospace', boxSizing: 'border-box' }}
           />
           <div style={{ margin: '8px 0' }}>
             <button onClick={handleRun} disabled={busy}>
@@ -67,29 +74,18 @@ export function SqlView() {
             </button>{' '}
             <span style={{ color: 'red' }}>{err}</span>
           </div>
-          {result && (
-            <div>
-              <p style={{ color: '#57606a' }}>共 {result.rowCount} 行</p>
-              <table border={1} cellPadding={4} cellSpacing={0}>
-                <thead>
-                  <tr>
-                    {result.columns.map((c) => (
-                      <th key={c}>{c}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {result.rows.map((r, i) => (
-                    <tr key={i}>
-                      {result.columns.map((c) => (
-                        <td key={c}>{String(r[c] ?? '')}</td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {result && result.rows.length > 0 && (
+            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+              <PaginationBar page={page} pageSize={PAGE_SIZE} total={result.rowCount} onPageChange={setPage} />
+              <div style={{ flex: 1, overflow: 'auto' }}>
+                <DataTable
+                  columns={result.columns}
+                  rows={result.rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)}
+                />
+              </div>
             </div>
           )}
+          {result && result.rows.length === 0 && <p style={{ color: '#8b949e' }}>查询成功,0 行结果。</p>}
         </div>
       </div>
     </div>
