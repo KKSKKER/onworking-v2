@@ -1,0 +1,77 @@
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { mkdtempSync, rmSync, mkdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import * as XLSX from 'xlsx';
+import { initWorkspace, type Workspace } from '../../src/core/workspace/workspace';
+import { saveBigTableConfig } from '../../src/core/bigtable/store';
+import { savePipeline } from '../../src/core/pipeline/store';
+import { PipelineEngine } from '../../src/core/pipeline/engine';
+
+describe('pipeline integration (end-to-end)', () => {
+  let dir: string;
+  let ws: Workspace;
+  let sourceDir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'int-'));
+    ws = initWorkspace(dir);
+    sourceDir = join(dir, 'src');
+    mkdirSync(sourceDir, { recursive: true });
+  });
+
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it('imports 20k rows end-to-end with lineage and integer cents', async () => {
+    // 造 2 万行序时账样表
+    const rows: unknown[][] = [['期间', '借方金额', '摘要']];
+    for (let i = 0; i < 20000; i++) {
+      rows.push([`2024-${String((i % 12) + 1).padStart(2, '0')}`, i * 1.5, `摘要${i}`]);
+    }
+    const wsx = XLSX.utils.aoa_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, wsx, '序时账');
+    XLSX.writeFile(wb, join(sourceDir, 'seq.xlsx'));
+
+    saveBigTableConfig(ws, 'seq', {
+      tableName: 'seq',
+      autoIncrement: true,
+      fields: [
+        { name: 'period', type: 'date', order: 1 },
+        { name: 'debit', type: 'cents', order: 2 },
+        { name: 'note', type: 'text', order: 3 },
+      ],
+    });
+    savePipeline(ws, {
+      kind: 'clean',
+      id: 'c1',
+      label: '',
+      bigTableFolder: 'seq',
+      sourceDir,
+      headerRow: 1,
+      mappings: [
+        { sourceHeader: '期间', outputName: 'period', type: 'date' },
+        { sourceHeader: '借方金额', outputName: 'debit', type: 'cents' },
+        { sourceHeader: '摘要', outputName: 'note', type: 'text' },
+      ],
+      createdAt: '',
+    });
+
+    const t0 = Date.now();
+    const eng = new PipelineEngine(ws, join(ws.onworkingDir, 'db', 'onworking.db'));
+    const results = await eng.recomputeAll();
+    const elapsed = Date.now() - t0;
+    const r = results[0];
+    expect(r.ok).toBe(true);
+    expect(r.rows).toBe(20000);
+
+    const row = eng.db
+      .prepare('SELECT * FROM seq LIMIT 1')
+      .get() as Record<string, unknown>;
+    expect(row.__source_file).toBeTruthy(); // 血缘来源
+    expect(typeof row.__source_row).toBe('number'); // 血缘行号是整数
+    expect(typeof row.debit).toBe('number'); // 整数分
+    console.log(`[integration] 20k 行导入耗时 ${elapsed}ms (${Math.round((20000 / elapsed) * 1000)} 行/秒)`);
+    eng.close();
+  });
+});
