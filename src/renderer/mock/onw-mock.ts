@@ -57,6 +57,26 @@ async function mockDispatch(command: ApiCommand): Promise<ApiResult<unknown>> {
       return ok(['序时账', '科目余额表', '凭证明细']);
     case 'setup.detectSource':
       return ok({ sheetName: '序时账', headerRow: 1, headers: ['日期', '借方金额', '摘要'] });
+    case 'setup.preview':
+      return ok({
+        sheetName: '序时账',
+        headerRow: 1,
+        headers: ['日期', '借方金额', '摘要'],
+        rows: [
+          ['2024-01-15', 123456, '计提工资'],
+          ['2024-01-16', 8200, '差旅报销'],
+        ],
+        total: 11110,
+      });
+    case 'query.run':
+      return ok({
+        columns: ['date', 'total'],
+        rows: [
+          { date: '2024-01', total: 123456 },
+          { date: '2024-02', total: 8200 },
+        ],
+        rowCount: 2,
+      });
     case 'template.list':
       return ok([]);
     case 'template.save':

@@ -19,7 +19,7 @@ import {
 import { ProjectState } from '../core/state/project';
 import { gitStatus } from '../core/versioning/git';
 import { ensureWorkspaceVcs } from '../core/versioning/workspace-vcs';
-import { captureError } from '../core/errors';
+import { AppError, captureError } from '../core/errors';
 import type { ApiCommand, ApiResult } from './contracts';
 
 export interface ApiContext {
@@ -58,32 +58,13 @@ const handlers: Record<string, Handler> = {
     deletePipeline(ctx.ws, String(p.id));
     return { deleted: p.id };
   },
-  'pipeline.run': async (ctx, p) => {
-    const eng = ctx.getEngine();
-    try {
-      return await eng.run(String(p.id), (prog) =>
-        ctx.emitProgress?.({ pipelineId: p.id, progress: prog }),
-      );
-    } finally {
-      eng.close();
-    }
-  },
-  'pipeline.recomputeAll': async (ctx) => {
-    const eng = ctx.getEngine();
-    try {
-      return await eng.recomputeAll();
-    } finally {
-      eng.close();
-    }
-  },
-  'pipeline.recomputeByDependency': async (ctx, p) => {
-    const eng = ctx.getEngine();
-    try {
-      return await eng.recomputeByDependency(String(p.trigger));
-    } finally {
-      eng.close();
-    }
-  },
+  'pipeline.run': async (ctx, p) =>
+    ctx.getEngine().run(String(p.id), (prog) =>
+      ctx.emitProgress?.({ pipelineId: p.id, progress: prog }),
+    ),
+  'pipeline.recomputeAll': async (ctx) => ctx.getEngine().recomputeAll(),
+  'pipeline.recomputeByDependency': async (ctx, p) =>
+    ctx.getEngine().recomputeByDependency(String(p.trigger)),
 
   'setup.detectSource': async (_ctx, p) =>
     detectSourceConfig(String(p.filePath), p.sheetName ? String(p.sheetName) : undefined),
@@ -91,6 +72,17 @@ const handlers: Record<string, Handler> = {
     const filePath = String(p.filePath);
     const sheets = filePath.toLowerCase().endsWith('.csv') ? parseCsvFile(filePath) : parseExcelFile(filePath);
     return sheets.map((s) => s.sheetName);
+  },
+  'setup.preview': async (_ctx, p) => {
+    const filePath = String(p.filePath);
+    const limit = Number(p.limit ?? 100);
+    const sheets = filePath.toLowerCase().endsWith('.csv') ? parseCsvFile(filePath) : parseExcelFile(filePath);
+    const sheet = (p.sheetName ? sheets.find((s) => s.sheetName === p.sheetName) : undefined) ?? sheets[0];
+    const headerRow = Number(p.headerRow ?? 1);
+    const full = [sheet.headers, ...sheet.rows];
+    const headers = (full[headerRow - 1] ?? []).map((c) => String(c));
+    const rows = full.slice(headerRow).slice(0, limit);
+    return { sheetName: sheet.sheetName, headerRow, headers, rows, total: full.length - headerRow };
   },
 
   'template.list': async (ctx) => listTemplates(ctx.ws),
@@ -101,15 +93,26 @@ const handlers: Record<string, Handler> = {
   'template.apply': async (ctx, p) =>
     applyTemplateToSheet(p.sheet as never, loadTemplate(ctx.ws, String(p.name))),
 
-  'schema.tables': async (ctx) => {
-    const eng = ctx.getEngine();
-    try {
-      return eng.db
-        .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-        .all();
-    } finally {
-      eng.close();
+  'schema.tables': async (ctx) =>
+    ctx
+      .getEngine()
+      .db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+      .all(),
+
+  'query.run': async (ctx, p) => {
+    const sql = String(p.sql).trim();
+    if (!/^(SELECT|WITH)\b/i.test(sql)) {
+      throw new AppError({
+        module: 'query',
+        code: 'QUERY_NOT_SELECT',
+        message: 'only SELECT/WITH queries are allowed in the workbench',
+        data: { sql },
+      });
     }
+    const limit = Number(p.limit ?? 500);
+    const rows = ctx.getEngine().db.prepare(`${sql} LIMIT ${limit}`).all() as Record<string, unknown>[];
+    const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+    return { columns, rows, rowCount: rows.length };
   },
 
   'state.summary': async (ctx) => new ProjectState(ctx.ws).getSummary(),

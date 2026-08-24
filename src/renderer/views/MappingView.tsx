@@ -1,6 +1,10 @@
 // 视图:文件字段映射(参考 V1 RuleEditor:Sheet 选择 + 表头/截止行 + 自动检测 + 字段映射表)。
+// 保存规则 → pipeline.save;保存模板 → template.save(真实后端)。
 import { useEffect, useState } from 'react';
 import { useSelection } from '../state/SelectionContext';
+import type { CleanPipelineConfig } from '../../core/pipeline/config';
+import type { MappingTemplate } from '../../core/template/store';
+import type { FieldMapping } from '../../core/etl/transform';
 
 interface DetectResult {
   sheetName: string;
@@ -68,11 +72,45 @@ export function MappingView() {
     );
   }
 
-  function handleSave() {
-    setMsg(`规则已保存(演示):${sheet} · 表头 ${headerRow} · ${fields.filter((f) => f.included).length} 字段`);
+  function buildMappings(): FieldMapping[] {
+    return fields
+      .filter((f) => f.included)
+      .map((f) => ({ sourceHeader: f.sourceHeader, outputName: f.outputName, type: f.type }));
   }
-  function handleSaveTemplate() {
-    setMsg(`已保存为模板(演示):${sheet}`);
+
+  async function handleSave() {
+    if (!selectedFolder || !filePath.trim()) {
+      setMsg('请先选择目标大表并输入源文件路径');
+      return;
+    }
+    const sourceDir = filePath.split(/[\\/]/).slice(0, -1).join('/') || '.';
+    const config: CleanPipelineConfig = {
+      kind: 'clean',
+      id: `c_${Date.now()}`,
+      label: `${selectedFolder}清洗`,
+      bigTableFolder: selectedFolder,
+      sourceDir,
+      sheetName: sheet || undefined,
+      headerRow,
+      mappings: buildMappings(),
+      createdAt: new Date().toISOString(),
+    };
+    const res = await window.onw.invoke({ cmd: 'pipeline.save', config });
+    setMsg(res.ok ? `规则已保存: ${config.id}` : `保存失败: ${res.error.message}`);
+  }
+
+  async function handleSaveTemplate() {
+    if (fields.length === 0) {
+      setMsg('请先获取表头再保存模板');
+      return;
+    }
+    const tpl: MappingTemplate = {
+      name: sheet || '新模板',
+      mappings: buildMappings(),
+      createdAt: new Date().toISOString(),
+    };
+    const res = await window.onw.invoke({ cmd: 'template.save', template: tpl });
+    setMsg(res.ok ? `模板已保存: ${tpl.name}` : `保存失败: ${res.error.message}`);
   }
 
   const target = selectedFolder ?? '(未选择大表)';

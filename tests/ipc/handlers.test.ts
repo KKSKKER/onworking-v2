@@ -14,6 +14,7 @@ describe('ipc handlers', () => {
   let ws: Workspace;
   let sourceDir: string;
   let ctx: ApiContext;
+  let engine: PipelineEngine | null = null;
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'ipc-'));
@@ -49,10 +50,18 @@ describe('ipc handlers', () => {
       createdAt: '',
     });
     const dbPath = join(ws.onworkingDir, 'db', 'onworking.db');
-    ctx = { ws, dbPath, getEngine: () => new PipelineEngine(ws, dbPath) };
+    ctx = {
+      ws,
+      dbPath,
+      getEngine: () => (engine ??= new PipelineEngine(ws, dbPath)),
+    };
   });
 
-  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+  afterEach(() => {
+    engine?.close();
+    engine = null;
+    rmSync(dir, { recursive: true, force: true });
+  });
 
   it('lists big tables', async () => {
     const res = await dispatch({ cmd: 'bigtable.list' }, ctx);
@@ -88,5 +97,36 @@ describe('ipc handlers', () => {
   it('state summary via ipc', async () => {
     const res = await dispatch({ cmd: 'state.summary' }, ctx);
     expect(res.ok).toBe(true);
+  });
+
+  it('query.run executes real SQL and returns rows', async () => {
+    // 先跑管线把数据写入,再查
+    await dispatch({ cmd: 'pipeline.run', id: 'c1' }, ctx);
+    const res = await dispatch({ cmd: 'query.run', sql: 'SELECT date, debit FROM seq ORDER BY date' }, ctx);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      const d = res.data as { columns: string[]; rows: Record<string, unknown>[] };
+      expect(d.columns).toContain('date');
+      expect(d.rows.length).toBe(1);
+      expect(d.rows[0].debit).toBe(10000); // 100 元 → 分
+    }
+  });
+
+  it('query.run rejects non-SELECT sql', async () => {
+    const res = await dispatch({ cmd: 'query.run', sql: 'DELETE FROM seq' }, ctx);
+    expect(res.ok).toBe(false);
+  });
+
+  it('setup.preview returns headers and rows for a source file', async () => {
+    const res = await dispatch(
+      { cmd: 'setup.preview', filePath: join(sourceDir, 'a.xlsx'), headerRow: 1, limit: 10 },
+      ctx,
+    );
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      const d = res.data as { headers: string[]; rows: unknown[][] };
+      expect(d.headers).toEqual(['日期', '借方金额']);
+      expect(d.rows.length).toBe(1);
+    }
   });
 });

@@ -1,60 +1,90 @@
-// 视图:预览。核对源文件表头行/截止行与数据(跟随左侧栏选中的文件)。
+// 视图:预览。真实读取源文件数据(setup.preview),表头行/截止行可调。
 import { useState } from 'react';
 import { useSelection } from '../state/SelectionContext';
 
-interface PreviewSheet {
+interface PreviewData {
+  sheetName: string;
+  headerRow: number;
   headers: string[];
-  rows: (string | number)[][];
+  rows: unknown[][];
+  total: number;
 }
-
-const SAMPLE: PreviewSheet = {
-  headers: ['日期', '借方金额', '摘要'],
-  rows: [
-    ['2024-01-15', 123456, '计提工资'],
-    ['2024-01-16', 8200, '差旅报销'],
-    ['2024-02-01', 50000, '采购'],
-  ],
-};
 
 export function PreviewView() {
   const { selectedFile } = useSelection();
   const [headerRow, setHeaderRow] = useState(1);
-  const [endRow, setEndRow] = useState('');
-  const [loaded, setLoaded] = useState(false);
+  const [limit, setLimit] = useState(100);
+  const [preview, setPreview] = useState<PreviewData | null>(null);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  const fileName = selectedFile ? selectedFile.split(/[\\/]/).pop() : '(在左侧栏选择源文件)';
+  async function handleLoad() {
+    setErr('');
+    if (!selectedFile) {
+      setErr('请先在左侧栏选择源文件');
+      return;
+    }
+    setBusy(true);
+    const res = await window.onw.invoke({
+      cmd: 'setup.preview',
+      filePath: selectedFile,
+      headerRow,
+      limit,
+    });
+    setBusy(false);
+    if (!res.ok) {
+      setErr(res.error.message);
+      setPreview(null);
+      return;
+    }
+    setPreview(res.data as PreviewData);
+  }
+
+  const fileName = selectedFile ? selectedFile.split(/[\\/]/).pop() : '(未选择)';
 
   return (
     <div style={{ padding: 12 }}>
-      <div style={{ marginBottom: 8 }}>
-        文件: {fileName} · 表头行{' '}
-        <input
-          type="number"
-          value={headerRow}
-          onChange={(e) => setHeaderRow(Number(e.target.value))}
-          style={{ width: 50 }}
-        />{' '}
-        截止行 <input value={endRow} onChange={(e) => setEndRow(e.target.value)} style={{ width: 60 }} />{' '}
-        <button onClick={() => setLoaded(true)}>加载预览</button>
+      <div style={{ marginBottom: 8, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+        <span>
+          文件: <b>{fileName}</b>
+        </span>
+        <span>
+          Sheet:{' '}
+          <select value={preview?.sheetName ?? ''} disabled={!preview}>
+            <option>{preview?.sheetName ?? '—'}</option>
+          </select>
+        </span>
+        <span>
+          表头行{' '}
+          <input type="number" value={headerRow} onChange={(e) => setHeaderRow(Number(e.target.value))} style={{ width: 50 }} />
+        </span>
+        <span>
+          行数{' '}
+          <input type="number" value={limit} onChange={(e) => setLimit(Number(e.target.value))} style={{ width: 60 }} />
+        </span>
+        <button onClick={handleLoad} disabled={busy}>
+          {busy ? '加载中…' : '加载预览'}
+        </button>
+        <span style={{ color: 'red' }}>{err}</span>
       </div>
-      {loaded && selectedFile ? (
+      {preview ? (
         <div>
-          <p>
-            已加载:共 {SAMPLE.rows.length} 行 {SAMPLE.headers.length} 列
+          <p style={{ color: '#57606a' }}>
+            {preview.sheetName} · 共 {preview.total} 行,显示前 {preview.rows.length} 行
           </p>
           <table border={1} cellPadding={4} cellSpacing={0}>
             <thead>
               <tr>
-                {SAMPLE.headers.map((h) => (
+                {preview.headers.map((h) => (
                   <th key={h}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {SAMPLE.rows.map((r, i) => (
+              {preview.rows.map((r, i) => (
                 <tr key={i}>
-                  {r.map((c, j) => (
-                    <td key={j}>{String(c)}</td>
+                  {preview.headers.map((h, j) => (
+                    <td key={h}>{String(r[j] ?? '')}</td>
                   ))}
                 </tr>
               ))}
@@ -62,7 +92,7 @@ export function PreviewView() {
           </table>
         </div>
       ) : (
-        <p>在左侧栏选择源文件后点击「加载预览」。</p>
+        <p style={{ color: '#8b949e' }}>在左侧栏选择源文件后点击「加载预览」,查看真实数据。</p>
       )}
     </div>
   );

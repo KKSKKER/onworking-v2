@@ -1,4 +1,4 @@
-// 视图:SQL 工作台。表浏览器 + SQL 编辑器 + 运行结果。
+// 视图:SQL 工作台。表浏览器 + SQL 编辑器 + 真实查询执行(query.run)。
 import { useState } from 'react';
 import { useApi } from './useApi';
 
@@ -6,31 +6,40 @@ interface TableInfo {
   name: string;
 }
 
-const SAMPLE_RESULT: Record<string, unknown>[] = [
-  { date: '2024-01', total: 123456 },
-  { date: '2024-02', total: 8200 },
-];
+interface QueryResult {
+  columns: string[];
+  rows: Record<string, unknown>[];
+  rowCount: number;
+}
 
 export function SqlView() {
-  const { data: tables } = useApi<TableInfo[]>({ cmd: 'schema.tables' });
-  const [sql, setSql] = useState('SELECT date, SUM(debit) AS total FROM seq GROUP BY date');
-  const [result, setResult] = useState<Record<string, unknown>[] | null>(null);
+  const { data: tables, reload } = useApi<TableInfo[]>({ cmd: 'schema.tables' });
+  const [sql, setSql] = useState('SELECT date, debit FROM seq LIMIT 100');
+  const [result, setResult] = useState<QueryResult | null>(null);
   const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
 
   async function handleRun() {
     setErr('');
-    // 演示:mock 环境直接返回样例(真实环境走查询管线)
-    setResult(SAMPLE_RESULT);
+    setBusy(true);
+    const res = await window.onw.invoke({ cmd: 'query.run', sql });
+    setBusy(false);
+    if (!res.ok) {
+      setErr(res.error.message);
+      setResult(null);
+      return;
+    }
+    setResult(res.data as QueryResult);
   }
 
-  function handleCopyStructure() {
-    navigator.clipboard?.writeText(
-      (tables ?? []).map((t) => `表 ${t.name} (SQLite)`).join('\n'),
-    );
-    setErr('表结构已复制(演示)');
+  async function handleCopyStructure() {
+    const res = await window.onw.invoke({ cmd: 'schema.tables' });
+    if (res.ok) {
+      const list = (res.data as TableInfo[]).map((t) => `表: ${t.name}`).join('\n');
+      await navigator.clipboard?.writeText(list);
+      setErr('表结构已复制');
+    }
   }
-
-  const cols = result && result.length > 0 ? Object.keys(result[0]) : [];
 
   return (
     <div style={{ padding: 12 }}>
@@ -43,6 +52,7 @@ export function SqlView() {
             ))}
           </ul>
           <button onClick={handleCopyStructure}>复制表结构</button>
+          <button onClick={reload}>刷新</button>
         </div>
         <div style={{ flex: 1 }}>
           <textarea
@@ -52,28 +62,33 @@ export function SqlView() {
             style={{ width: '100%', fontFamily: 'monospace' }}
           />
           <div style={{ margin: '8px 0' }}>
-            <button onClick={handleRun}>▶ 运行 (Ctrl+Enter)</button>{' '}
+            <button onClick={handleRun} disabled={busy}>
+              {busy ? '运行中…' : '▶ 运行'}
+            </button>{' '}
             <span style={{ color: 'red' }}>{err}</span>
           </div>
           {result && (
-            <table border={1} cellPadding={4} cellSpacing={0}>
-              <thead>
-                <tr>
-                  {cols.map((c) => (
-                    <th key={c}>{c}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {result.map((r, i) => (
-                  <tr key={i}>
-                    {cols.map((c) => (
-                      <td key={c}>{String(r[c])}</td>
+            <div>
+              <p style={{ color: '#57606a' }}>共 {result.rowCount} 行</p>
+              <table border={1} cellPadding={4} cellSpacing={0}>
+                <thead>
+                  <tr>
+                    {result.columns.map((c) => (
+                      <th key={c}>{c}</th>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {result.rows.map((r, i) => (
+                    <tr key={i}>
+                      {result.columns.map((c) => (
+                        <td key={c}>{String(r[c] ?? '')}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>
