@@ -1,12 +1,22 @@
-// 顶栏:文件/查询管理切换 · AI开放模式 · 语言 · 打开工作区。
+// 顶栏:文件/查询管理切换 · 增加视图(重开关闭的视图) · AI开放模式 · 语言 · 打开工作区。
 import { useState } from 'react';
+import { VIEWS } from '../views/registry';
 
 export type ShellMode = 'files' | 'query';
 
-export function TopBar({ mode, onModeChange }: { mode: ShellMode; onModeChange: (m: ShellMode) => void }) {
+export function TopBar({
+  mode,
+  onModeChange,
+  onAddView,
+}: {
+  mode: ShellMode;
+  onModeChange: (m: ShellMode) => void;
+  onAddView: (viewId: string) => void;
+}) {
   const [aiMode, setAiMode] = useState('off');
   const [lang, setLang] = useState('zh');
   const [wsName, setWsName] = useState('未打开');
+  const [addingView, setAddingView] = useState(false);
 
   async function handlePick() {
     const res = await window.onw.invoke({ cmd: 'workspace.pick' });
@@ -25,6 +35,18 @@ export function TopBar({ mode, onModeChange }: { mode: ShellMode; onModeChange: 
         <button className={mode === 'query' ? 'active' : ''} onClick={() => onModeChange('query')}>查询管理</button>
       </div>
       <div className="spacer" />
+      <div className="view-add">
+        <button onClick={() => setAddingView((v) => !v)}>+ 增加视图</button>
+        {addingView && (
+          <div className="view-menu">
+            {VIEWS.map((v) => (
+              <button key={v.id} onClick={() => { onAddView(v.id); setAddingView(false); }}>
+                {v.title}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       <button onClick={handlePick}>打开工作区</button>
       <span className="ctrl">
         AI开放模式

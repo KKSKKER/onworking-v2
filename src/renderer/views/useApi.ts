@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ApiCommand } from '../../ipc/contracts';
 
-export function useApi<T>(command: ApiCommand): {
+export function useApi<T>(command: ApiCommand, enabled = true): {
   data: T | null;
   error: string | null;
   loading: boolean;
@@ -15,6 +15,7 @@ export function useApi<T>(command: ApiCommand): {
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
+    if (!enabled) return;
     let alive = true;
     setLoading(true);
     window.onw
@@ -37,7 +38,7 @@ export function useApi<T>(command: ApiCommand): {
     return () => {
       alive = false;
     };
-  }, [tick, JSON.stringify(command)]);
+  }, [tick, enabled, JSON.stringify(command)]);
 
   const reload = useCallback(() => setTick((t) => t + 1), []);
   return { data, error, loading, reload };

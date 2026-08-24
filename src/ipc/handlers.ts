@@ -2,8 +2,11 @@
 // API handlers:命令 → 核心调用,统一返回 ApiResult。
 // 主进程把 ipcMain.handle 接到 dispatch;渲染层经 window.onw.invoke 调用。
 import type { Workspace } from '../core/workspace/workspace';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { listBigTables, loadBigTableConfig, saveBigTableConfig } from '../core/bigtable/store';
 import { listPipelines, savePipeline, deletePipeline } from '../core/pipeline/store';
+import { scanSourceDir } from '../core/ingest/scanner';
 import { PipelineEngine } from '../core/pipeline/engine';
 import { detectSourceConfig } from '../core/pipeline/setup';
 import {
@@ -38,6 +41,11 @@ const handlers: Record<string, Handler> = {
   'bigtable.save': async (ctx, p) => {
     saveBigTableConfig(ctx.ws, String(p.folder), p.config as never);
     return { saved: p.folder };
+  },
+  'bigtable.sourceFiles': async (ctx, p) => {
+    // 大表源目录:.onworking/bigtables/<folder>/source/(不存在返回空)
+    const dir = join(ctx.ws.onworkingDir, 'bigtables', String(p.folder), 'source');
+    return existsSync(dir) ? scanSourceDir(dir).map((f) => f.path) : [];
   },
 
   'pipeline.list': async (ctx) => listPipelines(ctx.ws),

@@ -41,6 +41,37 @@ body { font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", san
 .tree li:hover { background: #eaeef2; }
 .tree li.add { color: #0969da; }
 
+/* 大表树:文件夹 / 文件 / 选中 */
+.tree-folder { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px; border-radius: 4px; cursor: pointer; width: 100%; }
+.tree-folder:hover { background: #eaeef2; }
+.tree-folder.selected { background: #0969da; color: #fff; }
+.tree-caret { width: 12px; display: inline-block; }
+.tree-sub { list-style: none; margin: 0; padding: 0 0 0 16px; }
+.tree-file { padding: 2px 6px; border-radius: 4px; cursor: pointer; }
+.tree-file:hover { background: #eaeef2; }
+.tree-file.selected { background: #ddf4ff; color: #0969da; }
+
+/* 顶栏「增加视图」下拉 */
+.view-add { position: relative; }
+.view-menu {
+  position: absolute; right: 0; top: 26px; z-index: 50;
+  background: #fff; border: 1px solid #d0d7de; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.12);
+  display: flex; flex-direction: column; min-width: 140px; padding: 4px;
+}
+.view-menu button {
+  background: transparent; color: #1f2328; border: none; border-radius: 4px; padding: 6px 10px; text-align: left; cursor: pointer;
+}
+.view-menu button:hover { background: #eaeef2; }
+
+/* 右侧属性面板 */
+.prop-row { display: flex; gap: 8px; margin-bottom: 6px; font-size: 12px; }
+.prop-key { color: #57606a; min-width: 60px; }
+.prop-val { color: #1f2328; word-break: break-all; }
+.prop-hint { color: #8b949e; font-size: 12px; margin-top: 12px; line-height: 1.5; }
+
+/* dockview 浅色主题下确保文字可读 */
+.dockview-theme-light { background: #fff; color: #1f2328; }
+
 /* 底部面板 */
 .bottom-panel {
   height: 130px; border-top: 1px solid #d0d7de;

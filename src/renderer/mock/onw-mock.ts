@@ -36,6 +36,8 @@ async function mockDispatch(command: ApiCommand): Promise<ApiResult<unknown>> {
     }
     case 'bigtable.save':
       return ok({ saved: command.folder });
+    case 'bigtable.sourceFiles':
+      return ok(['序时账.xlsx', '序时账2025.XLS', '科目余额.csv']);
     case 'pipeline.list':
       return ok(['c1', 'q1']);
     case 'pipeline.save':

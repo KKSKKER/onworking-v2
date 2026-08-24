@@ -1,41 +1,63 @@
-// 应用外壳:多区域框架(VS Code 风格 dockview 视图区)。
-import { useMemo, useState } from 'react';
-import { DockviewReact, type DockviewReadyEvent } from 'dockview-react';
+// 应用外壳:多区域框架(VS Code 风格 dockview 视图区)+ 选中状态联动。
+import { useMemo, useRef, useState } from 'react';
+import { DockviewReact, type DockviewReadyEvent, type DockviewApi } from 'dockview-react';
 import 'dockview-react/dist/styles/dockview.css';
 import { TopBar, type ShellMode } from './shell/TopBar';
 import { SidebarLeft } from './shell/SidebarLeft';
 import { SidebarRight } from './shell/SidebarRight';
 import { BottomPanel } from './shell/BottomPanel';
-import { dockviewComponents } from './views/registry';
+import { ResizableSidebar } from './shell/ResizableSidebar';
+import { SelectionProvider } from './state/SelectionContext';
+import { dockviewComponents, VIEWS } from './views/registry';
 import './styles.css';
 
 export function App() {
   const [mode, setMode] = useState<ShellMode>('files');
   const components = useMemo(() => dockviewComponents(), []);
+  const apiRef = useRef<DockviewApi | null>(null);
 
   function onReady(event: DockviewReadyEvent) {
-    event.api.addPanel({ id: 'sql', component: 'sql', title: 'SQL 工作台' });
-    event.api.addPanel({ id: 'query', component: 'query', title: '查询' });
-    event.api.addPanel({ id: 'mapping', component: 'mapping', title: '文件字段映射' });
-    event.api.addPanel({ id: 'bigtable-settings', component: 'bigtable-settings', title: '大表字段设置' });
-    event.api.addPanel({ id: 'preview', component: 'preview', title: '预览' });
+    apiRef.current = event.api;
+    const opened: string[] = [];
+    for (const v of VIEWS) {
+      event.api.addPanel({ id: v.id, component: v.id, title: v.title });
+      opened.push(v.id);
+    }
+    void opened;
+  }
+
+  function addView(viewId: string) {
+    const api = apiRef.current;
+    if (!api) return;
+    if (api.getPanel(viewId)) {
+      api.getPanel(viewId)?.api.setActive();
+    } else {
+      const v = VIEWS.find((x) => x.id === viewId);
+      api.addPanel({ id: viewId, component: viewId, title: v?.title ?? viewId });
+    }
   }
 
   return (
-    <div className="app">
-      <TopBar mode={mode} onModeChange={setMode} />
-      <div className="body">
-        <aside className="sidebar-left">
-          <SidebarLeft mode={mode} />
-        </aside>
-        <main className="view-area">
-          <DockviewReact components={components} onReady={onReady} />
-        </main>
-        <aside className="sidebar-right">
-          <SidebarRight />
-        </aside>
+    <SelectionProvider>
+      <div className="app">
+        <TopBar mode={mode} onModeChange={setMode} onAddView={addView} />
+        <div className="body">
+          <ResizableSidebar initialWidth={240} minWidth={140} maxWidth={500} side="left">
+            <SidebarLeft mode={mode} />
+          </ResizableSidebar>
+          <main className="view-area">
+            <DockviewReact
+              className="dockview-theme-light"
+              components={components}
+              onReady={onReady}
+            />
+          </main>
+          <ResizableSidebar initialWidth={220} minWidth={140} maxWidth={500} side="right">
+            <SidebarRight />
+          </ResizableSidebar>
+        </div>
+        <BottomPanel />
       </div>
-      <BottomPanel />
-    </div>
+    </SelectionProvider>
   );
 }
