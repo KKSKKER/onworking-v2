@@ -1,5 +1,5 @@
-// 左侧栏:文件管理 → 大表树(可展开源文件,选中联动视图);查询管理 → 管线列表。
-import { useState } from 'react';
+// 左侧栏:文件管理 → 大表树(单击=选中+展开,参考 V1 FolderTree);查询管理 → 管线列表。
+import { useEffect, useState } from 'react';
 import { useApi } from '../views/useApi';
 import { useSelection } from '../state/SelectionContext';
 import type { ShellMode } from './TopBar';
@@ -12,6 +12,14 @@ function BigTableTree() {
   const { data: folders, reload } = useApi<string[]>({ cmd: 'bigtable.list' });
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const { selectedFolder, selectedFile, selectFolder, selectFile } = useSelection();
+
+  // 自动选中第一个大表(避免空状态,单击即选中)
+  useEffect(() => {
+    if (!selectedFolder && folders && folders.length > 0) {
+      selectFolder(folders[0]);
+      setExpanded(new Set([folders[0]]));
+    }
+  }, [folders, selectedFolder, selectFolder]);
 
   function toggleExpand(name: string): void {
     setExpanded((prev) => {
@@ -35,8 +43,10 @@ function BigTableTree() {
             expanded={expanded.has(folder)}
             selected={selectedFolder === folder}
             selectedFile={selectedFile}
-            onToggle={() => toggleExpand(folder)}
-            onSelectFolder={() => selectFolder(folder)}
+            onSelect={() => {
+              selectFolder(folder); // 单击即选中大表,视图跟随
+              toggleExpand(folder);
+            }}
             onSelectFile={selectFile}
           />
         ))}
@@ -51,20 +61,15 @@ function TreeFolder(props: {
   expanded: boolean;
   selected: boolean;
   selectedFile: string | null;
-  onToggle: () => void;
-  onSelectFolder: () => void;
+  onSelect: () => void;
   onSelectFile: (file: string) => void;
 }) {
-  const { folder, expanded, selected, selectedFile, onToggle, onSelectFolder, onSelectFile } = props;
+  const { folder, expanded, selected, selectedFile, onSelect, onSelectFile } = props;
   const { data: files } = useApi<string[]>({ cmd: 'bigtable.sourceFiles', folder }, expanded);
 
   return (
     <li>
-      <span
-        className={`tree-folder ${selected ? 'selected' : ''}`}
-        onClick={onToggle}
-        onDoubleClick={onSelectFolder}
-      >
+      <span className={`tree-folder ${selected ? 'selected' : ''}`} onClick={onSelect}>
         <span className="tree-caret">{expanded ? '▾' : '▸'}</span> 🗂 {folder}
       </span>
       {expanded && (files ?? []).length > 0 && (
@@ -89,8 +94,6 @@ function TreeFolder(props: {
 
 function PipelineList() {
   const { data: pipelines, reload } = useApi<string[]>({ cmd: 'pipeline.list' });
-  const { selectedFile } = useSelection();
-  void selectedFile;
   return (
     <div className="sidebar-panel">
       <div className="sidebar-title">

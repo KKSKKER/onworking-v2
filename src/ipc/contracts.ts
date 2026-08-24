@@ -24,6 +24,7 @@ export type ApiCommand =
   | { cmd: 'pipeline.recomputeAll' }
   | { cmd: 'pipeline.recomputeByDependency'; trigger: string }
   | { cmd: 'setup.detectSource'; filePath: string; sheetName?: string }
+  | { cmd: 'setup.sheets'; filePath: string }
   | { cmd: 'template.list' }
   | { cmd: 'template.save'; template: MappingTemplate }
   | { cmd: 'template.apply'; name: string; sheet: ParsedSheet }

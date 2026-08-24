@@ -1,6 +1,6 @@
-// 视图:文件字段映射。选择源文件 → 检测表头 → 把源列映射到大表字段。
-import { useState } from 'react';
-import { useApi } from './useApi';
+// 视图:文件字段映射(参考 V1 RuleEditor:Sheet 选择 + 表头/截止行 + 自动检测 + 字段映射表)。
+import { useEffect, useState } from 'react';
+import { useSelection } from '../state/SelectionContext';
 
 interface DetectResult {
   sheetName: string;
@@ -8,62 +8,135 @@ interface DetectResult {
   headers: string[];
 }
 
+interface FieldRow {
+  included: boolean;
+  sourceHeader: string;
+  outputName: string;
+  type: 'text' | 'cents' | 'number' | 'date';
+}
+
 export function MappingView() {
-  const [filePath, setFilePath] = useState('D:/演示工作区/序时账/source/序时账.xlsx');
+  const { selectedFile, selectedFolder } = useSelection();
+  const [filePath, setFilePath] = useState(selectedFile ?? '');
+  const [sheets, setSheets] = useState<string[]>([]);
+  const [sheet, setSheet] = useState<string>('');
   const [detected, setDetected] = useState<DetectResult | null>(null);
-  const { data: folders } = useApi<string[]>({ cmd: 'bigtable.list' });
-  const [targetTable, setTargetTable] = useState('序时账');
+  const [headerRow, setHeaderRow] = useState(1);
+  const [endRow, setEndRow] = useState('');
+  const [fields, setFields] = useState<FieldRow[]>([]);
   const [msg, setMsg] = useState('');
 
-  async function handleDetect() {
-    const res = await window.onw.invoke({ cmd: 'setup.detectSource', filePath });
-    if (res.ok) setDetected(res.data as DetectResult);
-    else setMsg(`检测失败: ${res.error.message}`);
+  // 跟随左侧栏选中的文件
+  useEffect(() => {
+    if (selectedFile) {
+      setFilePath(selectedFile);
+      setDetected(null);
+      setFields([]);
+      loadSheets(selectedFile);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFile]);
+
+  async function loadSheets(path: string) {
+    const res = await window.onw.invoke({ cmd: 'setup.sheets', filePath: path });
+    if (res.ok) {
+      const names = res.data as string[];
+      setSheets(names);
+      if (names.length > 0) setSheet(names[0]);
+    }
   }
+
+  async function handleDetect() {
+    if (!filePath.trim()) return;
+    setMsg('');
+    if (sheets.length === 0) await loadSheets(filePath);
+    const res = await window.onw.invoke({ cmd: 'setup.detectSource', filePath, sheetName: sheet || undefined });
+    if (!res.ok) {
+      setMsg(`检测失败: ${res.error.message}`);
+      return;
+    }
+    const d = res.data as DetectResult;
+    setDetected(d);
+    setHeaderRow(d.headerRow);
+    setFields(
+      d.headers.map((h) => ({
+        included: true,
+        sourceHeader: h,
+        outputName: h,
+        type: /金额|借方|贷方|余额|amount|amt/i.test(h) ? ('cents' as const) : ('text' as const),
+      })),
+    );
+  }
+
+  function handleSave() {
+    setMsg(`规则已保存(演示):${sheet} · 表头 ${headerRow} · ${fields.filter((f) => f.included).length} 字段`);
+  }
+  function handleSaveTemplate() {
+    setMsg(`已保存为模板(演示):${sheet}`);
+  }
+
+  const target = selectedFolder ?? '(未选择大表)';
 
   return (
     <div style={{ padding: 12 }}>
-      <div style={{ marginBottom: 8 }}>
+      <div style={{ marginBottom: 8, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
         源文件{' '}
-        <input style={{ width: 320 }} value={filePath} onChange={(e) => setFilePath(e.target.value)} />{' '}
+        <input style={{ width: 260 }} value={filePath} onChange={(e) => setFilePath(e.target.value)} />{' '}
         <button onClick={handleDetect}>一键获取表头</button>
       </div>
-      <div style={{ marginBottom: 8 }}>
-        映射到大表{' '}
-        <select value={targetTable} onChange={(e) => setTargetTable(e.target.value)}>
-          {(folders ?? []).map((f) => (
-            <option key={f} value={f}>
-              {f}
-            </option>
-          ))}
-        </select>
-      </div>
-      {detected ? (
+      {sheets.length > 0 && (
+        <div style={{ marginBottom: 8, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span>
+            Sheet({sheets.length}):{' '}
+            <select value={sheet} onChange={(e) => setSheet(e.target.value)} style={{ width: 180 }}>
+              {sheets.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </span>
+          <span>
+            表头行{' '}
+            <input type="number" value={headerRow} onChange={(e) => setHeaderRow(Number(e.target.value))} style={{ width: 50 }} />
+          </span>
+          <span>
+            截止行 <input value={endRow} onChange={(e) => setEndRow(e.target.value)} style={{ width: 60 }} placeholder="末尾" />
+          </span>
+          <span>
+            映射到大表: <b>{target}</b>
+          </span>
+        </div>
+      )}
+      {detected && fields.length > 0 && (
         <div>
-          <p>
-            Sheet: {detected.sheetName} · 表头行: {detected.headerRow}
-          </p>
           <table border={1} cellPadding={4} cellSpacing={0}>
             <thead>
               <tr>
-                <th>☑</th>
+                <th>
+                  <input
+                    type="checkbox"
+                    checked={fields.every((f) => f.included)}
+                    onChange={(e) => setFields(fields.map((f) => ({ ...f, included: e.target.checked })))}
+                  />
+                </th>
                 <th>源字段</th>
                 <th>映射到</th>
                 <th>类型</th>
               </tr>
             </thead>
             <tbody>
-              {detected.headers.map((h, i) => (
-                <tr key={i}>
+              {fields.map((f, i) => (
+                <tr key={i} style={{ opacity: f.included ? 1 : 0.4 }}>
                   <td>
-                    <input type="checkbox" defaultChecked />
+                    <input type="checkbox" checked={f.included} onChange={(e) => setField(i, 'included', e.target.checked)} />
                   </td>
-                  <td>{h}</td>
+                  <td>{f.sourceHeader}</td>
                   <td>
-                    <input placeholder="输出字段名" defaultValue={h} />
+                    <input value={f.outputName} onChange={(e) => setField(i, 'outputName', e.target.value)} />
                   </td>
                   <td>
-                    <select defaultValue="text">
+                    <select value={f.type} onChange={(e) => setField(i, 'type', e.target.value)}>
                       <option value="text">text</option>
                       <option value="cents">cents</option>
                       <option value="number">number</option>
@@ -74,13 +147,22 @@ export function MappingView() {
               ))}
             </tbody>
           </table>
-          <button onClick={() => setMsg('映射已保存(演示)')}>💾 保存规则</button>{' '}
-          <button onClick={() => setMsg('已保存为模板(演示)')}>保存为模板</button>{' '}
-          <span>{msg}</span>
+          <div style={{ marginTop: 8 }}>
+            <button onClick={handleSave}>💾 保存规则</button>{' '}
+            <button onClick={handleSaveTemplate}>保存为模板</button>{' '}
+            <span>{msg}</span>
+          </div>
         </div>
-      ) : (
-        <p>点击「一键获取表头」开始。</p>
+      )}
+      {!detected && (
+        <p style={{ color: '#8b949e' }}>
+          在左侧栏选择源文件,或输入路径后点「一键获取表头」。
+        </p>
       )}
     </div>
   );
+
+  function setField(index: number, key: 'included' | 'outputName' | 'type', value: unknown) {
+    setFields(fields.map((f, i) => (i === index ? { ...f, [key]: value } : f)));
+  }
 }

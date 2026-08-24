@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { listBigTables, loadBigTableConfig, saveBigTableConfig } from '../core/bigtable/store';
 import { listPipelines, savePipeline, deletePipeline } from '../core/pipeline/store';
 import { scanSourceDir } from '../core/ingest/scanner';
+import { parseCsvFile, parseExcelFile } from '../core/ingest/parser';
 import { PipelineEngine } from '../core/pipeline/engine';
 import { detectSourceConfig } from '../core/pipeline/setup';
 import {
@@ -86,6 +87,11 @@ const handlers: Record<string, Handler> = {
 
   'setup.detectSource': async (_ctx, p) =>
     detectSourceConfig(String(p.filePath), p.sheetName ? String(p.sheetName) : undefined),
+  'setup.sheets': async (_ctx, p) => {
+    const filePath = String(p.filePath);
+    const sheets = filePath.toLowerCase().endsWith('.csv') ? parseCsvFile(filePath) : parseExcelFile(filePath);
+    return sheets.map((s) => s.sheetName);
+  },
 
   'template.list': async (ctx) => listTemplates(ctx.ws),
   'template.save': async (ctx, p) => {

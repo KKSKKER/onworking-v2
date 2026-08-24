@@ -53,8 +53,10 @@ async function mockDispatch(command: ApiCommand): Promise<ApiResult<unknown>> {
       ]);
     case 'pipeline.recomputeByDependency':
       return ok([]);
+    case 'setup.sheets':
+      return ok(['序时账', '科目余额表', '凭证明细']);
     case 'setup.detectSource':
-      return ok({ sheetName: 'Sheet1', headerRow: 1, headers: ['日期', '借方金额', '摘要'] });
+      return ok({ sheetName: '序时账', headerRow: 1, headers: ['日期', '借方金额', '摘要'] });
     case 'template.list':
       return ok([]);
     case 'template.save':
