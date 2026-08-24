@@ -143,6 +143,47 @@ export async function toolBuildMasterTable(
   }
 }
 
+/** tool: 创建查询管线(泳道图「保存 pipeline 配置」)。SQL 跑在总表 DB。 */
+export function toolCreateQueryPipeline(
+  ws: Workspace,
+  id: string,
+  opts: { sql: string; dependencies: string[]; resultTable: string },
+): { pipelineId: string } {
+  savePipeline(ws, {
+    kind: 'query',
+    id,
+    label: id,
+    sql: opts.sql,
+    dependencies: opts.dependencies,
+    resultTable: opts.resultTable,
+    createdAt: new Date().toISOString(),
+  });
+  return { pipelineId: id };
+}
+
+/** tool: 运行查询管线(SQL → 物化结果表,总表 DB)。 */
+export async function toolRunQueryPipeline(ws: Workspace, id: string): Promise<RunSummary> {
+  const eng = new PipelineEngine(ws);
+  try {
+    return await eng.run(id);
+  } finally {
+    eng.close();
+  }
+}
+
+/** tool: 临时查询(ad-hoc,SQL 工作台等价)。 */
+export function toolQuery(
+  ws: Workspace,
+  sql: string,
+): { columns: string[]; rows: Record<string, unknown>[]; rowCount: number } {
+  const eng = new PipelineEngine(ws);
+  try {
+    return eng.query(sql);
+  } finally {
+    eng.close();
+  }
+}
+
 /** tool: 验证数据(大表 DB 行数 + 总表 DB 行数)。 */
 export function toolVerifyData(ws: Workspace, bigTableFolder: string): { rows: number; masterRows: number } {
   const cfg = loadBigTableConfig(ws, bigTableFolder);
