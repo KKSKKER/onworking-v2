@@ -27,6 +27,7 @@ body { font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", san
   background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 4px; padding: 3px 10px; cursor: pointer;
 }
 .topbar button:hover { background: #30363d; }
+.topbar .topbar-msg { color: #7ee787; font-size: 12px; white-space: nowrap; }
 
 /* 主体三栏 */
 .body { display: flex; flex: 1; min-height: 0; }

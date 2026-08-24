@@ -12,7 +12,7 @@ import type { BigTableConfig, BigTableField } from '../bigtable/schema';
 import { scanSourceDir, type ScannedFile } from '../ingest/scanner';
 import { parseCsvFile, parseExcelFile, type ParsedSheet } from '../ingest/parser';
 import { detectSourceConfig } from '../pipeline/setup';
-import { savePipeline, listPipelines } from '../pipeline/store';
+import { savePipeline, listPipelines, loadPipeline } from '../pipeline/store';
 import { PipelineEngine, type RunSummary } from '../pipeline/engine';
 import { ProjectState } from '../state/project';
 import { loadTemplate, applyTemplateToSheet } from '../template/store';
@@ -134,6 +134,32 @@ export async function toolRunCleaning(ws: Workspace, pipelineId: string): Promis
   } finally {
     eng.close();
   }
+}
+
+async function runCleanPipelines(ws: Workspace, ids: string[]): Promise<RunSummary[]> {
+  const eng = new PipelineEngine(ws);
+  try {
+    const out: RunSummary[] = [];
+    for (const id of ids) out.push(await eng.run(id));
+    return out;
+  } finally {
+    eng.close();
+  }
+}
+
+/** tool: 合并当前大表(按 YAML 规则把源文件合并进该大表)。 */
+export async function toolMergeBigTable(ws: Workspace, folder: string): Promise<RunSummary[]> {
+  const ids = listPipelines(ws).filter((id) => {
+    const cfg = loadPipeline(ws, id);
+    return cfg.kind === 'clean' && cfg.bigTableFolder === folder;
+  });
+  return runCleanPipelines(ws, ids);
+}
+
+/** tool: 全部合并(把工作区所有大表按规则合并一次)。 */
+export async function toolMergeAll(ws: Workspace): Promise<RunSummary[]> {
+  const ids = listPipelines(ws).filter((id) => loadPipeline(ws, id).kind === 'clean');
+  return runCleanPipelines(ws, ids);
 }
 
 /** tool: 构建总表(SQL 清洗管线:各大表 DB → 总表 DB)。 */

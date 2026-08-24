@@ -27,6 +27,8 @@ import {
   toolCreateSqlCleanPipeline,
   toolCreateQueryPipeline,
   toolRunCleaning,
+  toolMergeBigTable,
+  toolMergeAll,
   toolBuildMasterTable,
   toolRunQueryPipeline,
   toolQuery,
@@ -100,6 +102,8 @@ const handlers: Record<string, Handler> = {
     if (cfg.kind === 'sql-clean') return toolBuildMasterTable(ctx.ws, id);
     return toolRunQueryPipeline(ctx.ws, id);
   },
+  'pipeline.mergeBigTable': async (ctx, p) => toolMergeBigTable(ctx.ws, String(p.folder)),
+  'pipeline.mergeAll': async (ctx) => toolMergeAll(ctx.ws),
   'pipeline.recomputeAll': async (ctx) => ctx.getEngine().recomputeAll(),
   'pipeline.recomputeByDependency': async (ctx, p) =>
     ctx.getEngine().recomputeByDependency(String(p.trigger)),

@@ -22,6 +22,8 @@ export type ApiCommand =
   | { cmd: 'pipeline.save'; config: PipelineConfig }
   | { cmd: 'pipeline.delete'; id: string }
   | { cmd: 'pipeline.run'; id: string }
+  | { cmd: 'pipeline.mergeBigTable'; folder: string }
+  | { cmd: 'pipeline.mergeAll' }
   | { cmd: 'pipeline.recomputeAll' }
   | { cmd: 'pipeline.recomputeByDependency'; trigger: string }
   | { cmd: 'setup.detectSource'; filePath: string; sheetName?: string }

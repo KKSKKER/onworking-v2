@@ -1,8 +1,17 @@
-// 顶栏:文件/查询管理切换 · 增加视图(重开关闭的视图) · AI开放模式 · 语言 · 打开工作区。
+// 顶栏:文件/查询管理切换 · 合并(当前/全部) · 增加视图 · AI开放模式 · 语言 · 打开工作区。
 import { useState } from 'react';
 import { VIEWS } from '../views/registry';
+import { useSelection } from '../state/SelectionContext';
 
 export type ShellMode = 'files' | 'query';
+
+interface MergeSummary {
+  pipelineId: string;
+  kind: string;
+  ok: boolean;
+  rows?: number;
+  error?: string;
+}
 
 export function TopBar({
   mode,
@@ -17,6 +26,9 @@ export function TopBar({
   const [lang, setLang] = useState('zh');
   const [wsName, setWsName] = useState('未打开');
   const [addingView, setAddingView] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [mergeMsg, setMergeMsg] = useState('');
+  const { selectedFolder } = useSelection();
 
   async function handlePick() {
     const res = await window.onw.invoke({ cmd: 'workspace.pick' });
@@ -24,6 +36,29 @@ export function TopBar({
       const ws = res.data as { root: string };
       setWsName(ws.root);
     }
+  }
+
+  async function doMerge(kind: 'one' | 'all') {
+    const folder = selectedFolder;
+    if (kind === 'one' && !folder) {
+      setMergeMsg('请先在左侧栏选择大表');
+      return;
+    }
+    setBusy(true);
+    setMergeMsg('');
+    const cmd = kind === 'one'
+      ? ({ cmd: 'pipeline.mergeBigTable', folder: folder as string } as const)
+      : ({ cmd: 'pipeline.mergeAll' } as const);
+    const res = await window.onw.invoke(cmd);
+    setBusy(false);
+    if (!res.ok) {
+      setMergeMsg(`合并失败: ${res.error.message}`);
+      return;
+    }
+    const list = res.data as MergeSummary[];
+    const okCount = list.filter((r) => r.ok).length;
+    const totalRows = list.filter((r) => r.ok).reduce((s, r) => s + (r.rows ?? 0), 0);
+    setMergeMsg(`${kind === 'one' ? `合并「${selectedFolder}」` : '全部合并'}: ${okCount}/${list.length} 成功, ${totalRows} 行`);
   }
 
   return (
@@ -34,6 +69,9 @@ export function TopBar({
         <button className={mode === 'files' ? 'active' : ''} onClick={() => onModeChange('files')}>文件管理</button>
         <button className={mode === 'query' ? 'active' : ''} onClick={() => onModeChange('query')}>查询管理</button>
       </div>
+      <button onClick={() => doMerge('one')} disabled={busy} title="按 YAML 规则把源文件合并进当前选中大表">▶ 合并当前</button>
+      <button onClick={() => doMerge('all')} disabled={busy} title="把工作区所有大表按规则合并一次">▶ 全部合并</button>
+      {mergeMsg && <span className="topbar-msg">{mergeMsg}</span>}
       <div className="spacer" />
       <div className="view-add">
         <button onClick={() => setAddingView((v) => !v)}>+ 增加视图</button>
