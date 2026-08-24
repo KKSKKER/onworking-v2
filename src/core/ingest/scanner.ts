@@ -1,6 +1,6 @@
 // src/core/ingest/scanner.ts
 // 递归扫描源目录,返回支持的文件(xlsx/xls/csv)。
-import { readdirSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { join, relative, extname } from 'node:path';
 
 const SUPPORTED_EXT = new Set(['.xlsx', '.xls', '.csv']);
@@ -11,6 +11,7 @@ export interface ScannedFile {
 }
 
 export function scanSourceDir(sourceDir: string): ScannedFile[] {
+  if (!existsSync(sourceDir)) return []; // 目录不存在 → 视为无文件
   const out: ScannedFile[] = [];
   const walk = (dir: string): void => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {

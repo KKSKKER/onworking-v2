@@ -12,19 +12,25 @@ export interface ParsedSheet {
   rows: unknown[][];
 }
 
-function parseExcelWorkbook(filePath: string): ParsedSheet[] {
+export interface ParseOptions {
+  /** 表头行(1-based),默认 1。 */
+  headerRow?: number;
+}
+
+function parseExcelWorkbook(filePath: string, opts?: ParseOptions): ParsedSheet[] {
   const wb = XLSX.readFile(filePath);
+  const headerRowIdx = (opts?.headerRow ?? 1) - 1;
   return wb.SheetNames.map((sheetName) => {
     const ws = wb.Sheets[sheetName];
     const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true }) as unknown[][];
-    const headers = (aoa[0] ?? []).map((h) => String(h ?? '').trim());
-    const rows = aoa.slice(1);
+    const headers = (aoa[headerRowIdx] ?? []).map((h) => String(h ?? '').trim());
+    const rows = aoa.slice(headerRowIdx + 1);
     return { sheetName, headers, rows };
   });
 }
 
-export function parseExcelFile(filePath: string): ParsedSheet[] {
-  return parseExcelWorkbook(filePath);
+export function parseExcelFile(filePath: string, opts?: ParseOptions): ParsedSheet[] {
+  return parseExcelWorkbook(filePath, opts);
 }
 
 /** 手写 CSV 解析:支持引号包裹字段(含内嵌逗号/换行/双引号转义)。 */
@@ -68,10 +74,11 @@ function parseCsvText(text: string): string[][] {
   return rows;
 }
 
-export function parseCsvFile(filePath: string): ParsedSheet[] {
+export function parseCsvFile(filePath: string, opts?: ParseOptions): ParsedSheet[] {
   const text = readFileSync(filePath, 'utf-8');
   const table = parseCsvText(text);
-  const headers = (table[0] ?? []).map((h) => h.trim());
-  const rows = table.slice(1);
+  const headerRowIdx = (opts?.headerRow ?? 1) - 1;
+  const headers = (table[headerRowIdx] ?? []).map((h) => h.trim());
+  const rows = table.slice(headerRowIdx + 1);
   return [{ sheetName: 'csv', headers, rows }];
 }
