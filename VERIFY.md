@@ -17,6 +17,9 @@
 | T-err 错误捕获 | `src/core/errors/` | `tests/core/errors.test.ts` | `npx vitest run tests/core/errors.test.ts` | AppError(code/module/data) + captureError 入日志 |
 | T-graph 血缘网络 | `src/core/lineage/graph.ts` | `tests/core/lineage-graph.test.ts` | `npx vitest run tests/core/lineage-graph.test.ts` | 有向图:upstream/downstream/getAffected/拓扑重算序 |
 | T-wire 接入 | `src/core/etl/writer.ts` | `tests/core/etl.test.ts` | `npx vitest run tests/core/etl.test.ts` | writer 接入 logger + captureError(insert 失败进日志) |
+| T-hdr 表头检测 | `src/core/ingest/header-detect.ts` | `tests/core/header-detect.test.ts` | `npx vitest run tests/core/header-detect.test.ts` | 前N行打分锁定表头,找不到返回 -1 |
+| T-tpl 模板系统 | `src/core/template/store.ts` | `tests/core/template.test.ts` | `npx vitest run tests/core/template.test.ts` | 映射模板 save/apply(匹配反馈 matched/skipped) |
+| T-st 项目状态机 | `src/core/state/project.ts` | `tests/core/project-state.test.ts` | `npx vitest run tests/core/project-state.test.ts` | 大表 phase 转移校验 + 持久化 + getSummary(Agent 读当前状态) |
 
 ## 实现时的关键决定(请确认是否符合预期)
 
