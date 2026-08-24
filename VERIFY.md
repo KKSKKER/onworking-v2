@@ -30,7 +30,20 @@
    - 实测:better-sqlite3 v13 在**无类型列**上会把整数存成 REAL,所以金额列必须声明 `INTEGER` 才能保证"金额整数分"硬约束。
    - 语义类型(text/cents/number/date)→ 数据库类型 由 `dbTypeFor()` 映射(cents→INTEGER, number→REAL, text/date→TEXT)。
 
+## P3 管线引擎(已完成)
+
+| 模块 | 源码 | 测试 | 说明 |
+|---|---|---|---|
+| 管线配置+存储 | `src/core/pipeline/config.ts` `store.ts` | `tests/core/pipeline-config.test.ts` | clean/query 管线配置校验 + `.onworking/pipelines/` |
+| 管线注册表+血缘图 | `src/core/pipeline/registry.ts` | `tests/core/pipeline-registry.test.ts` | 大表/管线节点,source→clean→bigtable→query 边 |
+| 清洗管线执行器 | `src/core/pipeline/clean-runner.ts` | `tests/core/clean-runner.test.ts` | scan→parse(带表头行)→map→血缘→批量写入 |
+| 查询管线执行器 | `src/core/pipeline/query-runner.ts` | `tests/core/query-runner.test.ts` | SELECT/WITH → 物化结果表,覆盖式重跑 |
+| 重算编排引擎 | `src/core/pipeline/engine.ts` | `tests/core/pipeline-engine.test.ts` | 单/多/全/**按依赖自动重算**(拓扑序,更新状态机) |
+| 集成+性能 | `scripts/demo-import.ts` | `tests/core/pipeline-integration.test.ts` | **真实序时账 11,110 行 295ms(3.8 万行/秒)** |
+
 ## 尚未做(等你确认后继续)
 
-- **T8 集成**:scanner→parse→transform→lineage→write 全链路 + 真实数据性能测量(`demo:import`)。
-- 管线引擎(把血缘有向图接进真实管线)、前端外壳、AI 开放模式、MCP —— 后续计划。
+- **P2 前端外壳 + 五视图**(Electron + React + dockview)。
+- **P4 三流程闭环 UI**。
+- **P5 AI 开放模式 + MCP + 操作手册**。
+- 数据校验(Validator):P3 未含「数据是否干净?」检查点,后续如需再补。
