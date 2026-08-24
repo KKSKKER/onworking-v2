@@ -23,6 +23,8 @@ export interface ApiContext {
   dbPath: string;
   /** 惰性获取 PipelineEngine(主进程缓存单例;测试可每次新建)。 */
   getEngine(): PipelineEngine;
+  /** 进度事件回调(主进程转发到渲染层)。 */
+  emitProgress?(payload: unknown): void;
 }
 
 type Payload = Record<string, unknown>;
@@ -50,7 +52,9 @@ const handlers: Record<string, Handler> = {
   'pipeline.run': async (ctx, p) => {
     const eng = ctx.getEngine();
     try {
-      return await eng.run(String(p.id));
+      return await eng.run(String(p.id), (prog) =>
+        ctx.emitProgress?.({ pipelineId: p.id, progress: prog }),
+      );
     } finally {
       eng.close();
     }

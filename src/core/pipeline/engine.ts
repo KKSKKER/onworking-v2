@@ -17,6 +17,7 @@ import { captureError } from '../errors';
 import { logger } from '../logging';
 import { commitWorkspaceChanges } from '../versioning/workspace-vcs';
 import type { PipelineKind } from './config';
+import type { CleanProgress } from './clean-runner';
 
 const MODULE = 'pipeline/engine';
 
@@ -59,12 +60,12 @@ export class PipelineEngine {
       .map((n) => n.id);
   }
 
-  async run(id: string): Promise<RunSummary> {
+  async run(id: string, onProgress?: (p: CleanProgress) => void): Promise<RunSummary> {
     const cfg = loadPipeline(this.ws, id);
     try {
       if (cfg.kind === 'clean') {
         const bigTable = loadBigTableConfig(this.ws, cfg.bigTableFolder);
-        const result = await runCleanPipeline(this.db, cfg, bigTable);
+        const result = await runCleanPipeline(this.db, cfg, bigTable, onProgress);
         const st = new ProjectState(this.ws);
         st.setPhase(cfg.bigTableFolder, 'cleaned');
         st.registerFiles(cfg.bigTableFolder, result.files);

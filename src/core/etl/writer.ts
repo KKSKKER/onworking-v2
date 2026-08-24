@@ -62,6 +62,8 @@ export async function writeBigTable(
       percent: rows.length === 0 ? 100 : Math.round((inserted / rows.length) * 100),
     });
     logger.debug(MODULE, 'batch inserted', { table: tableName, inserted, total: rows.length });
+    // 每批让出事件循环:使 IPC 进度消息能流式送达渲染层(主进程不被整段阻塞)
+    await new Promise((resolve) => setImmediate(resolve));
   }
 
   logger.info(MODULE, 'write complete', { table: tableName, inserted });

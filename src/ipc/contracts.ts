@@ -12,6 +12,7 @@ export type ApiResult<T> =
 
 export type ApiCommand =
   | { cmd: 'workspace.open'; path: string }
+  | { cmd: 'workspace.pick' }
   | { cmd: 'bigtable.list' }
   | { cmd: 'bigtable.get'; folder: string }
   | { cmd: 'bigtable.save'; folder: string; config: BigTableConfig }
