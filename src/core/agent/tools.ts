@@ -73,15 +73,13 @@ export function toolImportFiles(ws: Workspace, bigTableFolder: string, sourceDir
   return files;
 }
 
-/** tool: 设置映射 → 写 YAML 规则 + 建清洗管线(规则驱动,参考 V1)。 */
-export function toolSetupMapping(
+/** tool: 设置字段映射 —— 只写 YAML 规则,不生成管线。 */
+export function toolSetMapping(
   ws: Workspace,
   bigTableFolder: string,
-  sourceDir: string,
   headerRow: number,
   mappings: FieldMapping[],
-): { pipelineId: string; ruleFile: string } {
-  // 写 YAML 规则(源→大表映射的唯一真源)
+): { ruleFile: string } {
   const rule: RuleYaml = {
     name: `${bigTableFolder}_rule`,
     display: `提取规则: ${bigTableFolder}`,
@@ -96,7 +94,15 @@ export function toolSetupMapping(
     })),
   };
   const ruleFile = saveRule(ws, bigTableFolder, rule);
+  return { ruleFile };
+}
 
+/** tool: 创建清洗管线(引用大表规则执行,不写规则)。 */
+export function toolCreateCleaningPipeline(
+  ws: Workspace,
+  bigTableFolder: string,
+  sourceDir: string,
+): { pipelineId: string } {
   const pipelineId = `c_${Date.now()}`;
   savePipeline(ws, {
     kind: 'clean',
@@ -106,7 +112,7 @@ export function toolSetupMapping(
     sourceDir,
     createdAt: new Date().toISOString(),
   });
-  return { pipelineId, ruleFile };
+  return { pipelineId };
 }
 
 /** tool: 引用模板套用映射。 */

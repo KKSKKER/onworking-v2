@@ -22,7 +22,8 @@ import type { ApiCommand, ApiResult } from './contracts';
 import {
   toolCreateBigTable,
   toolGetFileHeaders,
-  toolSetupMapping,
+  toolSetMapping,
+  toolCreateCleaningPipeline,
   toolCreateSqlCleanPipeline,
   toolCreateQueryPipeline,
   toolRunCleaning,
@@ -62,7 +63,7 @@ const handlers: Record<string, Handler> = {
 
   'pipeline.list': async (ctx) => listPipelines(ctx.ws),
   'pipeline.save': async (ctx, p) => {
-    // 前端保存管线 → 按类型分发到工具函数
+    // 前端保存管线 → 按类型分发到工具函数(clean 只建管线,不写规则)
     const config = p.config as PipelineConfig;
     if (config.kind === 'query') {
       return toolCreateQueryPipeline(ctx.ws, config.id, {
@@ -78,7 +79,14 @@ const handlers: Record<string, Handler> = {
         resultTable: config.resultTable,
       });
     }
-    return toolSetupMapping(ctx.ws, config.bigTableFolder, config.sourceDir, config.headerRow ?? 1, config.mappings ?? []);
+    return toolCreateCleaningPipeline(ctx.ws, config.bigTableFolder, config.sourceDir);
+  },
+  'mapping.save': async (ctx, p) => {
+    // 文件字段映射:只写 YAML 规则,不生成管线
+    const folder = String(p.folder);
+    const headerRow = Number(p.headerRow ?? 1);
+    const mappings = p.mappings as never;
+    return toolSetMapping(ctx.ws, folder, headerRow, mappings);
   },
   'pipeline.delete': async (ctx, p) => {
     deletePipeline(ctx.ws, String(p.id));

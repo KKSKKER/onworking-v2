@@ -2,7 +2,6 @@
 // 保存规则 → pipeline.save;保存模板 → template.save(真实后端)。
 import { useEffect, useState } from 'react';
 import { useSelection } from '../state/SelectionContext';
-import type { CleanPipelineConfig } from '../../core/pipeline/config';
 import type { MappingTemplate } from '../../core/template/store';
 import type { FieldMapping } from '../../core/etl/transform';
 
@@ -87,24 +86,18 @@ export function MappingView() {
   }
 
   async function handleSave() {
-    if (!selectedFolder || !filePath.trim()) {
-      setMsg('请先选择目标大表并输入源文件路径');
+    if (!selectedFolder) {
+      setMsg('请先选择目标大表');
       return;
     }
-    const sourceDir = filePath.split(/[\\/]/).slice(0, -1).join('/') || '.';
-    const config: CleanPipelineConfig = {
-      kind: 'clean',
-      id: `c_${Date.now()}`,
-      label: `${selectedFolder}清洗`,
-      bigTableFolder: selectedFolder,
-      sourceDir,
-      sheetName: sheet || undefined,
+    // 只保存字段映射(YAML 规则),不生成管线
+    const res = await window.onw.invoke({
+      cmd: 'mapping.save',
+      folder: selectedFolder,
       headerRow,
       mappings: buildMappings(),
-      createdAt: new Date().toISOString(),
-    };
-    const res = await window.onw.invoke({ cmd: 'pipeline.save', config });
-    setMsg(res.ok ? `规则已保存: ${config.id}` : `保存失败: ${res.error.message}`);
+    });
+    setMsg(res.ok ? '映射已保存(规则)' : `保存失败: ${res.error.message}`);
   }
 
   async function handleSaveTemplate() {

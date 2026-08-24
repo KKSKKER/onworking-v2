@@ -13,7 +13,8 @@ import {
   toolImportFiles,
   toolGetFileHeaders,
   toolSetBigTableFields,
-  toolSetupMapping,
+  toolSetMapping,
+  toolCreateCleaningPipeline,
   toolRunCleaning,
   toolBuildMasterTable,
   toolVerifyData,
@@ -96,8 +97,9 @@ export async function runInitialSetupFlow(opts: {
 
     const { fields, mappings } = guessFieldsAndMappings(headers.detected.headers);
     await push('setBigTableFields', () => toolSetBigTableFields(ws, bigTableFolder, fields));
-    const { pipelineId } = (await push('setupMapping', () =>
-      toolSetupMapping(ws, bigTableFolder, sourceDir, headers.detected.headerRow, mappings),
+    await push('setMapping', () => toolSetMapping(ws, bigTableFolder, headers.detected.headerRow, mappings));
+    const { pipelineId } = (await push('createCleaningPipeline', () =>
+      toolCreateCleaningPipeline(ws, bigTableFolder, sourceDir),
     )) as { pipelineId: string };
 
     // 建立 SQL 清洗管线(大表 → 总表)

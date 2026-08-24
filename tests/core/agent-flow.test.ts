@@ -38,7 +38,7 @@ describe('agent flow (initial setup via AI tools)', () => {
     expect(result.success).toBe(true);
     // 每个关键 AI tool 都被调用并成功
     const toolNames = result.steps.map((s) => s.tool);
-    for (const t of ['openWorkspace', 'createBigTable', 'importFiles', 'getFileHeaders', 'setBigTableFields', 'setupMapping', 'runCleaning', 'buildMasterTable', 'verifyData']) {
+    for (const t of ['openWorkspace', 'createBigTable', 'importFiles', 'getFileHeaders', 'setBigTableFields', 'setMapping', 'createCleaningPipeline', 'runCleaning', 'buildMasterTable', 'verifyData']) {
       expect(toolNames).toContain(t);
     }
     expect(result.steps.every((s) => s.ok)).toBe(true);

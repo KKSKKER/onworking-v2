@@ -7,7 +7,8 @@ import {
   toolImportFiles,
   toolGetFileHeaders,
   toolSetBigTableFields,
-  toolSetupMapping,
+  toolSetMapping,
+  toolCreateCleaningPipeline,
   toolRunCleaning,
   toolCreateSqlCleanPipeline,
   toolBuildMasterTable,
@@ -49,13 +50,17 @@ async function main(): Promise<void> {
   ]);
   console.log('✓ ④ toolSetBigTableFields: 借方余额 / 贷方余额 / 年份');
 
-  // 第 5 步:创建映射(写 YAML 规则 + 清洗管线)
-  const { pipelineId } = toolSetupMapping(ws, BIG_TABLE, sourceDir, headers.detected.headerRow, [
+  // 第 5 步:创建映射(只写 YAML 规则,不生成管线)
+  toolSetMapping(ws, BIG_TABLE, headers.detected.headerRow, [
     { sourceHeader: '借方金额合计', outputName: '借方余额', transform: 'to-cents' },
     { sourceHeader: '贷方金额合计', outputName: '贷方余额', transform: 'to-cents' },
     { sourceHeader: '年度', outputName: '年份', transform: 'none' },
   ]);
-  console.log(`✓ ⑤ toolSetupMapping: ${pipelineId}`);
+  console.log('✓ ⑤ toolSetMapping: 写 YAML 规则');
+
+  // 第 5.5 步:单独创建清洗管线(引用规则)
+  const { pipelineId } = toolCreateCleaningPipeline(ws, BIG_TABLE, sourceDir);
+  console.log(`✓ ⑤.5 toolCreateCleaningPipeline: ${pipelineId}`);
 
   // 第 6 步:清洗入大表
   const clean = await toolRunCleaning(ws, pipelineId);

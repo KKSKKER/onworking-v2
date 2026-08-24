@@ -17,6 +17,7 @@ export type ApiCommand =
   | { cmd: 'bigtable.get'; folder: string }
   | { cmd: 'bigtable.save'; folder: string; config: BigTableConfig }
   | { cmd: 'bigtable.sourceFiles'; folder: string }
+  | { cmd: 'mapping.save'; folder: string; headerRow?: number; mappings: unknown[] }
   | { cmd: 'pipeline.list' }
   | { cmd: 'pipeline.save'; config: PipelineConfig }
   | { cmd: 'pipeline.delete'; id: string }
