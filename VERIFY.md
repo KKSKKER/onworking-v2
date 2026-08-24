@@ -49,9 +49,21 @@
 - **表头检测+模板接入核心**:`pipeline/setup.ts`(`detectSourceConfig` / `applyMappingTemplate`),P2 映射视图直接复用。
 - **i18n 裁决(方案1)**:核心错误信息英文 + 稳定 `code`;UI 文案 P2 走 i18n。
 
+## P2 应用外壳 + 五视图(浏览器 mock 开发中)
+
+| 模块 | 位置 | 说明 |
+|---|---|---|
+| IPC 契约 + handlers | `src/ipc/` | 命令→核心,统一 ApiResult(6 测试) |
+| Electron 主进程 | `src/main/` | preload 桥 + ipcMain 路由 + 引擎主进程运行(每批让出进度流) |
+| 渲染层外壳 | `src/renderer/` | dockview 多视图 + 顶栏/侧栏/底部面板 + 浏览器 mock `window.onw` |
+| 五视图 | `src/renderer/views/` | 大表字段设置/文件字段映射/预览/SQL工作台/查询 |
+
+**浏览器验证**:`npm run dev:renderer` → 打开 http://localhost:5173 看外壳(需 mock,无真实后端数据)。
+**Electron 真启动**:需先装 **VS Build Tools**(better-sqlite3 无 Electron 预编译,当前机器缺编译环境),然后 `npm run rebuild:electron && npm run dev`。
+
 ## 尚未做(等你确认后继续)
 
-- **P2 前端外壳 + 五视图**(Electron + React + dockview)。
+- **P2-D 视图接真实后端**:mock 数据换成走 `window.onw.invoke` 的真实 IPC(结构已就位,Electron 可用后即通)。
 - **P4 三流程闭环 UI**。
-- **P5 AI 开放模式 + MCP + 操作手册**。
+- **P5 AI 开放模式网关 + MCP + 操作手册**。
 - 数据校验(Validator):P3 未含「数据是否干净?」检查点,后续如需再补。
