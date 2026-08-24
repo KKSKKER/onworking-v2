@@ -19,7 +19,9 @@
 1. **better-sqlite3 升到 v13**(Node 24 无 v11 预编译,已实测 v13 可用)。
 2. **CSV 手写解析、全按字符串保留** —— 因为 SheetJS 会把 `2024-01`(期间)误判成日期序列号 45292(实测发现的坑),类型转换统一交给 ETL 层。
 3. **大表文件夹位置**:`.onworking/bigtables/<folder>/bigtable.json`(git 可追踪的元数据区)。
-4. **金额列存 INTEGER**(`sqlType: 'INTEGER'`),写入时原生整数分,符合"金额整数分"硬约束。
+4. **列类型用数据库原生类型字符串**(`sqlType: 'INTEGER'/'TEXT'/'REAL'`),不维护自造类型枚举。
+   - 实测:better-sqlite3 v13 在**无类型列**上会把整数存成 REAL,所以金额列必须声明 `INTEGER` 才能保证"金额整数分"硬约束。
+   - 语义类型(text/cents/number/date)→ 数据库类型 由 `dbTypeFor()` 映射(cents→INTEGER, number→REAL, text/date→TEXT)。
 
 ## 尚未做(等你确认后继续)
 
