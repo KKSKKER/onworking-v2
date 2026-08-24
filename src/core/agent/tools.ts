@@ -175,6 +175,32 @@ export async function toolBuildMasterTable(
   }
 }
 
+async function runSqlCleanPipelines(ws: Workspace, ids: string[]): Promise<RunSummary[]> {
+  const eng = new PipelineEngine(ws);
+  try {
+    const out: RunSummary[] = [];
+    for (const id of ids) out.push(await eng.run(id));
+    return out;
+  } finally {
+    eng.close();
+  }
+}
+
+/** tool: 从当前大表构建总表(跑含该大表的 sql-clean 管线)。 */
+export async function toolBuildMasterForBigTable(ws: Workspace, folder: string): Promise<RunSummary[]> {
+  const ids = listPipelines(ws).filter((id) => {
+    const cfg = loadPipeline(ws, id);
+    return cfg.kind === 'sql-clean' && cfg.bigTables.includes(folder);
+  });
+  return runSqlCleanPipelines(ws, ids);
+}
+
+/** tool: 从全部大表构建总表(跑所有 sql-clean 管线)。 */
+export async function toolBuildMasterAll(ws: Workspace): Promise<RunSummary[]> {
+  const ids = listPipelines(ws).filter((id) => loadPipeline(ws, id).kind === 'sql-clean');
+  return runSqlCleanPipelines(ws, ids);
+}
+
 /** tool: 创建查询管线(泳道图「保存 pipeline 配置」)。SQL 跑在总表 DB。 */
 export function toolCreateQueryPipeline(
   ws: Workspace,

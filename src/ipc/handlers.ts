@@ -30,6 +30,8 @@ import {
   toolMergeBigTable,
   toolMergeAll,
   toolBuildMasterTable,
+  toolBuildMasterForBigTable,
+  toolBuildMasterAll,
   toolRunQueryPipeline,
   toolQuery,
   toolGetProjectState,
@@ -104,6 +106,8 @@ const handlers: Record<string, Handler> = {
   },
   'pipeline.mergeBigTable': async (ctx, p) => toolMergeBigTable(ctx.ws, String(p.folder)),
   'pipeline.mergeAll': async (ctx) => toolMergeAll(ctx.ws),
+  'pipeline.buildMasterBigTable': async (ctx, p) => toolBuildMasterForBigTable(ctx.ws, String(p.folder)),
+  'pipeline.buildMasterAll': async (ctx) => toolBuildMasterAll(ctx.ws),
   'pipeline.recomputeAll': async (ctx) => ctx.getEngine().recomputeAll(),
   'pipeline.recomputeByDependency': async (ctx, p) =>
     ctx.getEngine().recomputeByDependency(String(p.trigger)),

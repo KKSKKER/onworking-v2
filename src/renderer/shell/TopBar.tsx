@@ -38,27 +38,34 @@ export function TopBar({
     }
   }
 
-  async function doMerge(kind: 'one' | 'all') {
+  async function doAction(kind: 'mergeOne' | 'mergeAll' | 'masterOne' | 'masterAll') {
     const folder = selectedFolder;
-    if (kind === 'one' && !folder) {
+    if ((kind === 'mergeOne' || kind === 'masterOne') && !folder) {
       setMergeMsg('请先在左侧栏选择大表');
       return;
     }
     setBusy(true);
     setMergeMsg('');
-    const cmd = kind === 'one'
-      ? ({ cmd: 'pipeline.mergeBigTable', folder: folder as string } as const)
-      : ({ cmd: 'pipeline.mergeAll' } as const);
+    const cmd =
+      kind === 'mergeOne' ? ({ cmd: 'pipeline.mergeBigTable', folder: folder as string } as const)
+      : kind === 'mergeAll' ? ({ cmd: 'pipeline.mergeAll' } as const)
+      : kind === 'masterOne' ? ({ cmd: 'pipeline.buildMasterBigTable', folder: folder as string } as const)
+      : ({ cmd: 'pipeline.buildMasterAll' } as const);
     const res = await window.onw.invoke(cmd);
     setBusy(false);
     if (!res.ok) {
-      setMergeMsg(`合并失败: ${res.error.message}`);
+      setMergeMsg(`失败: ${res.error.message}`);
       return;
     }
     const list = res.data as MergeSummary[];
     const okCount = list.filter((r) => r.ok).length;
     const totalRows = list.filter((r) => r.ok).reduce((s, r) => s + (r.rows ?? 0), 0);
-    setMergeMsg(`${kind === 'one' ? `合并「${selectedFolder}」` : '全部合并'}: ${okCount}/${list.length} 成功, ${totalRows} 行`);
+    const label =
+      kind === 'mergeOne' ? `合并「${selectedFolder}」`
+      : kind === 'mergeAll' ? '全部合并'
+      : kind === 'masterOne' ? `构建总表「${selectedFolder}」`
+      : '全部构建总表';
+    setMergeMsg(`${label}: ${okCount}/${list.length} 成功, ${totalRows} 行`);
   }
 
   return (
@@ -69,8 +76,11 @@ export function TopBar({
         <button className={mode === 'files' ? 'active' : ''} onClick={() => onModeChange('files')}>文件管理</button>
         <button className={mode === 'query' ? 'active' : ''} onClick={() => onModeChange('query')}>查询管理</button>
       </div>
-      <button onClick={() => doMerge('one')} disabled={busy} title="按 YAML 规则把源文件合并进当前选中大表">▶ 合并当前</button>
-      <button onClick={() => doMerge('all')} disabled={busy} title="把工作区所有大表按规则合并一次">▶ 全部合并</button>
+      <button onClick={() => doAction('mergeOne')} disabled={busy} title="按 YAML 规则把源文件合并进当前选中大表">▶ 合并当前</button>
+      <button onClick={() => doAction('mergeAll')} disabled={busy} title="把工作区所有大表按规则合并一次">▶ 全部合并</button>
+      <span className="topbar-sep" />
+      <button onClick={() => doAction('masterOne')} disabled={busy} title="从当前选中大表构建总表">⇉ 总表当前</button>
+      <button onClick={() => doAction('masterAll')} disabled={busy} title="从全部大表构建总表">⇉ 总表全部</button>
       {mergeMsg && <span className="topbar-msg">{mergeMsg}</span>}
       <div className="spacer" />
       <div className="view-add">
