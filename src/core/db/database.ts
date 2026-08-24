@@ -4,9 +4,14 @@
 // 本层纯 better-sqlite3 进程内操作;worker 线程封装在 Electron 组装层。
 import Database from 'better-sqlite3';
 
-export function openDatabase(dbPath: string): Database.Database {
+export function openDatabase(
+  dbPath: string,
+  opts?: { wal?: boolean },
+): Database.Database {
   const db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');
+  if (opts?.wal !== false) {
+    db.pragma('journal_mode = WAL'); // 默认 WAL;ATTACH 场景用 false(DELETE)
+  }
   db.pragma('synchronous = NORMAL');
   return db;
 }

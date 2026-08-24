@@ -79,7 +79,7 @@ async function main(): Promise<void> {
   });
 
   const t0 = Date.now();
-  const eng = new PipelineEngine(ws, join(ws.onworkingDir, 'db', 'onworking.db'));
+  const eng = new PipelineEngine(ws);
   const results = await eng.recomputeAll();
   const elapsed = Date.now() - t0;
   for (const r of results) {

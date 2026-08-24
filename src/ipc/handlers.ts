@@ -94,11 +94,7 @@ const handlers: Record<string, Handler> = {
   'template.apply': async (ctx, p) =>
     applyTemplateToSheet(p.sheet as never, loadTemplate(ctx.ws, String(p.name))),
 
-  'schema.tables': async (ctx) =>
-    ctx
-      .getEngine()
-      .db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-      .all(),
+  'schema.tables': async (ctx) => ctx.getEngine().schemaTables(),
 
   'query.run': async (ctx, p) => {
     const sql = String(p.sql).trim();
@@ -110,12 +106,7 @@ const handlers: Record<string, Handler> = {
         data: { sql },
       });
     }
-    const limit = Number(p.limit ?? 500);
-    // 仅当 SQL 未自带 LIMIT 时才追加(避免 "LIMIT 100 LIMIT 500" 语法错误)
-    const finalSql = /\blimit\b/i.test(sql) ? sql : `${sql} LIMIT ${limit}`;
-    const rows = ctx.getEngine().db.prepare(finalSql).all() as Record<string, unknown>[];
-    const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
-    return { columns, rows, rowCount: rows.length };
+    return ctx.getEngine().query(sql, Number(p.limit ?? 500));
   },
 
   'state.summary': async (ctx) => new ProjectState(ctx.ws).getSummary(),

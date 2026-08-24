@@ -9,6 +9,11 @@ function bigTableDir(ws: Workspace, folder: string): string {
   return join(ws.onworkingDir, 'bigtables', folder);
 }
 
+/** 大表自己的 SQLite DB 路径(每大表独立一个 DB)。 */
+export function bigTableDbPath(ws: Workspace, folder: string): string {
+  return join(bigTableDir(ws, folder), 'db', 'onworking.db');
+}
+
 export function listBigTables(ws: Workspace): string[] {
   const dir = join(ws.onworkingDir, 'bigtables');
   if (!existsSync(dir)) return [];

@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as XLSX from 'xlsx';
 import { initWorkspace, type Workspace } from '../../src/core/workspace/workspace';
-import { saveBigTableConfig } from '../../src/core/bigtable/store';
+import { saveBigTableConfig, bigTableDbPath } from '../../src/core/bigtable/store';
+import { openDatabase } from '../../src/core/db/database';
 import { savePipeline } from '../../src/core/pipeline/store';
 import { PipelineEngine } from '../../src/core/pipeline/engine';
 
@@ -58,16 +59,17 @@ describe('pipeline integration (end-to-end)', () => {
     });
 
     const t0 = Date.now();
-    const eng = new PipelineEngine(ws, join(ws.onworkingDir, 'db', 'onworking.db'));
+    const eng = new PipelineEngine(ws);
     const results = await eng.recomputeAll();
     const elapsed = Date.now() - t0;
     const r = results[0];
     expect(r.ok).toBe(true);
     expect(r.rows).toBe(20000);
 
-    const row = eng.db
-      .prepare('SELECT * FROM seq LIMIT 1')
-      .get() as Record<string, unknown>;
+    // 大表数据落在它自己的 DB(每大表独立)
+    const btdb = openDatabase(bigTableDbPath(ws, 'seq'));
+    const row = btdb.prepare('SELECT * FROM seq LIMIT 1').get() as Record<string, unknown>;
+    btdb.close();
     expect(row.__source_file).toBeTruthy(); // 血缘来源
     expect(typeof row.__source_row).toBe('number'); // 血缘行号是整数
     expect(typeof row.debit).toBe('number'); // 整数分

@@ -25,6 +25,9 @@ export function buildLineageGraph(
       g.addNode({ id: p.id, kind: 'clean-pipeline', label: p.label });
       const srcId = `src:${p.sourceDir}`;
       if (!g.has(srcId)) g.addNode({ id: srcId, kind: 'source', label: p.sourceDir });
+    } else if (p.kind === 'sql-clean') {
+      g.addNode({ id: p.id, kind: 'sql-clean-pipeline', label: p.label });
+      resultOf.set(p.resultTable, p.id);
     } else {
       g.addNode({ id: p.id, kind: 'query-pipeline', label: p.label });
       resultOf.set(p.resultTable, p.id);
@@ -37,6 +40,12 @@ export function buildLineageGraph(
       g.addEdge(`src:${p.sourceDir}`, p.id); // source → clean
       const tableName = folderToTable.get(p.bigTableFolder);
       if (tableName && g.has(tableName)) g.addEdge(p.id, tableName); // clean → bigtable
+    } else if (p.kind === 'sql-clean') {
+      // 每个参与大表 → sql-clean(大表 DB → 总表)
+      for (const folder of p.bigTables) {
+        const tableName = folderToTable.get(folder);
+        if (tableName && g.has(tableName)) g.addEdge(tableName, p.id);
+      }
     } else {
       for (const dep of p.dependencies) {
         if (g.has(dep)) g.addEdge(dep, p.id); // bigtable → query

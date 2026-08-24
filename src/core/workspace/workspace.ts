@@ -25,3 +25,8 @@ export function openWorkspace(root: string): Workspace {
     ? { root, onworkingDir: join(root, '.onworking') }
     : initWorkspace(root);
 }
+
+/** 总表 DB 路径(工作区级,各大表汇总后写入)。 */
+export function masterDbPath(ws: Workspace): string {
+  return join(ws.onworkingDir, 'db', 'master.db');
+}

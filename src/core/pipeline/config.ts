@@ -2,7 +2,7 @@
 // 管线配置类型与校验:清洗管线(源文件→大表)与查询管线(SQL→结果表)。
 import type { FieldMapping } from '../etl/transform';
 
-export type PipelineKind = 'clean' | 'query';
+export type PipelineKind = 'clean' | 'sql-clean' | 'query';
 
 export interface CleanPipelineConfig {
   kind: 'clean';
@@ -30,7 +30,20 @@ export interface QueryPipelineConfig {
   createdAt: string;
 }
 
-export type PipelineConfig = CleanPipelineConfig | QueryPipelineConfig;
+export interface SqlCleanPipelineConfig {
+  kind: 'sql-clean';
+  id: string;
+  label: string;
+  /** 参与汇总的大表文件夹(每个独立 DB)。 */
+  bigTables: string[];
+  /** 清洗/汇总 SQL,可引用各大表(如 "序时账".seq)。 */
+  sql: string;
+  /** 产出到总表 DB 的表名。 */
+  resultTable: string;
+  createdAt: string;
+}
+
+export type PipelineConfig = CleanPipelineConfig | QueryPipelineConfig | SqlCleanPipelineConfig;
 
 /** 返回错误字符串数组;空数组 = 合法。 */
 export function validatePipeline(cfg: PipelineConfig): string[] {
@@ -41,6 +54,10 @@ export function validatePipeline(cfg: PipelineConfig): string[] {
     if (!cfg.sourceDir || !cfg.sourceDir.trim()) errors.push('sourceDir');
     if (!(cfg.headerRow >= 1)) errors.push('headerRow');
     if (!cfg.mappings || cfg.mappings.length === 0) errors.push('mappings');
+  } else if (cfg.kind === 'sql-clean') {
+    if (!cfg.sql || !cfg.sql.trim()) errors.push('sql');
+    if (!cfg.resultTable || !cfg.resultTable.trim()) errors.push('resultTable');
+    if (!cfg.bigTables || cfg.bigTables.length === 0) errors.push('bigTables');
   } else {
     if (!cfg.sql || !cfg.sql.trim()) errors.push('sql');
     if (!cfg.resultTable || !cfg.resultTable.trim()) errors.push('resultTable');

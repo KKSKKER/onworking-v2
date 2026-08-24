@@ -74,8 +74,20 @@ async function main(): Promise<void> {
     mappings,
     createdAt: new Date().toISOString(),
   });
+  // SQL 清洗管线:大表 DB → 总表 DB
+  const alias = 'bt_序时账';
+  const btFields = mappings.map((m) => m.outputName).join(', ');
+  savePipeline(ws, {
+    kind: 'sql-clean',
+    id: 'm1',
+    label: '构建总表',
+    bigTables: ['序时账'],
+    sql: `SELECT ${btFields} FROM "${alias}".seq`,
+    resultTable: 'seq',
+    createdAt: new Date().toISOString(),
+  });
 
-  const eng = new PipelineEngine(ws, join(ws.onworkingDir, 'db', 'onworking.db'));
+  const eng = new PipelineEngine(ws);
   const results = await eng.recomputeAll();
   for (const r of results) {
     console.log(`  ${r.pipelineId}: ${r.ok ? `OK ${r.rows} 行` : `失败 ${r.error}`}`);

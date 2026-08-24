@@ -1,17 +1,20 @@
 // src/core/pipeline/engine.ts
 // 重算编排引擎:单跑/多跑/全跑/按依赖自动重算。
-// 依赖血缘有向图:recomputeByDependency 用 getRecomputeOrder(上游先),
-// 只执行 pipeline 节点(bigtable/source 是数据节点,不执行)。
-// 成功跑完清洗管线后更新项目状态机(phase=cleaned, files/mappedFields)。
+// 数据架构:源文件→(规则)→大表(每大表独立 DB)→(SQL清洗)→总表 DB→(查询)。
+// clean 管线写各自大表的 DB;query/sql-clean 用总表 DB。引擎不持有常驻 DB,按需开关。
+import { dirname } from 'node:path';
+import { mkdirSync } from 'node:fs';
 import type Database from 'better-sqlite3';
 import { openDatabase } from '../db/database';
 import type { Workspace } from '../workspace/workspace';
+import { masterDbPath } from '../workspace/workspace';
 import { LineageGraph } from '../lineage/graph';
-import { listBigTables, loadBigTableConfig } from '../bigtable/store';
+import { listBigTables, loadBigTableConfig, bigTableDbPath } from '../bigtable/store';
 import { listPipelines, loadPipeline } from './store';
 import { buildLineageGraph } from './registry';
 import { runCleanPipeline } from './clean-runner';
 import { runQueryPipeline } from './query-runner';
+import { runSqlCleanPipeline } from './sql-clean-runner';
 import { ProjectState } from '../state/project';
 import { captureError } from '../errors';
 import { logger } from '../logging';
@@ -29,14 +32,18 @@ export interface RunSummary {
   error?: string;
 }
 
+export interface QueryOutcome {
+  columns: string[];
+  rows: Record<string, unknown>[];
+  rowCount: number;
+}
+
 export class PipelineEngine {
   private ws: Workspace;
-  readonly db: Database.Database;
   private graph: LineageGraph;
 
-  constructor(ws: Workspace, dbPath: string) {
+  constructor(ws: Workspace) {
     this.ws = ws;
-    this.db = openDatabase(dbPath);
     const pipelines = listPipelines(ws).map((id) => loadPipeline(ws, id));
     const bigTables = listBigTables(ws).map((folder) => {
       const cfg = loadBigTableConfig(ws, folder);
@@ -45,18 +52,30 @@ export class PipelineEngine {
     this.graph = buildLineageGraph(pipelines, bigTables);
   }
 
-  close(): void {
-    this.db.close();
-  }
+  /** 无常驻 DB,close 为兼容占位。 */
+  close(): void {}
 
   graphView(): LineageGraph {
     return this.graph;
   }
 
+  masterDb(): string {
+    return masterDbPath(this.ws);
+  }
+
+  private bigTableDb(folder: string): Database.Database {
+    const path = bigTableDbPath(this.ws, folder);
+    mkdirSync(dirname(path), { recursive: true }); // 确保 db/ 目录存在
+    return openDatabase(path, { wal: false }); // 非 WAL:保证 sql-clean ATTACH 可靠
+  }
+
   private pipelineNodeIds(): string[] {
     return this.graph
       .serialize()
-      .nodes.filter((n) => n.kind === 'clean-pipeline' || n.kind === 'query-pipeline')
+      .nodes.filter(
+        (n) =>
+          n.kind === 'clean-pipeline' || n.kind === 'query-pipeline' || n.kind === 'sql-clean-pipeline',
+      )
       .map((n) => n.id);
   }
 
@@ -65,20 +84,39 @@ export class PipelineEngine {
     try {
       if (cfg.kind === 'clean') {
         const bigTable = loadBigTableConfig(this.ws, cfg.bigTableFolder);
-        const result = await runCleanPipeline(this.db, cfg, bigTable, onProgress);
+        const db = this.bigTableDb(cfg.bigTableFolder);
+        let result;
+        try {
+          result = await runCleanPipeline(db, cfg, bigTable, onProgress);
+        } finally {
+          db.close();
+        }
         const st = new ProjectState(this.ws);
         st.setPhase(cfg.bigTableFolder, 'cleaned');
         st.registerFiles(cfg.bigTableFolder, result.files);
         st.registerMapping(cfg.bigTableFolder, cfg.mappings.length);
         st.save();
-        commitWorkspaceChanges(this.ws, `pipeline ${id} (clean) ran`); // 版本追踪配置变更
+        commitWorkspaceChanges(this.ws, `pipeline ${id} (clean) ran`);
         logger.info(MODULE, 'run ok', { pipelineId: id, kind: 'clean', rows: result.rowsInserted });
         return { pipelineId: id, kind: 'clean', ok: true, rows: result.rowsInserted };
       }
-      const result = await runQueryPipeline(this.db, cfg);
-      commitWorkspaceChanges(this.ws, `pipeline ${id} (query) ran`);
-      logger.info(MODULE, 'run ok', { pipelineId: id, kind: 'query', rows: result.rows });
-      return { pipelineId: id, kind: 'query', ok: true, rows: result.rows };
+      // query / sql-clean:用总表 DB
+      const db = openDatabase(this.masterDb(), { wal: false });
+      try {
+        if (cfg.kind === 'query') {
+          const result = await runQueryPipeline(db, cfg);
+          commitWorkspaceChanges(this.ws, `pipeline ${id} (query) ran`);
+          logger.info(MODULE, 'run ok', { pipelineId: id, kind: 'query', rows: result.rows });
+          return { pipelineId: id, kind: 'query', ok: true, rows: result.rows };
+        }
+        // sql-clean(R2-T3 实现):ATTACH 各大表 → 跑 SQL → 物化总表
+        const result = await runSqlCleanPipeline(db, this.ws, cfg);
+        commitWorkspaceChanges(this.ws, `pipeline ${id} (sql-clean) ran`);
+        logger.info(MODULE, 'run ok', { pipelineId: id, kind: 'sql-clean', rows: result.rows });
+        return { pipelineId: id, kind: 'sql-clean', ok: true, rows: result.rows };
+      } finally {
+        db.close();
+      }
     } catch (err) {
       const appErr = captureError(err, {
         module: 'pipeline/engine',
@@ -90,7 +128,30 @@ export class PipelineEngine {
     }
   }
 
-  /** 多个管线重算:按子集内拓扑序(经完整图可达性)执行。 */
+  /** 临时 SQL 查询(工作台),跑在总表 DB。 */
+  query(sql: string, limit = 500): QueryOutcome {
+    const db = openDatabase(this.masterDb(), { wal: false });
+    try {
+      const finalSql = /\blimit\b/i.test(sql) ? sql : `${sql} LIMIT ${limit}`;
+      const rows = db.prepare(finalSql).all() as Record<string, unknown>[];
+      const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+      return { columns, rows, rowCount: rows.length };
+    } finally {
+      db.close();
+    }
+  }
+
+  schemaTables(): { name: string }[] {
+    const db = openDatabase(this.masterDb(), { wal: false });
+    try {
+      return db
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+        .all() as { name: string }[];
+    } finally {
+      db.close();
+    }
+  }
+
   async recomputeMany(ids: string[]): Promise<RunSummary[]> {
     const order = this.topoOrder(ids);
     const summaries: RunSummary[] = [];
@@ -102,7 +163,6 @@ export class PipelineEngine {
     return this.recomputeMany(this.pipelineNodeIds());
   }
 
-  /** 按依赖自动重算:触发点(如源目录)变更 → 沿血缘找受影响管线 → 拓扑序执行。 */
   async recomputeByDependency(triggerId: string): Promise<RunSummary[]> {
     const pipelineIds = new Set(this.pipelineNodeIds());
     const order = this.graph
@@ -113,7 +173,6 @@ export class PipelineEngine {
     return summaries;
   }
 
-  /** 选中集合的拓扑序:若 b 在 a 的下游(完整图可达),则 a 先于 b。 */
   private topoOrder(ids: string[]): string[] {
     const wanted = new Set(ids);
     const indegree = new Map<string, number>();
@@ -142,7 +201,7 @@ export class PipelineEngine {
       }
       queue.sort();
     }
-    for (const id of ids) if (!order.includes(id)) order.push(id); // 环兜底
+    for (const id of ids) if (!order.includes(id)) order.push(id);
     return order;
   }
 }

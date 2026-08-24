@@ -49,11 +49,20 @@ describe('ipc handlers', () => {
       ],
       createdAt: '',
     });
-    const dbPath = join(ws.onworkingDir, 'db', 'onworking.db');
+    savePipeline(ws, {
+      kind: 'sql-clean',
+      id: 'm1',
+      label: '',
+      bigTables: ['seq'],
+      sql: 'SELECT date, debit FROM "bt_seq".seq',
+      resultTable: 'seq',
+      createdAt: '',
+    });
+    const dbPath = join(ws.onworkingDir, 'db', 'master.db');
     ctx = {
       ws,
       dbPath,
-      getEngine: () => (engine ??= new PipelineEngine(ws, dbPath)),
+      getEngine: () => (engine ??= new PipelineEngine(ws)),
     };
   });
 
@@ -100,8 +109,9 @@ describe('ipc handlers', () => {
   });
 
   it('query.run executes real SQL and returns rows', async () => {
-    // 先跑管线把数据写入,再查
+    // 先跑 clean(大表 DB)+ sql-clean(总表 DB),再查
     await dispatch({ cmd: 'pipeline.run', id: 'c1' }, ctx);
+    await dispatch({ cmd: 'pipeline.run', id: 'm1' }, ctx);
     const res = await dispatch({ cmd: 'query.run', sql: 'SELECT date, debit FROM seq ORDER BY date' }, ctx);
     expect(res.ok).toBe(true);
     if (res.ok) {

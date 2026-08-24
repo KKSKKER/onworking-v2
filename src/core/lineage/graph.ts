@@ -8,6 +8,7 @@ export type LineageNodeKind =
   | 'source'
   | 'bigtable'
   | 'clean-pipeline'
+  | 'sql-clean-pipeline'
   | 'query-pipeline';
 
 export interface LineageNode {
