@@ -22,7 +22,7 @@ const cleanCfg = (): CleanPipelineConfig => ({
   bigTableFolder: 'seq',
   sourceDir: '/data/seq',
   headerRow: 1,
-  mappings: [{ sourceHeader: '日期', outputName: 'date', type: 'date' }],
+  mappings: [{ sourceHeader: '日期', outputName: 'date', transform: 'normalize-date' }],
   createdAt: '2026-08-24',
 });
 

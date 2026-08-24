@@ -27,7 +27,7 @@ describe('template store', () => {
     saveTemplate(ws, {
       name: 'seq',
       createdAt: '2026-08-24',
-      mappings: [{ sourceHeader: '日期', outputName: 'date', type: 'date' }],
+      mappings: [{ sourceHeader: '日期', outputName: 'date', transform: 'normalize-date' }],
     });
     expect(listTemplates(ws)).toEqual(['seq']);
     expect(loadTemplate(ws, 'seq').mappings[0].outputName).toBe('date');
@@ -50,9 +50,9 @@ describe('template store', () => {
       name: 'seq',
       createdAt: '2026-08-24',
       mappings: [
-        { sourceHeader: '日期', outputName: 'date', type: 'date' as const },
-        { sourceHeader: '借方金额', outputName: 'debit', type: 'cents' as const },
-        { sourceHeader: '不存在的列', outputName: 'x', type: 'text' as const },
+        { sourceHeader: '日期', outputName: 'date', transform: 'normalize-date' as const },
+        { sourceHeader: '借方金额', outputName: 'debit', transform: 'to-cents' as const },
+        { sourceHeader: '不存在的列', outputName: 'x', transform: 'trim' as const },
       ],
     };
     const sheet: ParsedSheet = { sheetName: 's', headers: ['日期', '借方金额', '备注'], rows: [] };

@@ -38,8 +38,8 @@ describe('pipeline setup', () => {
       name: 'seq',
       createdAt: '',
       mappings: [
-        { sourceHeader: '日期', outputName: 'date', type: 'date' },
-        { sourceHeader: '不存在的列', outputName: 'x', type: 'text' },
+        { sourceHeader: '日期', outputName: 'date', transform: 'normalize-date' },
+        { sourceHeader: '不存在的列', outputName: 'x', transform: 'trim' },
       ],
     });
     const sheet: ParsedSheet = { sheetName: 's', headers: ['日期', '金额'], rows: [] };

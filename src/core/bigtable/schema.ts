@@ -1,6 +1,7 @@
 // src/core/bigtable/schema.ts
 // 大表模型:字段/类型/主键 + 配置校验。
-export type FieldType = 'text' | 'cents' | 'number' | 'date';
+// 类型直接用 SQLite 原生列类型(不用自造语义类型)。
+export type FieldType = 'TEXT' | 'INTEGER' | 'REAL';
 
 export interface BigTableField {
   name: string;

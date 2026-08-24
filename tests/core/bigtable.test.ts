@@ -25,7 +25,7 @@ describe('bigtable schema', () => {
     const cfg: BigTableConfig = {
       tableName: 't',
       autoIncrement: true,
-      fields: [{ name: 'date', type: 'date', order: 1 }],
+      fields: [{ name: 'date', type: 'TEXT', order: 1 }],
     };
     expect(validateBigTableConfig(cfg)).toEqual([]);
   });
@@ -47,8 +47,8 @@ describe('bigtable store', () => {
       tableName: 'seq',
       autoIncrement: true,
       fields: [
-        { name: 'date', type: 'date', order: 1, primaryKey: true },
-        { name: 'debit', type: 'cents', order: 2 },
+        { name: 'date', type: 'TEXT', order: 1, primaryKey: true },
+        { name: 'debit', type: 'INTEGER', order: 2 },
       ],
     };
     saveBigTableConfig(ws, 'seq', cfg);

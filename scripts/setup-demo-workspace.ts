@@ -27,9 +27,13 @@ function guessMappings(headers: string[]): FieldMapping[] {
     .map((h, i) => ({
       sourceHeader: String(h).trim(),
       outputName: `col_${i}`,
-      type: /金额|借方|贷方|余额|amount|amt/i.test(String(h)) ? ('cents' as const) : ('text' as const),
+      transform: /金额|借方|贷方|余额|amount|amt/i.test(String(h)) ? ('to-cents' as const) : ('none' as const),
     }))
     .filter((m) => m.sourceHeader !== '');
+}
+
+function dbTypeForTransform(t: FieldMapping['transform']): 'TEXT' | 'INTEGER' | 'REAL' {
+  return t === 'to-cents' ? 'INTEGER' : 'TEXT';
 }
 
 async function main(): Promise<void> {
@@ -58,7 +62,7 @@ async function main(): Promise<void> {
   saveBigTableConfig(ws, '序时账', {
     tableName: 'seq',
     autoIncrement: true,
-    fields: mappings.map((m, i) => ({ name: m.outputName, type: m.type, order: i + 1 })),
+    fields: mappings.map((m, i) => ({ name: m.outputName, type: dbTypeForTransform(m.transform), order: i + 1 })),
   });
   savePipeline(ws, {
     kind: 'clean',

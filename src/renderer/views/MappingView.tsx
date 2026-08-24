@@ -12,11 +12,19 @@ interface DetectResult {
   headers: string[];
 }
 
+type ValueTransform = 'none' | 'to-cents' | 'normalize-date' | 'trim';
+const TRANSFORM_OPTIONS: { value: ValueTransform; label: string }[] = [
+  { value: 'none', label: '无' },
+  { value: 'to-cents', label: '元转分' },
+  { value: 'normalize-date', label: '日期归一化' },
+  { value: 'trim', label: '去空格' },
+];
+
 interface FieldRow {
   included: boolean;
   sourceHeader: string;
   outputName: string;
-  type: 'text' | 'cents' | 'number' | 'date';
+  transform: ValueTransform;
 }
 
 export function MappingView() {
@@ -67,7 +75,7 @@ export function MappingView() {
         included: true,
         sourceHeader: h,
         outputName: h,
-        type: /金额|借方|贷方|余额|amount|amt/i.test(h) ? ('cents' as const) : ('text' as const),
+        transform: /金额|借方|贷方|余额|amount|amt/i.test(h) ? ('to-cents' as const) : ('none' as const),
       })),
     );
   }
@@ -75,7 +83,7 @@ export function MappingView() {
   function buildMappings(): FieldMapping[] {
     return fields
       .filter((f) => f.included)
-      .map((f) => ({ sourceHeader: f.sourceHeader, outputName: f.outputName, type: f.type }));
+      .map((f) => ({ sourceHeader: f.sourceHeader, outputName: f.outputName, transform: f.transform }));
   }
 
   async function handleSave() {
@@ -160,7 +168,7 @@ export function MappingView() {
                 </th>
                 <th>源字段</th>
                 <th>映射到</th>
-                <th>类型</th>
+                <th>清洗转换</th>
               </tr>
             </thead>
             <tbody>
@@ -174,11 +182,15 @@ export function MappingView() {
                     <input value={f.outputName} onChange={(e) => setField(i, 'outputName', e.target.value)} />
                   </td>
                   <td>
-                    <select value={f.type} onChange={(e) => setField(i, 'type', e.target.value)}>
-                      <option value="text">text</option>
-                      <option value="cents">cents</option>
-                      <option value="number">number</option>
-                      <option value="date">date</option>
+                    <select
+                      value={f.transform}
+                      onChange={(e) => setField(i, 'transform', e.target.value)}
+                    >
+                      {TRANSFORM_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
                     </select>
                   </td>
                 </tr>
@@ -200,7 +212,7 @@ export function MappingView() {
     </div>
   );
 
-  function setField(index: number, key: 'included' | 'outputName' | 'type', value: unknown) {
+  function setField(index: number, key: 'included' | 'outputName' | 'transform', value: unknown) {
     setFields(fields.map((f, i) => (i === index ? { ...f, [key]: value } : f)));
   }
 }

@@ -29,9 +29,9 @@ async function mockDispatch(command: ApiCommand): Promise<ApiResult<unknown>> {
         tableName: isBalance ? 'balance' : 'seq',
         autoIncrement: true,
         fields: [
-          { name: 'date', type: 'date', order: 1 },
-          { name: isBalance ? 'amount' : 'debit', type: 'cents', order: 2 },
-          { name: 'note', type: 'text', order: 3 },
+          { name: 'date', type: 'TEXT', order: 1 },
+          { name: isBalance ? 'amount' : 'debit', type: 'INTEGER', order: 2 },
+          { name: 'note', type: 'TEXT', order: 3 },
         ],
       });
     }

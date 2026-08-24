@@ -1,12 +1,14 @@
 // src/core/etl/transform.ts
-// 字段映射 + 类型转换。金额 → 整数分(cents),日期 → YYYY-MM-DD,空值 → null。
+// 字段映射 + 值转换。类型用数据库原生类型(存于大表配置);这里只管"值怎么变"。
 import type { ParsedSheet } from '../ingest/parser';
-import type { FieldType } from '../bigtable/schema';
+
+/** 值转换:清洗阶段对源值做的处理。类型与转换解耦。 */
+export type ValueTransform = 'none' | 'to-cents' | 'normalize-date' | 'trim';
 
 export interface FieldMapping {
   sourceHeader: string;
   outputName: string;
-  type: FieldType;
+  transform: ValueTransform;
 }
 
 export interface TransformedRow {
@@ -21,22 +23,22 @@ export function applyMapping(sheet: ParsedSheet, mappings: FieldMapping[]): Tran
     for (const m of mappings) {
       const idx = colIndex.get(m.sourceHeader);
       const raw = idx === undefined ? undefined : row[idx];
-      out[m.outputName] = convertByType(raw, m.type);
+      out[m.outputName] = applyTransform(raw, m.transform);
     }
     return out;
   });
 }
 
-function convertByType(v: unknown, type: FieldType): string | number | null {
-  switch (type) {
-    case 'cents':
+function applyTransform(v: unknown, transform: ValueTransform): string | number | null {
+  switch (transform) {
+    case 'to-cents':
       return centsToInt(v);
-    case 'date':
+    case 'normalize-date':
       return normalizeDate(v);
-    case 'number':
-      return toNumber(v);
-    case 'text':
+    case 'trim':
       return toText(v);
+    case 'none':
+      return v === undefined || v === null ? null : (v as string | number);
   }
 }
 
@@ -74,18 +76,4 @@ export function toText(v: unknown): string | null {
   if (v === null || v === undefined) return null;
   const s = String(v).trim();
   return s === '' ? null : s;
-}
-
-/** 语义类型 → SQLite 原生列类型。金额→INTEGER(整数分),数字→REAL,文本/日期→TEXT。 */
-export function dbTypeFor(type: FieldType): string {
-  switch (type) {
-    case 'cents':
-      return 'INTEGER';
-    case 'number':
-      return 'REAL';
-    case 'text':
-      return 'TEXT';
-    case 'date':
-      return 'TEXT';
-  }
 }

@@ -4,7 +4,7 @@ import type { BigTableConfig } from '../../core/bigtable/schema';
 import { useApi } from './useApi';
 import { useSelection } from '../state/SelectionContext';
 
-const FIELD_TYPES = ['text', 'cents', 'number', 'date'] as const;
+const FIELD_TYPES = ['TEXT', 'INTEGER', 'REAL'] as const;
 
 export function BigTableSettingsView() {
   const { selectedFolder } = useSelection();
@@ -111,7 +111,7 @@ export function BigTableSettingsView() {
   function addField() {
     if (!cfg) return;
     const order = cfg.fields.length + 1;
-    setCfg({ ...cfg, fields: [...cfg.fields, { name: `field${order}`, type: 'text', order }] });
+    setCfg({ ...cfg, fields: [...cfg.fields, { name: `field${order}`, type: 'TEXT', order }] });
   }
   function removeField(index: number) {
     if (!cfg) return;

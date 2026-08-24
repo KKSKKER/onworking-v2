@@ -27,9 +27,13 @@ function guessMappings(headers: string[]): FieldMapping[] {
     .map((h, i) => ({
       sourceHeader: String(h).trim(),
       outputName: `col_${i}`,
-      type: /金额|借方|贷方|余额|amount|amt/i.test(String(h)) ? ('cents' as const) : ('text' as const),
+      transform: /金额|借方|贷方|余额|amount|amt/i.test(String(h)) ? ('to-cents' as const) : ('none' as const),
     }))
     .filter((m) => m.sourceHeader !== '');
+}
+
+function dbTypeForTransform(t: FieldMapping['transform']): 'TEXT' | 'INTEGER' | 'REAL' {
+  return t === 'to-cents' ? 'INTEGER' : 'TEXT';
 }
 
 async function main(): Promise<void> {
@@ -53,7 +57,7 @@ async function main(): Promise<void> {
   const headers = headerRow <= 1 ? sheet.headers : fullRows[headerRow - 1].map((c) => String(c));
   const mappings = guessMappings(headers);
   console.log(`表头行: ${headerRow}; 列(${headers.length}): ${headers.join(' | ')}`);
-  console.log(`映射: ${mappings.map((m) => `${m.sourceHeader}→${m.outputName}:${m.type}`).join(', ')}`);
+  console.log(`映射: ${mappings.map((m) => `${m.sourceHeader}→${m.outputName}:${m.transform}`).join(', ')}`);
 
   // 临时演示工作区
   const dir = mkdtempSync(join(tmpdir(), 'onw-demo-'));
@@ -61,7 +65,7 @@ async function main(): Promise<void> {
   saveBigTableConfig(ws, 'big', {
     tableName: 'big',
     autoIncrement: true,
-    fields: mappings.map((m, i) => ({ name: m.outputName, type: m.type, order: i + 1 })),
+    fields: mappings.map((m, i) => ({ name: m.outputName, type: dbTypeForTransform(m.transform), order: i + 1 })),
   });
   savePipeline(ws, {
     kind: 'clean',

@@ -32,8 +32,8 @@ describe('ipc handlers', () => {
       tableName: 'seq',
       autoIncrement: true,
       fields: [
-        { name: 'date', type: 'date', order: 1 },
-        { name: 'debit', type: 'cents', order: 2 },
+        { name: 'date', type: 'TEXT', order: 1 },
+        { name: 'debit', type: 'INTEGER', order: 2 },
       ],
     });
     savePipeline(ws, {
@@ -44,8 +44,8 @@ describe('ipc handlers', () => {
       sourceDir,
       headerRow: 1,
       mappings: [
-        { sourceHeader: '日期', outputName: 'date', type: 'date' },
-        { sourceHeader: '借方金额', outputName: 'debit', type: 'cents' },
+        { sourceHeader: '日期', outputName: 'date', transform: 'normalize-date' },
+        { sourceHeader: '借方金额', outputName: 'debit', transform: 'to-cents' },
       ],
       createdAt: '',
     });

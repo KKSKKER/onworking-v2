@@ -3,7 +3,7 @@
 import type Database from 'better-sqlite3';
 import { scanSourceDir } from '../ingest/scanner';
 import { parseCsvFile, parseExcelFile } from '../ingest/parser';
-import { applyMapping, dbTypeFor } from '../etl/transform';
+import { applyMapping } from '../etl/transform';
 import { writeBigTable } from '../etl/writer';
 import { attachLineage, lineageColumnNames } from '../lineage';
 import { AppError } from '../errors';
@@ -48,11 +48,11 @@ export async function runCleanPipeline(
     });
   }
 
-  // 列定义:大表字段(SQLite 原生类型)+ 血缘列
+  // 列定义:大表字段类型即 SQLite 原生类型(TEXT/INTEGER/REAL)+ 血缘列
   const fieldCols = bigTable.fields
     .slice()
     .sort((a, b) => a.order - b.order)
-    .map((f) => ({ name: f.name, sqlType: dbTypeFor(f.type) }));
+    .map((f) => ({ name: f.name, sqlType: f.type }));
   // __source_row 是行号,须 INTEGER(否则 better-sqlite3 存成 '2.0' 文本)
   const lineageCols = lineageColumnNames().map((c) => ({
     name: c,

@@ -20,9 +20,9 @@ describe('transform', () => {
 
   it('maps by sourceHeader, converts cents and date', () => {
     const mappings: FieldMapping[] = [
-      { sourceHeader: '日期', outputName: 'date', type: 'date' },
-      { sourceHeader: '借方金额', outputName: 'debit', type: 'cents' },
-      { sourceHeader: '摘要', outputName: 'note', type: 'text' },
+      { sourceHeader: '日期', outputName: 'date', transform: 'normalize-date' },
+      { sourceHeader: '借方金额', outputName: 'debit', transform: 'to-cents' },
+      { sourceHeader: '摘要', outputName: 'note', transform: 'trim' },
     ];
     const out = applyMapping(sheet, mappings);
     expect(out[0].date).toBe('2024-01-15');
