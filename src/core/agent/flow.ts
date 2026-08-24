@@ -110,7 +110,8 @@ export async function runInitialSetupFlow(opts: {
       id: sqlId,
       label: '构建总表',
       bigTables: [bigTableFolder],
-      sql: `SELECT ${fields.map((f) => f.name).join(', ')} FROM "${alias}".${tableName ?? 'seq'}`,
+      // SELECT * 复制全部列,任何列名都兼容
+      sql: `SELECT * FROM "${alias}".${tableName ?? 'seq'}`,
       resultTable: tableName ?? 'seq',
       createdAt: new Date().toISOString(),
     });

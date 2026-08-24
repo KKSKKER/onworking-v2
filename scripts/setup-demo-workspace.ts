@@ -76,13 +76,12 @@ async function main(): Promise<void> {
   });
   // SQL 清洗管线:大表 DB → 总表 DB
   const alias = 'bt_序时账';
-  const btFields = mappings.map((m) => m.outputName).join(', ');
   savePipeline(ws, {
     kind: 'sql-clean',
     id: 'm1',
     label: '构建总表',
     bigTables: ['序时账'],
-    sql: `SELECT ${btFields} FROM "${alias}".seq`,
+    sql: `SELECT * FROM "${alias}".seq`,
     resultTable: 'seq',
     createdAt: new Date().toISOString(),
   });
