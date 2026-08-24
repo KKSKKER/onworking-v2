@@ -14,6 +14,7 @@ import { runCleanPipeline } from './clean-runner';
 import { runQueryPipeline } from './query-runner';
 import { ProjectState } from '../state/project';
 import { captureError } from '../errors';
+import { commitWorkspaceChanges } from '../versioning/workspace-vcs';
 import type { PipelineKind } from './config';
 
 export interface RunSummary {
@@ -66,9 +67,11 @@ export class PipelineEngine {
         st.registerFiles(cfg.bigTableFolder, result.files);
         st.registerMapping(cfg.bigTableFolder, cfg.mappings.length);
         st.save();
+        commitWorkspaceChanges(this.ws, `pipeline ${id} (clean) ran`); // 版本追踪配置变更
         return { pipelineId: id, kind: 'clean', ok: true, rows: result.rowsInserted };
       }
       const result = await runQueryPipeline(this.db, cfg);
+      commitWorkspaceChanges(this.ws, `pipeline ${id} (query) ran`);
       return { pipelineId: id, kind: 'query', ok: true, rows: result.rows };
     } catch (err) {
       const appErr = captureError(err, {

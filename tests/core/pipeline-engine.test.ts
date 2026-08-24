@@ -7,6 +7,7 @@ import { initWorkspace, type Workspace } from '../../src/core/workspace/workspac
 import { saveBigTableConfig } from '../../src/core/bigtable/store';
 import { savePipeline } from '../../src/core/pipeline/store';
 import { PipelineEngine } from '../../src/core/pipeline/engine';
+import { gitCurrentCommit } from '../../src/core/versioning/git';
 
 describe('pipeline engine', () => {
   let dir: string;
@@ -76,6 +77,8 @@ describe('pipeline engine', () => {
     expect(results.filter((r) => r.ok)).toHaveLength(2);
     const row = eng.db.prepare('SELECT total FROM "total"').get() as { total: number };
     expect(row.total).toBe(30000); // 100+200 元 → 分
+    // 版本追踪已接入:运行后 .onworking 配置变更已 git 提交
+    expect(gitCurrentCommit(ws)).toBeTruthy();
     eng.close();
   });
 
