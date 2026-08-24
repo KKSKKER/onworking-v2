@@ -3,3 +3,4 @@ dist/
 .vite/
 *.tsbuildinfo
 release/
+demo-workspace/
