@@ -110,7 +110,9 @@ const handlers: Record<string, Handler> = {
       });
     }
     const limit = Number(p.limit ?? 500);
-    const rows = ctx.getEngine().db.prepare(`${sql} LIMIT ${limit}`).all() as Record<string, unknown>[];
+    // 仅当 SQL 未自带 LIMIT 时才追加(避免 "LIMIT 100 LIMIT 500" 语法错误)
+    const finalSql = /\blimit\b/i.test(sql) ? sql : `${sql} LIMIT ${limit}`;
+    const rows = ctx.getEngine().db.prepare(finalSql).all() as Record<string, unknown>[];
     const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
     return { columns, rows, rowCount: rows.length };
   },
