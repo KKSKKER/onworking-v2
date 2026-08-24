@@ -8,12 +8,10 @@ export function TopBar({
   mode,
   onModeChange,
   onAddView,
-  onSplitView,
 }: {
   mode: ShellMode;
   onModeChange: (m: ShellMode) => void;
   onAddView: (viewId: string) => void;
-  onSplitView: () => void;
 }) {
   const [aiMode, setAiMode] = useState('off');
   const [lang, setLang] = useState('zh');
@@ -49,7 +47,6 @@ export function TopBar({
           </div>
         )}
       </div>
-      <button onClick={onSplitView} title="把预览视图分到当前视图右侧,两栏并排">⫿ 分栏</button>
       <button onClick={handlePick}>打开工作区</button>
       <span className="ctrl">
         AI开放模式

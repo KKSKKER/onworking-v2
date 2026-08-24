@@ -37,29 +37,10 @@ export function App() {
     }
   }
 
-  // 分栏:把「预览」视图分到当前视图右侧 → 两栏并排
-  function splitView() {
-    const api = apiRef.current;
-    if (!api) return;
-    const active = api.activePanel;
-    if (!active) return;
-    const existing = api.getPanel('preview');
-    if (existing) {
-      existing.api.setActive();
-      return;
-    }
-    api.addPanel({
-      id: 'preview',
-      component: 'preview',
-      title: '预览',
-      position: { referencePanel: active.id, direction: 'right' },
-    });
-  }
-
   return (
     <SelectionProvider>
       <div className="app">
-        <TopBar mode={mode} onModeChange={setMode} onAddView={addView} onSplitView={splitView} />
+        <TopBar mode={mode} onModeChange={setMode} onAddView={addView} />
         <div className="body">
           <ResizableSidebar initialWidth={240} minWidth={140} maxWidth={500} side="left">
             <SidebarLeft mode={mode} />
