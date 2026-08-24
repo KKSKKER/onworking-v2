@@ -1,0 +1,67 @@
+import { describe, it, expect } from 'vitest';
+import Database from 'better-sqlite3';
+import { applyMapping, centsToInt, normalizeDate, type FieldMapping } from '../../src/core/etl/transform';
+import { openDatabase } from '../../src/core/db/database';
+import { writeBigTable } from '../../src/core/etl/writer';
+import type { ParsedSheet } from '../../src/core/ingest/parser';
+
+describe('transform', () => {
+  const sheet: ParsedSheet = {
+    sheetName: 's',
+    headers: ['日期', '借方金额', '摘要'],
+    rows: [
+      ['2024-01-15', 123.45, '工资'],
+      ['2024-02-20', -5, ''],
+    ],
+  };
+
+  it('maps by sourceHeader, converts cents and date', () => {
+    const mappings: FieldMapping[] = [
+      { sourceHeader: '日期', outputName: 'date', type: 'date' },
+      { sourceHeader: '借方金额', outputName: 'debit', type: 'cents' },
+      { sourceHeader: '摘要', outputName: 'note', type: 'text' },
+    ];
+    const out = applyMapping(sheet, mappings);
+    expect(out[0].date).toBe('2024-01-15');
+    expect(out[0].debit).toBe(12345); // 元 → 分
+    expect(out[1].debit).toBe(-500);
+    expect(out[1].note).toBeNull(); // 空字符串 → null
+  });
+
+  it('centsToInt converts yuan decimal to integer cents', () => {
+    expect(centsToInt(123.45)).toBe(12345);
+    expect(centsToInt(-0.05)).toBe(-5);
+    expect(centsToInt('100')).toBe(10000);
+    expect(centsToInt('')).toBeNull();
+  });
+
+  it('normalizeDate handles various inputs', () => {
+    expect(normalizeDate('2024-01-15')).toBe('2024-01-15');
+    expect(normalizeDate('2024/1/5')).toBe('2024-01-05');
+  });
+});
+
+describe('writer', () => {
+  it('batch-writes rows, stores cents as INTEGER, reports progress to 100', async () => {
+    const db = openDatabase(':memory:');
+    const rows = Array.from({ length: 12000 }, (_, i) => ({ a: `r${i}`, b: i }));
+    const progress: number[] = [];
+    const res = await writeBigTable(
+      db,
+      'big',
+      [
+        { name: 'a', sqlType: 'TEXT' },
+        { name: 'b', sqlType: 'INTEGER' },
+      ],
+      rows,
+      (p) => progress.push(p.percent),
+    );
+    expect(res.rowsInserted).toBe(12000);
+    expect(progress[progress.length - 1]).toBe(100);
+    const n = (db.prepare('SELECT COUNT(*) AS n FROM big').get() as { n: number }).n;
+    expect(n).toBe(12000);
+    const t = (db.prepare('SELECT typeof(b) AS t FROM big LIMIT 1').get() as { t: string }).t;
+    expect(t).toBe('integer'); // INTEGER 列原生整数存储
+    db.close();
+  });
+});
