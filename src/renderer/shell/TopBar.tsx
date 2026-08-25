@@ -1,5 +1,5 @@
 // 顶栏:文件/查询管理切换 · 合并(当前/全部) · 增加视图 · AI开放模式 · 语言 · 打开工作区。
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { VIEWS } from '../views/registry';
 import { useSelection } from '../state/SelectionContext';
 import { sendCli } from '../cli';
@@ -23,7 +23,14 @@ export function TopBar({
   onModeChange: (m: ShellMode) => void;
   onAddView: (viewId: string) => void;
 }) {
-  const [aiMode, setAiMode] = useState('off');
+  const [aiMode, setAiMode] = useState<'off' | 'external' | 'local'>('off');
+
+  // 读取工作区 AI 开放模式(存于 .onworking/settings.json)
+  useEffect(() => {
+    void sendCli({ cmd: 'settings.get' }).then((res) => {
+      if (res.ok) setAiMode((res.data as { aiOpenMode: 'off' | 'external' | 'local' }).aiOpenMode);
+    });
+  }, []);
   const [lang, setLang] = useState('zh');
   const [wsName, setWsName] = useState('未打开');
   const [addingView, setAddingView] = useState(false);
@@ -98,7 +105,14 @@ export function TopBar({
       <button onClick={handlePick}>打开工作区</button>
       <span className="ctrl">
         AI开放模式
-        <select value={aiMode} onChange={(e) => setAiMode(e.target.value)}>
+        <select
+          value={aiMode}
+          onChange={async (e) => {
+            const mode = e.target.value as 'off' | 'external' | 'local';
+            setAiMode(mode);
+            await sendCli({ cmd: 'settings.setAiMode', mode }); // 写入 .onworking/settings.json
+          }}
+        >
           <option value="off">关闭</option>
           <option value="external">外部(仅元数据)</option>
           <option value="local">本地(可查数据)</option>

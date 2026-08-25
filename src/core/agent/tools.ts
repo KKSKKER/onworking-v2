@@ -4,6 +4,7 @@
 import { copyFileSync, mkdirSync, existsSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { openWorkspace, masterDbPath, type Workspace } from '../workspace/workspace';
+import { loadSettings, saveSettings, type WorkspaceSettings, type AiOpenMode } from '../workspace/settings';
 import {
   saveBigTableConfig,
   listBigTables,
@@ -109,6 +110,17 @@ export function toolExportQueryCsv(
   } finally {
     db.close();
   }
+}
+
+/** tool: 读取工作区设置(含 AI 开放模式)。 */
+export function toolGetSettings(ws: Workspace): WorkspaceSettings {
+  return loadSettings(ws);
+}
+
+/** tool: 设置 AI 开放模式(写入 .onworking/settings.json)。 */
+export function toolSetAiMode(ws: Workspace, mode: AiOpenMode): { mode: AiOpenMode } {
+  saveSettings(ws, { ...loadSettings(ws), aiOpenMode: mode });
+  return { mode };
 }
 
 /** tool: 列出全部管线配置(含 kind/依赖/结果表),供「管线管理」视图分组展示。 */

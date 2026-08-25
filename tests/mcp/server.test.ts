@@ -5,6 +5,7 @@ import { join, basename } from 'node:path';
 import { createContext } from '../../src/app/context';
 import type { ApiContext } from '../../src/ipc/handlers';
 import { handleMcpRequest, type McpSession } from '../../src/mcp/server';
+import { saveSettings } from '../../src/core/workspace/settings';
 
 describe('mcp server', () => {
   let dir: string;
@@ -144,6 +145,21 @@ describe('mcp server', () => {
   it('returns null for notifications (no reply expected)', async () => {
     const res = await handleMcpRequest(session, { jsonrpc: '2.0', method: 'notifications/initialized' });
     expect(res).toBeNull();
+  });
+
+  it('blocks data APIs for the AI in external mode (AI_MODE_RESTRICTED), metadata still works', async () => {
+    saveSettings(session.getCtx()!.ws, { name: 'ws', aiOpenMode: 'external' });
+    const data = await handleMcpRequest(session, {
+      jsonrpc: '2.0', id: 1, method: 'tools/call',
+      params: { name: 'query.run', arguments: { sql: 'SELECT 1' } },
+    });
+    expect(String((data?.result as { content?: { text?: string }[] } | undefined)?.content?.[0]?.text ?? '')).toContain('AI_MODE_RESTRICTED');
+    const meta = await handleMcpRequest(session, {
+      jsonrpc: '2.0', id: 2, method: 'tools/call',
+      params: { name: 'state.summary', arguments: {} },
+    });
+    expect(String((meta?.result as { content?: { text?: string }[] } | undefined)?.content?.[0]?.text ?? '')).not.toContain('AI_MODE_RESTRICTED');
+    saveSettings(session.getCtx()!.ws, { name: 'ws', aiOpenMode: 'local' }); // 恢复
   });
 
   it('manual.read tool returns the operations manual text', async () => {

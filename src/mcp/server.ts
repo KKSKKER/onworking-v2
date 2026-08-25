@@ -4,7 +4,21 @@
 import { dispatchIpc, handlers } from '../ipc/handlers';
 import type { ApiResult, IpcRequest } from '../ipc/contracts';
 import type { ApiContext } from '../ipc/handlers';
+import { loadSettings, type AiOpenMode } from '../core/workspace/settings';
 import { MANUAL_TEXT } from './manual';
+
+// ---- AI 开放模式门禁 ----
+// 非 local 模式下调「真实数据」API 返回 AI_MODE_RESTRICTED;UI 不受影响。
+const METADATA_ALLOWED = new Set([
+  'state.summary', 'bigtable.list', 'pipeline.list', 'template.list', 'vcs.status', 'schema.tables', 'settings.get',
+]);
+const OFF_ALLOWED = new Set(['state.summary']);
+
+function isAiAllowed(mode: AiOpenMode, cmd: string): boolean {
+  if (mode === 'local') return true;
+  if (mode === 'off') return OFF_ALLOWED.has(cmd);
+  return METADATA_ALLOWED.has(cmd); // external:仅元数据
+}
 
 const PROTOCOL_VERSION = '2024-11-05';
 
@@ -88,6 +102,8 @@ export const TOOL_SCHEMAS: Record<string, ToolSchema> = {
   'schema.tables': schema({}),
   'state.summary': schema({}),
   'vcs.status': schema({}),
+  'settings.get': schema({}),
+  'settings.setAiMode': schema({ mode: str }, ['mode']),
 };
 
 /** 处理一条 JSON-RPC 请求;notification 无 id,返回 null 表示不回包。 */
@@ -203,6 +219,27 @@ export async function handleMcpRequest(
         id,
         result: {
           content: [{ type: 'text', text: JSON.stringify({ code: 'NO_WORKSPACE', message: 'no workspace opened; call workspace.open first' }) }],
+          isError: true,
+        },
+      };
+    }
+
+    // AI 开放模式门禁:非 local 模式下,数据/写 API 对 AI 禁用(UI 不受影响)
+    const aiMode = loadSettings(ctx.ws).aiOpenMode;
+    if (name === 'settings.setAiMode') {
+      return {
+        jsonrpc: '2.0', id,
+        result: {
+          content: [{ type: 'text', text: JSON.stringify({ code: 'AI_MODE_RESTRICTED', message: 'AI 无权修改开放模式(仅界面可设置)' }) }],
+          isError: true,
+        },
+      };
+    }
+    if (!isAiAllowed(aiMode, name)) {
+      return {
+        jsonrpc: '2.0', id,
+        result: {
+          content: [{ type: 'text', text: JSON.stringify({ code: 'AI_MODE_RESTRICTED', message: `当前模式(${aiMode})不允许给 AI 使用该 API: ${name}` }) }],
           isError: true,
         },
       };

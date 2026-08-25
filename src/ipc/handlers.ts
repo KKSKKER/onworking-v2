@@ -28,6 +28,8 @@ import {
   toolRunPipeline,
   toolRunPipelines,
   toolListPipelineConfigs,
+  toolGetSettings,
+  toolSetAiMode,
   toolPreviewCleanResult,
   toolSaveTemplate,
   toolAddFilesToBigTable,
@@ -159,6 +161,9 @@ export const handlers: { [K in SessionCommands]: HandlerFor<K> } = {
     ensureWorkspaceVcs(ctx.ws);
     return gitStatus(ctx.ws);
   },
+
+  'settings.get': async (ctx) => toolGetSettings(ctx.ws),
+  'settings.setAiMode': async (ctx, p) => toolSetAiMode(ctx.ws, p.mode),
 };
 
 /** 分发命令;统一捕获错误为 { ok:false }。返回 ApiResult<unknown>:结果形状由 CommandResults 定义,CLI/MCP/渲染层以 JSON 消费。 */

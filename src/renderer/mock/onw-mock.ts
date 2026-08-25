@@ -138,6 +138,10 @@ async function mockDispatch(command: ApiCommand): Promise<ApiResult<unknown>> {
       return ok('workspace=演示\n序时账: cleaned (files=3, mappedFields=3, pipelines=1)');
     case 'vcs.status':
       return ok({ staged: [], unstaged: [], untracked: ['settings.json'] });
+    case 'settings.get':
+      return ok({ name: '演示', aiOpenMode: 'off' });
+    case 'settings.setAiMode':
+      return ok({ mode: command.mode });
     default:
       return err('UNKNOWN_CMD', `unknown command: ${(command as { cmd: string }).cmd}`);
   }

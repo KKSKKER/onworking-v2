@@ -10,6 +10,7 @@ import type { Workspace } from '../core/workspace/workspace';
 import type { RunSummary, QueryOutcome } from '../core/pipeline/engine';
 import type { SourceConfig } from '../core/pipeline/setup';
 import type { RuleYaml } from '../core/rule/rule';
+import type { WorkspaceSettings, AiOpenMode } from '../core/workspace/settings';
 
 export type ApiResult<T> =
   | { ok: true; data: T }
@@ -50,6 +51,8 @@ export interface CommandPayloads {
   'schema.tables': {};
   'state.summary': {};
   'vcs.status': {};
+  'settings.get': {};
+  'settings.setAiMode': { mode: AiOpenMode };
 }
 
 /** 命令名 → 成功结果类型。 */
@@ -87,6 +90,8 @@ export interface CommandResults {
   'schema.tables': { name: string; columns: { name: string; type: string }[] }[];
   'state.summary': string;
   'vcs.status': { staged: string[]; unstaged: string[]; untracked: string[] };
+  'settings.get': WorkspaceSettings;
+  'settings.setAiMode': { mode: AiOpenMode };
 }
 
 export type ApiCommand = {
