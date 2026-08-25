@@ -1,16 +1,41 @@
 // src/renderer/mock/onw-mock.ts
 // 浏览器开发 mock:模拟 window.onw(真实环境由 Electron preload 提供)。
 // 只在 window.onw 不存在时安装(浏览器 vite dev)。
-import type { ApiCommand, ApiResult } from '../../ipc/contracts';
+import type { ApiCommand, ApiResult, IpcRequest } from '../../ipc/contracts';
 
 const SAMPLE_TABLES = ['seq', 'balance', 'total'];
 
 export function installMockOnw(): void {
-  const w = window as unknown as { onw?: unknown };
+  const w = window as unknown as { onw?: Record<string, unknown> };
   if (w.onw) return;
+  let cliEventCbs: ((line: string) => void)[] = [];
+  let cliErrorCbs: ((line: string) => void)[] = [];
+  let wsChangedCbs: (() => void)[] = [];
   w.onw = {
-    invoke: (command: ApiCommand): Promise<ApiResult<unknown>> => mockDispatch(command),
+    cli: (request: IpcRequest): void => {
+      setTimeout(() => {
+        void mockDispatch(request).then((result: ApiResult<unknown>) => {
+          const line = JSON.stringify({ reqId: request.reqId, result });
+          for (const cb of cliEventCbs) cb(line);
+        });
+      }, 150);
+    },
+    onCliEvent: (cb: (line: string) => void): (() => void) => {
+      cliEventCbs.push(cb);
+      return () => { cliEventCbs = cliEventCbs.filter((x) => x !== cb); };
+    },
+    onCliError: (cb: (line: string) => void): (() => void) => {
+      cliErrorCbs.push(cb);
+      return () => { cliErrorCbs = cliErrorCbs.filter((x) => x !== cb); };
+    },
+    onWorkspaceChanged: (cb: () => void): (() => void) => {
+      wsChangedCbs.push(cb);
+      return () => { wsChangedCbs = wsChangedCbs.filter((x) => x !== cb); };
+    },
+    openWorkspace: async (): Promise<{ ok: boolean }> => ({ ok: true }),
     pickWorkspace: async (): Promise<string | null> => 'D:/演示工作区',
+    // 旧 API 保留(T9 移除)
+    invoke: (command: ApiCommand): Promise<ApiResult<unknown>> => mockDispatch(command),
     onProgress: () => () => {},
     onLog: () => () => {},
   };
