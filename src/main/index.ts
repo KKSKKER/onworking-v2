@@ -3,15 +3,11 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import { join } from 'node:path';
 import { watch } from 'node:fs';
-import { dispatch, type ApiContext } from '../ipc/handlers';
-import { createContext } from '../app/context';
-import { useConsoleLogging, logger } from '../core/logging';
+import { useConsoleLogging } from '../core/logging';
 import { createCliBridge } from './cli-bridge';
 import type { IpcRequest } from '../ipc/contracts';
 
 useConsoleLogging('info');
-
-let ctx: ApiContext | null = null;
 
 // ---- CLI 桥:前端 → onw CLI 子进程(NDJSON),main 只转发 + 回推 ----
 const bridge = createCliBridge({
@@ -56,32 +52,7 @@ function createWindow(): void {
   } else {
     win.loadFile(join(__dirname, '../../renderer/index.html'));
   }
-
-  // 核心日志转发到渲染层日志栏(onw:log 事件)
-  logger.addSink((entry) => {
-    if (!win.isDestroyed()) win.webContents.send('onw:log', entry);
-  });
 }
-
-ipcMain.handle('onw:invoke', async (_event, command: { cmd: string; [k: string]: unknown }) => {
-  const reqId = command && typeof command === 'object' && 'reqId' in command
-    ? (command as { reqId?: number }).reqId
-    : undefined;
-  const open = (path: string) => {
-    ctx = createContext(path);
-    return { ok: true, data: ctx.ws };
-  };
-  if (command?.cmd === 'workspace.open') return open(String(command.path));
-  if (!ctx) {
-    return { ok: false, error: { code: 'NO_WORKSPACE', message: 'no workspace opened' } };
-  }
-  const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
-  if (win) {
-    ctx.emitProgress = (payload) => win.webContents.send('onw:progress', payload);
-  }
-  const result = await dispatch(command as never, ctx);
-  return reqId === undefined ? result : { reqId, result };
-});
 
 // 目录选择桥(UI 专属):渲染层先 pickWorkspace() 拿路径,再 openWorkspace。
 ipcMain.handle('onw:pick-workspace', async () => {

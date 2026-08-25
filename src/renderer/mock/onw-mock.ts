@@ -34,10 +34,6 @@ export function installMockOnw(): void {
     },
     openWorkspace: async (): Promise<{ ok: boolean }> => ({ ok: true }),
     pickWorkspace: async (): Promise<string | null> => 'D:/演示工作区',
-    // 旧 API 保留(T9 移除)
-    invoke: (command: ApiCommand): Promise<ApiResult<unknown>> => mockDispatch(command),
-    onProgress: () => () => {},
-    onLog: () => () => {},
   };
 }
 
