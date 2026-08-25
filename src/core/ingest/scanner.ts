@@ -18,7 +18,11 @@ export function scanSourceDir(sourceDir: string): ScannedFile[] {
       const full = join(dir, entry.name);
       if (entry.isDirectory()) {
         walk(full);
-      } else if (entry.isFile() && SUPPORTED_EXT.has(extname(entry.name).toLowerCase())) {
+      } else if (
+        entry.isFile() &&
+        !entry.name.startsWith('~$') && // Excel 临时锁文件
+        SUPPORTED_EXT.has(extname(entry.name).toLowerCase())
+      ) {
         out.push({ path: full, relPath: relative(sourceDir, full) });
       }
     }

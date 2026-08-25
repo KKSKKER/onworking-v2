@@ -21,6 +21,15 @@ describe('scanner', () => {
     expect(found).not.toContain('d.txt');
     rmSync(dir, { recursive: true, force: true });
   });
+
+  it('ignores Excel temp lock files (~$ prefixed)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ing-'));
+    writeFileSync(join(dir, 'a.xlsx'), '');
+    writeFileSync(join(dir, '~$a.xlsx'), '');
+    const found = scanSourceDir(dir).map((f) => f.relPath);
+    expect(found).toEqual(['a.xlsx']);
+    rmSync(dir, { recursive: true, force: true });
+  });
 });
 
 describe('parser', () => {
