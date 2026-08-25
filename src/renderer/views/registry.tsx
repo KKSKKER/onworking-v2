@@ -14,7 +14,7 @@ export interface ViewDef {
 }
 
 export const VIEWS: ViewDef[] = [
-  { id: 'bigtable-settings', title: '大表字段设置', component: BigTableSettingsView },
+  { id: 'bigtable-settings', title: '大表配置', component: BigTableSettingsView },
   { id: 'mapping', title: '文件字段映射', component: MappingView },
   { id: 'preview', title: '预览', component: PreviewView },
   { id: 'sql', title: 'SQL 工作台', component: SqlView },

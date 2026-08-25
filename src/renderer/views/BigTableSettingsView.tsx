@@ -1,4 +1,5 @@
-// 视图:大表字段设置。跟随左侧栏选中的大表,编辑字段(名/类型/主键/排序)。
+// 视图:大表配置 —— 字段可编辑(bigtable.save) + 规则 YAML/关联管线只读。
+// useApi 订阅 workspace:changed,AI/任何命令改了文件即自动刷新。
 import { useEffect, useState } from 'react';
 import type { BigTableConfig } from '../../core/bigtable/schema';
 import { useApi } from './useApi';
@@ -7,22 +8,32 @@ import { sendCli } from '../cli';
 
 const FIELD_TYPES = ['TEXT', 'INTEGER', 'REAL'] as const;
 
+interface BigTableContext {
+  config: BigTableConfig;
+  rules: {
+    name: string;
+    sources: { pattern: string; sheetName?: string; headerRow: number }[];
+    fields: { sourceHeader: string; outputName: string; order: number }[];
+  }[];
+  pipelines: { id: string; kind: string; label: string }[];
+}
+
 export function BigTableSettingsView() {
   const { selectedFolder } = useSelection();
   const { data: folders } = useApi<string[]>({ cmd: 'bigtable.list' });
   const folder = selectedFolder ?? folders?.[0] ?? null;
 
-  const { data: fetchedCfg, reload } = useApi<BigTableConfig>(
-    folder ? { cmd: 'bigtable.get', folder } : { cmd: 'bigtable.list' },
+  const { data: ctx, reload } = useApi<BigTableContext>(
+    folder ? { cmd: 'bigtable.config', folder } : { cmd: 'bigtable.list' },
     !!folder,
   );
   const [cfg, setCfg] = useState<BigTableConfig | null>(null);
   const [saveMsg, setSaveMsg] = useState('');
 
   useEffect(() => {
-    if (fetchedCfg) setCfg(JSON.parse(JSON.stringify(fetchedCfg)) as BigTableConfig);
+    if (ctx) setCfg(JSON.parse(JSON.stringify(ctx.config)) as BigTableConfig);
     setSaveMsg('');
-  }, [fetchedCfg]);
+  }, [ctx]);
 
   async function handleSave() {
     if (!cfg || !folder) return;
@@ -41,10 +52,9 @@ export function BigTableSettingsView() {
         <button onClick={reload}>刷新</button>
       </div>
       {cfg ? (
-        <div>
+        <>
           <div style={{ marginBottom: 8 }}>
-            表名{' '}
-            <input value={cfg.tableName} onChange={(e) => setCfg({ ...cfg, tableName: e.target.value })} />{' '}
+            表名 <input value={cfg.tableName} onChange={(e) => setCfg({ ...cfg, tableName: e.target.value })} />{' '}
             自增主键{' '}
             <input
               type="checkbox"
@@ -97,7 +107,25 @@ export function BigTableSettingsView() {
             <button onClick={handleSave}>💾 保存设置</button>{' '}
             <span>{saveMsg}</span>
           </div>
-        </div>
+
+          <hr style={{ margin: '16px 0' }} />
+          <div style={{ marginBottom: 8 }}>
+            <b>规则 YAML({ctx?.rules.length ?? 0}):</b>
+            {(ctx?.rules ?? []).map((r, i) => (
+              <pre key={i} style={{ background: '#f6f8fa', padding: 8, overflow: 'auto', fontSize: 12 }}>
+                {JSON.stringify(r, null, 2)}
+              </pre>
+            ))}
+          </div>
+          <div>
+            <b>关联管线({ctx?.pipelines.length ?? 0}):</b>
+            {(ctx?.pipelines ?? []).map((p) => (
+              <div key={p.id}>
+                {p.id} ({p.kind}) {p.label}
+              </div>
+            ))}
+          </div>
+        </>
       ) : (
         <p>加载中…</p>
       )}
