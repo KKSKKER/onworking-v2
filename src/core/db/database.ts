@@ -2,13 +2,15 @@
 // SQLite 打开 + 批量事务写入(性能核心)。
 // 批量写入用 prepare() + transaction():一次调用整批提交,失败整批回滚。
 // 本层纯 better-sqlite3 进程内操作;worker 线程封装在 Electron 组装层。
-import Database from 'better-sqlite3';
+import type Database from 'better-sqlite3';
+import { loadSqlite } from './sqlite';
 
 export function openDatabase(
   dbPath: string,
   opts?: { wal?: boolean },
 ): Database.Database {
-  const db = new Database(dbPath);
+  const Sqlite = loadSqlite(); // 双 ABI:按当前进程 node 自动选 137/115 构建
+  const db = new Sqlite(dbPath);
   if (opts?.wal !== false) {
     db.pragma('journal_mode = WAL'); // 默认 WAL;ATTACH 场景用 false(DELETE)
   }
