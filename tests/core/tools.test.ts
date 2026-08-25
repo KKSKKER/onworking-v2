@@ -7,7 +7,7 @@ import { initWorkspace, type Workspace } from '../../src/core/workspace/workspac
 import { saveBigTableConfig } from '../../src/core/bigtable/store';
 import { savePipeline } from '../../src/core/pipeline/store';
 import { saveRule } from '../../src/core/rule/store';
-import { toolRunPipeline, toolRunPipelines, toolPreviewCleanResult, toolSaveTemplate, toolSetMapping, toolAddFilesToBigTable, toolExportBigTableCsv, toolExportQueryCsv, toolExportSourceCsv, toolGetBigTableContext } from '../../src/core/agent/tools';
+import { toolRunPipeline, toolRunPipelines, toolPreviewCleanResult, toolSaveTemplate, toolSetMapping, toolAddFilesToBigTable, toolExportBigTableCsv, toolExportQueryCsv, toolExportSourceCsv, toolGetBigTableContext, toolListPipelineConfigs } from '../../src/core/agent/tools';
 import { listTemplates } from '../../src/core/template/store';
 import { listRules, loadRules } from '../../src/core/rule/store';
 import { PipelineEngine } from '../../src/core/pipeline/engine';
@@ -270,6 +270,12 @@ describe('tools', () => {
 
   it('toolExportQueryCsv rejects non-SELECT', () => {
     expect(() => toolExportQueryCsv(ws, 'DELETE FROM seq')).toThrow(/only SELECT/);
+  });
+
+  it('toolListPipelineConfigs returns all pipeline configs', () => {
+    const cfgs = toolListPipelineConfigs(ws);
+    const ids = cfgs.map((c) => c.id);
+    expect(ids).toEqual(expect.arrayContaining(['c1', 'm1']));
   });
 
   it('toolExportSourceCsv exports a source file sheet to CSV', () => {

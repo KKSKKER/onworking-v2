@@ -111,6 +111,11 @@ export function toolExportQueryCsv(
   }
 }
 
+/** tool: 列出全部管线配置(含 kind/依赖/结果表),供「管线管理」视图分组展示。 */
+export function toolListPipelineConfigs(ws: Workspace): PipelineConfig[] {
+  return listPipelines(ws).map((id) => loadPipeline(ws, id));
+}
+
 /** tool: 读取选中大表关联的全部配置(大表配置 + 规则 YAML + 关联管线),供前端实时渲染。 */
 export function toolGetBigTableContext(ws: Workspace, folder: string): {
   config: BigTableConfig;

@@ -27,6 +27,7 @@ import {
   toolCreateQueryPipeline,
   toolRunPipeline,
   toolRunPipelines,
+  toolListPipelineConfigs,
   toolPreviewCleanResult,
   toolSaveTemplate,
   toolAddFilesToBigTable,
@@ -75,6 +76,7 @@ export const handlers: { [K in SessionCommands]: HandlerFor<K> } = {
   'bigtable.config': async (ctx, p) => toolGetBigTableContext(ctx.ws, p.folder),
 
   'pipeline.list': async (ctx) => listPipelines(ctx.ws),
+  'pipeline.configs': async (ctx) => toolListPipelineConfigs(ctx.ws),
   'pipeline.save': async (ctx, p) => {
     const config = p.config;
     if (config.kind === 'query') {

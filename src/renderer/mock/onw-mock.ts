@@ -79,6 +79,12 @@ async function mockDispatch(command: ApiCommand): Promise<ApiResult<unknown>> {
       });
     case 'pipeline.list':
       return ok(['c1', 'q1']);
+    case 'pipeline.configs':
+      return ok([
+        { kind: 'clean', id: 'c1', label: '', bigTableFolder: 'seq', sourceDir: 'D:/src', createdAt: '' },
+        { kind: 'sql-clean', id: 'm1', label: '', bigTables: ['seq'], sql: '', resultTable: 'seq', createdAt: '' },
+        { kind: 'query', id: 'q1', label: '', sql: '', dependencies: ['seq'], resultTable: 'r1', createdAt: '' },
+      ]);
     case 'pipeline.save':
       return ok({ saved: (command.config as { id: string }).id });
     case 'pipeline.delete':

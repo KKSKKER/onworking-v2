@@ -28,6 +28,7 @@ export interface CommandPayloads {
   'bigtable.config': { folder: string };
   'mapping.save': { folder: string; headerRow?: number; mappings: FieldMapping[]; ruleName?: string; sheetName?: string; pattern?: string };
   'pipeline.list': {};
+  'pipeline.configs': {};
   'pipeline.save': { config: PipelineConfig };
   'pipeline.delete': { id: string };
   'pipeline.run': { id: string };
@@ -64,6 +65,7 @@ export interface CommandResults {
   'bigtable.config': { config: BigTableConfig; rules: RuleYaml[]; pipelines: PipelineConfig[] };
   'mapping.save': { ruleFile: string };
   'pipeline.list': string[];
+  'pipeline.configs': PipelineConfig[];
   'pipeline.save': { pipelineId: string };
   'pipeline.delete': { deleted: string };
   'pipeline.run': RunSummary;
