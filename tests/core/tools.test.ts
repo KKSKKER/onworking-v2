@@ -6,7 +6,7 @@ import * as XLSX from 'xlsx';
 import { initWorkspace, type Workspace } from '../../src/core/workspace/workspace';
 import { saveBigTableConfig } from '../../src/core/bigtable/store';
 import { savePipeline } from '../../src/core/pipeline/store';
-import { toolRunPipeline } from '../../src/core/agent/tools';
+import { toolRunPipeline, toolRunPipelines } from '../../src/core/agent/tools';
 
 describe('tools', () => {
   let dir: string;
@@ -66,5 +66,16 @@ describe('tools', () => {
     expect(clean.rows).toBe(2);
     const master = await toolRunPipeline(ws, 'm1');
     expect(master.ok).toBe(true);
+  });
+
+  it('toolRunPipelines filters pipelines by kind and folder', async () => {
+    const cleanOnly = await toolRunPipelines(ws, { kind: 'clean' });
+    expect(cleanOnly.map((r) => r.pipelineId)).toEqual(['c1']);
+
+    const masterOne = await toolRunPipelines(ws, { kind: 'sql-clean', bigTableFolder: 'seq' });
+    expect(masterOne.map((r) => r.pipelineId)).toEqual(['m1']);
+
+    const none = await toolRunPipelines(ws, { kind: 'clean', bigTableFolder: 'other' });
+    expect(none).toEqual([]);
   });
 });

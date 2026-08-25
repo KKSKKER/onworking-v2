@@ -136,7 +136,27 @@ export async function toolRunPipeline(ws: Workspace, id: string): Promise<RunSum
   }
 }
 
-async function runCleanPipelines(ws: Workspace, ids: string[]): Promise<RunSummary[]> {
+/** 批量运行过滤条件:all / 按 kind / 按 kind + 大表。 */
+export type PipelineFilter =
+  | { kind: 'all' }
+  | { kind: 'clean' }
+  | { kind: 'clean'; bigTableFolder: string }
+  | { kind: 'sql-clean' }
+  | { kind: 'sql-clean'; bigTableFolder: string };
+
+/** tool: 按过滤条件跑一批管线(替代 4 个批量合并/构建工具)。 */
+export async function toolRunPipelines(ws: Workspace, filter: PipelineFilter): Promise<RunSummary[]> {
+  const ids = listPipelines(ws).filter((id) => {
+    const cfg = loadPipeline(ws, id);
+    if (filter.kind === 'all') return true;
+    if (filter.kind === 'clean') {
+      if (cfg.kind !== 'clean') return false;
+      return 'bigTableFolder' in filter ? cfg.bigTableFolder === filter.bigTableFolder : true;
+    }
+    // sql-clean
+    if (cfg.kind !== 'sql-clean') return false;
+    return 'bigTableFolder' in filter ? cfg.bigTables.includes(filter.bigTableFolder) : true;
+  });
   const eng = new PipelineEngine(ws);
   try {
     const out: RunSummary[] = [];
@@ -145,47 +165,6 @@ async function runCleanPipelines(ws: Workspace, ids: string[]): Promise<RunSumma
   } finally {
     eng.close();
   }
-}
-
-/** tool: 合并当前大表(按 YAML 规则把源文件合并进该大表)。 */
-export async function toolMergeBigTable(ws: Workspace, folder: string): Promise<RunSummary[]> {
-  const ids = listPipelines(ws).filter((id) => {
-    const cfg = loadPipeline(ws, id);
-    return cfg.kind === 'clean' && cfg.bigTableFolder === folder;
-  });
-  return runCleanPipelines(ws, ids);
-}
-
-/** tool: 全部合并(把工作区所有大表按规则合并一次)。 */
-export async function toolMergeAll(ws: Workspace): Promise<RunSummary[]> {
-  const ids = listPipelines(ws).filter((id) => loadPipeline(ws, id).kind === 'clean');
-  return runCleanPipelines(ws, ids);
-}
-
-async function runSqlCleanPipelines(ws: Workspace, ids: string[]): Promise<RunSummary[]> {
-  const eng = new PipelineEngine(ws);
-  try {
-    const out: RunSummary[] = [];
-    for (const id of ids) out.push(await eng.run(id));
-    return out;
-  } finally {
-    eng.close();
-  }
-}
-
-/** tool: 从当前大表构建总表(跑含该大表的 sql-clean 管线)。 */
-export async function toolBuildMasterForBigTable(ws: Workspace, folder: string): Promise<RunSummary[]> {
-  const ids = listPipelines(ws).filter((id) => {
-    const cfg = loadPipeline(ws, id);
-    return cfg.kind === 'sql-clean' && cfg.bigTables.includes(folder);
-  });
-  return runSqlCleanPipelines(ws, ids);
-}
-
-/** tool: 从全部大表构建总表(跑所有 sql-clean 管线)。 */
-export async function toolBuildMasterAll(ws: Workspace): Promise<RunSummary[]> {
-  const ids = listPipelines(ws).filter((id) => loadPipeline(ws, id).kind === 'sql-clean');
-  return runSqlCleanPipelines(ws, ids);
 }
 
 /** tool: 创建查询管线(泳道图「保存 pipeline 配置」)。SQL 跑在总表 DB。 */

@@ -28,10 +28,7 @@ import {
   toolCreateSqlCleanPipeline,
   toolCreateQueryPipeline,
   toolRunPipeline,
-  toolMergeBigTable,
-  toolMergeAll,
-  toolBuildMasterForBigTable,
-  toolBuildMasterAll,
+  toolRunPipelines,
   toolQuery,
   toolGetProjectState,
 } from '../core/agent/tools';
@@ -90,10 +87,10 @@ const handlers: { [K in SessionCommands]: HandlerFor<K> } = {
     return { deleted: p.id };
   },
   'pipeline.run': async (ctx, p) => toolRunPipeline(ctx.ws, p.id),
-  'pipeline.mergeBigTable': async (ctx, p) => toolMergeBigTable(ctx.ws, p.folder),
-  'pipeline.mergeAll': async (ctx) => toolMergeAll(ctx.ws),
-  'pipeline.buildMasterBigTable': async (ctx, p) => toolBuildMasterForBigTable(ctx.ws, p.folder),
-  'pipeline.buildMasterAll': async (ctx) => toolBuildMasterAll(ctx.ws),
+  'pipeline.mergeBigTable': async (ctx, p) => toolRunPipelines(ctx.ws, { kind: 'clean', bigTableFolder: p.folder }),
+  'pipeline.mergeAll': async (ctx) => toolRunPipelines(ctx.ws, { kind: 'clean' }),
+  'pipeline.buildMasterBigTable': async (ctx, p) => toolRunPipelines(ctx.ws, { kind: 'sql-clean', bigTableFolder: p.folder }),
+  'pipeline.buildMasterAll': async (ctx) => toolRunPipelines(ctx.ws, { kind: 'sql-clean' }),
   'pipeline.recomputeAll': async (ctx) => ctx.getEngine().recomputeAll(),
   'pipeline.recomputeByDependency': async (ctx, p) => ctx.getEngine().recomputeByDependency(p.trigger),
 
