@@ -126,13 +126,13 @@ export function toolSetBigTableFields(
   saveBigTableConfig(ws, folder, { ...existing, fields });
 }
 
-/** tool: 获取文件表头(sheets 列表 + 自动检测结果)。 */
-export function toolGetFileHeaders(filePath: string): {
+/** tool: 获取文件表头(sheets 列表 + 自动检测结果)。sheetName 指定对哪个 sheet 检测。 */
+export function toolGetFileHeaders(filePath: string, sheetName?: string): {
   sheets: string[];
   detected: { sheetName: string; headerRow: number; headers: string[] };
 } {
   const sheets = filePath.toLowerCase().endsWith('.csv') ? parseCsvFile(filePath) : parseExcelFile(filePath);
-  return { sheets: sheets.map((s) => s.sheetName), detected: detectSourceConfig(filePath) };
+  return { sheets: sheets.map((s) => s.sheetName), detected: detectSourceConfig(filePath, sheetName) };
 }
 
 /** tool: 导入文件(扫描源目录,返回文件清单)。 */

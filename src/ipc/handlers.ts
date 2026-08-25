@@ -103,7 +103,7 @@ export const handlers: { [K in SessionCommands]: HandlerFor<K> } = {
   'pipeline.recomputeAll': async (ctx) => ctx.getEngine().recomputeAll(),
   'pipeline.recomputeByDependency': async (ctx, p) => ctx.getEngine().recomputeByDependency(p.trigger),
 
-  'setup.detectSource': async (_ctx, p) => toolGetFileHeaders(p.filePath).detected,
+  'setup.detectSource': async (_ctx, p) => toolGetFileHeaders(p.filePath, p.sheetName).detected,
   'setup.sheets': async (_ctx, p) => {
     const sheets = p.filePath.toLowerCase().endsWith('.csv')
       ? parseCsvFile(p.filePath)

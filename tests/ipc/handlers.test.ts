@@ -99,6 +99,21 @@ describe('ipc handlers', () => {
     if (res.ok) expect((res.data as { headers: string[] }).headers).toEqual(['日期', '借方金额']);
   });
 
+  it('setup.detectSource honors sheetName', async () => {
+    const f = join(dir, 'multi.xlsx');
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['A1', 'A2'], ['v1', 'v2']]), 'Sheet1');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['B1', 'B2'], ['w1', 'w2']]), 'Sheet2');
+    XLSX.writeFile(wb, f);
+    const res = await dispatch({ cmd: 'setup.detectSource', filePath: f, sheetName: 'Sheet2' }, ctx);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      const d = res.data as { sheetName: string; headers: string[] };
+      expect(d.sheetName).toBe('Sheet2');
+      expect(d.headers).toEqual(['B1', 'B2']);
+    }
+  });
+
   it('returns an error result for a failing command', async () => {
     const res = await dispatch({ cmd: 'bigtable.get', folder: 'missing' }, ctx);
     expect(res.ok).toBe(false);

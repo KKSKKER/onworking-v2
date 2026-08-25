@@ -47,6 +47,20 @@ describe('mcp server', () => {
     expect(names).toContain('state.summary');
   });
 
+  it('tools/list exposes input schemas with properties and required', async () => {
+    const res = await handleMcpRequest(session, { jsonrpc: '2.0', id: 2, method: 'tools/list' });
+    const tools = (res?.result as {
+      tools: { name: string; inputSchema: { properties?: Record<string, unknown>; required?: string[] } }[];
+    }).tools;
+    const open = tools.find((t) => t.name === 'workspace.open');
+    expect(open?.inputSchema.properties?.path).toBeTruthy();
+    expect(open?.inputSchema.required).toContain('path');
+    const preview = tools.find((t) => t.name === 'bigtable.previewRows');
+    expect(preview?.inputSchema.properties?.folder).toBeTruthy();
+    expect(preview?.inputSchema.properties?.limit).toBeTruthy();
+    expect(preview?.inputSchema.required).toEqual(['folder']);
+  });
+
   it('calls a tool and returns the dispatch result as text content', async () => {
     const res = await handleMcpRequest(session, {
       jsonrpc: '2.0',

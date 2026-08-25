@@ -30,6 +30,60 @@ export interface McpSession {
 /** 注册的所有命令名(来自 handler 表 + 引导命令 workspace.open)。 */
 export const commandKinds = ['workspace.open', ...Object.keys(handlers).sort()];
 
+// ---- 工具 inputSchema(运行时 JSON Schema,让 MCP 客户端能正确传参) ----
+interface Prop {
+  type: 'string' | 'integer' | 'number' | 'boolean' | 'object' | 'array';
+  items?: Prop;
+}
+interface ToolSchema {
+  type: 'object';
+  properties: Record<string, Prop>;
+  required: string[];
+}
+
+const str: Prop = { type: 'string' };
+const int: Prop = { type: 'integer' };
+const bool: Prop = { type: 'boolean' };
+const obj: Prop = { type: 'object' };
+const objArr: Prop = { type: 'array', items: obj };
+
+function schema(properties: Record<string, Prop>, required: string[] = []): ToolSchema {
+  return { type: 'object', properties, required };
+}
+
+/** 每个命令的入参 JSON Schema(与 CommandPayloads 对齐)。 */
+export const TOOL_SCHEMAS: Record<string, ToolSchema> = {
+  'workspace.open': schema({ path: str }, ['path']),
+  'bigtable.list': schema({}),
+  'bigtable.get': schema({ folder: str }, ['folder']),
+  'bigtable.save': schema({ folder: str, config: obj }, ['folder', 'config']),
+  'bigtable.sourceFiles': schema({ folder: str }, ['folder']),
+  'bigtable.previewRows': schema({ folder: str, limit: int, offset: int }, ['folder']),
+  'bigtable.addFiles': schema({ folder: str, files: objArr, overwrite: bool }, ['folder', 'files']),
+  'bigtable.exportCsv': schema({ folder: str, path: str, includeLineage: bool }, ['folder']),
+  'mapping.save': schema({ folder: str, headerRow: int, mappings: objArr, ruleName: str, sheetName: str }, ['folder', 'mappings']),
+  'pipeline.list': schema({}),
+  'pipeline.save': schema({ config: obj }, ['config']),
+  'pipeline.delete': schema({ id: str }, ['id']),
+  'pipeline.run': schema({ id: str }, ['id']),
+  'pipeline.mergeBigTable': schema({ folder: str }, ['folder']),
+  'pipeline.mergeAll': schema({}),
+  'pipeline.buildMasterBigTable': schema({ folder: str }, ['folder']),
+  'pipeline.buildMasterAll': schema({}),
+  'pipeline.recomputeAll': schema({}),
+  'pipeline.recomputeByDependency': schema({ trigger: str }, ['trigger']),
+  'setup.detectSource': schema({ filePath: str, sheetName: str }, ['filePath']),
+  'setup.sheets': schema({ filePath: str }, ['filePath']),
+  'setup.preview': schema({ filePath: str, sheetName: str, headerRow: int, offset: int, limit: int }, ['filePath']),
+  'query.run': schema({ sql: str, limit: int }, ['sql']),
+  'template.list': schema({}),
+  'template.save': schema({ template: obj }, ['template']),
+  'template.apply': schema({ name: str, sheet: obj }, ['name', 'sheet']),
+  'schema.tables': schema({}),
+  'state.summary': schema({}),
+  'vcs.status': schema({}),
+};
+
 /** 处理一条 JSON-RPC 请求;notification 无 id,返回 null 表示不回包。 */
 export async function handleMcpRequest(
   session: McpSession,
@@ -58,7 +112,7 @@ export async function handleMcpRequest(
         tools: commandKinds.map((name) => ({
           name,
           description: `onworking command: ${name}`,
-          inputSchema: { type: 'object' },
+          inputSchema: TOOL_SCHEMAS[name] ?? { type: 'object' },
         })),
       },
     };
