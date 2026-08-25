@@ -1,7 +1,8 @@
 // src/renderer/views/useApi.ts
-// 轻量 hook:调 window.onw.invoke 取数据,带 reload。
+// 轻量 hook:经 CLI(sendCli)取数据,带 reload;订阅 workspace:changed 自动刷新(同步 AI 执行)。
 import { useCallback, useEffect, useState } from 'react';
 import type { ApiCommand } from '../../ipc/contracts';
+import { sendCli } from '../cli';
 
 export function useApi<T>(command: ApiCommand, enabled = true): {
   data: T | null;
@@ -18,8 +19,7 @@ export function useApi<T>(command: ApiCommand, enabled = true): {
     if (!enabled) return;
     let alive = true;
     setLoading(true);
-    window.onw
-      .invoke(command)
+    sendCli(command)
       .then((res) => {
         if (!alive) return;
         if (res.ok) {
@@ -39,6 +39,12 @@ export function useApi<T>(command: ApiCommand, enabled = true): {
       alive = false;
     };
   }, [tick, enabled, JSON.stringify(command)]);
+
+  // AI/任何命令改了工作区 → 自动刷新(同步 AI 执行)
+  useEffect(() => {
+    if (!enabled) return;
+    return window.onw.onWorkspaceChanged(() => setTick((t) => t + 1));
+  }, [enabled]);
 
   const reload = useCallback(() => setTick((t) => t + 1), []);
   return { data, error, loading, reload };
