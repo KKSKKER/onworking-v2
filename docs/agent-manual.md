@@ -9,13 +9,41 @@
 
 本手册是操作 Onworking 工作区的**最高行为约束**。
 
-- **唯一合法操作途径**：只能调用本手册「第 2 节命令清单」列出的命令。
+- **唯一合法操作途径**：只能调用本手册「第 3 节命令清单」列出的命令。
 - 除清单内命令外，**禁止**使用任何其他工具、命令行、脚本去查看或修改文件。
 - 违反即视为错误操作：停止当前动作，改用清单内命令。
 
 ---
 
-## 1. 铁律（不可违反）
+## 1. 数据架构与标准使用链（必读）
+
+**数据流向是两段式，最终产物是总表 master.db，不是大表：**
+
+```
+源文件(源目录)
+   │  ① pipeline.save(kind:'clean') + pipeline.run   —— 按规则 YAML 清洗
+   ▼
+大表 DB   .onworking/bigtables/<folder>/db/onworking.db   （每大表独立）
+   │  ② pipeline.save(kind:'sql-clean') + pipeline.run   —— 大表 → 总表(ATTACH + SQL)
+   ▼
+总表 master.db   .onworking/db/master.db   （最终可查询库）
+   │  ③ pipeline.save(kind:'query') + pipeline.run / query.run
+   ▼
+查询结果表 / 临时查询
+```
+
+**关键认知（避免停在半路）：**
+
+- **总表 master.db 不会自动生成**。只有建了 sql-clean 管线并跑它，才会把大表数据汇进总表。`query.run` / `schema.tables` 查的都是 master.db —— 没走到 ② 之前总表是空的，`schema.tables` 查不到表。
+- `pipeline.run` 写哪个 DB 由管线 kind 决定：`clean` → 大表 DB；`sql-clean` / `query` → 总表 DB。
+- **一条完整任务必须走到 ②（总表）**；需要结果表/查数再走 ③。做到大表就停 = 任务没完成。
+- `bigtable.previewRows` 预览的是大表 DB（①→② 的中间产物）；`query.run` / `schema.tables` 查的是总表（② 之后的最终库）。
+
+**一句话标准链：** 打开工作区 → 建大表 → 加文件 → 写映射 → 建并跑 clean（进大表）→ 建并跑 sql-clean（进总表）→ 建并跑 query / query.run 查数。
+
+---
+
+## 2. 铁律（不可违反）
 
 1. **禁止用 shell / 终端 / 文件工具读文件**：`cat` / `ls` / `find` / `grep` / `head` / `tail` / `type` / `more` / 打开文件查看 等，一律禁止。
 2. **禁止用 shell / 终端 / 文件工具写、删、改文件**：`touch` / `echo >` / `rm` / `mv` / `cp` / `mkdir` / 编辑器写入 / 直接改文件 等，一律禁止。
@@ -27,7 +55,7 @@
 
 ---
 
-## 2. 命令清单（唯一允许）
+## 3. 命令清单（唯一允许）
 
 ### 工作区
 | 命令 | 用途 |
@@ -99,7 +127,7 @@ $lines | npm run --silent onw -- open D:/ws
 
 ---
 
-## 3. 标准工作流
+## 4. 标准工作流
 
 以「新建一个大表并导入数据」为例（每一步用命令，不得绕过）：
 
@@ -116,9 +144,11 @@ $lines | npm run --silent onw -- open D:/ws
 11. `pipeline.save` —— 建 sql-clean 管线（大表→总表），`pipeline.run`
 12. `schema.tables` / `query.run` —— 在总表上查数验证
 
+> **不要停在大表**：走到第 8~10 步只是完成了「大表」，此时**总表 master.db 还没生成**。凡需要查数/产出结果，必须继续第 11 步（sql-clean → 总表）和第 12 步。判断任务是否完成，以总表（`query.run`/`schema.tables`）能查到数据为准。
+
 ---
 
-## 4. 关键语义（容易踩坑，务必牢记）
+## 5. 关键语义（容易踩坑，务必牢记）
 
 - **大表是重建式的**：`pipeline.run` 每次先删旧表再写，行数 = 源目录所有匹配文件合计，**不是追加**。
 - **加文件 ≠ 导入**：`bigtable.addFiles` 只拷贝文件到 `source/` 目录；**必须重跑 `pipeline.run` 才导入数据**。
@@ -136,7 +166,7 @@ $lines | npm run --silent onw -- open D:/ws
 
 ---
 
-## 5. 约束如何执行
+## 6. 约束如何执行
 
 1. **注入**：本手册全文作为 Agent 的 system prompt 前置约束。
 2. **运行侧拦截**：工具权限只放行清单内命令（MCP tools），shell/文件编辑工具直接拒绝，从机制上杜绝绕过。
@@ -156,11 +186,11 @@ $lines | npm run --silent onw -- open D:/ws
 
 ---
 
-## 6. 排查（常见错误码）
+## 7. 排查（常见错误码）
 
 | 码 | 含义 | 处理 |
 |---|---|---|
-| `UNKNOWN_CMD` | 命令名错误 | 对照第 2 节清单 |
+| `UNKNOWN_CMD` | 命令名错误 | 对照第 3 节清单 |
 | `NO_WORKSPACE` | 未打开工作区 | 先 `workspace.open` |
 | `CLEAN_NO_RULE` | clean 管线没有规则 YAML | `mapping.save` 写映射 |
 | `FILE_NOT_FOUND` | `bigtable.addFiles` 源文件不存在 | 检查文件路径 |
