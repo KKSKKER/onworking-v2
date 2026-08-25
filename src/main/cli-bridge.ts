@@ -61,7 +61,7 @@ export function createCliBridge(opts: CliBridgeOptions): CliBridge {
   }
 
   function send(request: IpcRequest): boolean {
-    if (!child || child.stdin.destroyed) return false;
+    if (!child || !child.stdin || child.stdin.destroyed) return false;
     child.stdin.write(JSON.stringify(request) + '\n');
     return true;
   }
