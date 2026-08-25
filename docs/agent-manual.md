@@ -203,7 +203,7 @@ $lines | npm run --silent onw -- open D:/ws
 | `FILE_NOT_FOUND` | `bigtable.addFiles` 源文件不存在 | 检查文件路径 |
 | `QUERY_NOT_SELECT` | `query.run` 非 SELECT/WITH | 改查询语句 |
 | `TEMPLATE_NOT_FOUND` | 模板不存在 | `template.list` 查名 |
-| 环境：`better-sqlite3` ABI 不匹配 | 报 `NODE_MODULE_VERSION` 不符 | 正常 dev/测试/CLI/MCP 都跑在系统 node 上：`npm run dev`/`start` 已自动 `rebuild:node`，UI 桥 dev 下也 spawn 系统 node，**日常不会碰到 ABI 错**。唯一例外：`npm run dist`（打包，electron-builder 按 Electron 重建）之后，先跑一次 `npm run dev` 或 `npm run rebuild:node` 切回 node ABI。注意：**app 开着时别 `rebuild`**（模块被占用会 EPERM），先关掉再重建 |
+| 环境：`better-sqlite3` ABI 不匹配 | 报 `NODE_MODULE_VERSION` 不符（如 `137 vs 115`） | CLI/MCP 一律跑系统 node，electron-builder 已设 `npmRebuild:false`（打包不重建原生模块），**全链路只有系统 node 一个 ABI**，不再互切。若仍报 `137 vs 115`，说明有进程跑在 Electron node 下（用了 `ELECTRON_RUN_AS_NODE`）——改为 spawn 系统 `node` 即可。注意：**app 开着时别 `rebuild`**（模块被占用会 EPERM），先关掉再重建 |
 
 ---
 

@@ -31,7 +31,8 @@
     "files": ["dist/**"],
     "asarUnpack": ["dist/main/cli/**"],
     "directories": { "output": "release" },
-    "win": { "target": ["nsis", "portable"] }
+    "win": { "target": ["nsis", "portable"] },
+    "npmRebuild": false
   },
   "dependencies": {
     "better-sqlite3": "^11.10.0",

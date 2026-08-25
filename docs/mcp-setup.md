@@ -13,28 +13,25 @@
 <安装目录>/resources/app.asar/dist/main/cli/index.js
 ```
 
-## 2. 关键：用应用自带 Node 跑 CLI（不需要用户装 node）
+## 2. 关键：CLI/MCP 一律跑系统 node（单一 ABI，不再来回切）
 
-MCP server 是 stdio 子进程，用 `ELECTRON_RUN_AS_NODE=1` 让 **Onworking.exe 以 Node 模式运行** CLI：
+MCP server 是 stdio 子进程，用 **系统 node** 跑 CLI（`rebuild:node` 编的就是系统 node 版 better-sqlite3，ABI 137；**不要**用 `ELECTRON_RUN_AS_NODE`，那会让子进程跑 Electron 内置 node / ABI 115，与模块 137 冲突）：
 
 ```
-command: <安装目录>/Onworking.exe
-args:    [<安装目录>/resources/app.asar/dist/main/cli/index.js, "mcp"]
-env:     ELECTRON_RUN_AS_NODE=1
+command: node
+args:    [<CLI 入口>, "mcp"]
 ```
 
 - `mcp` 子命令 = MCP server（JSON-RPC 2.0 / stdio）。
 - 每个 Agent 会话由客户端拉起一个 MCP 进程（client-bound）。
+- CLI 入口：开发用 `D:/Jeffrey/onworking-v2/dist/main/cli/index.js`（先 `npm run build:main`）；打包后在 `<安装目录>/resources/app.asar/dist/main/cli/index.js`（打包机器需装 node）。
 
 ## 3. 具体客户端配置
 
 ### claude mcp add（Claude Code）
 
 ```bash
-claude mcp add onworking \
-  --env ELECTRON_RUN_AS_NODE=1 \
-  -- "C:/Program Files/Onworking/Onworking.exe" \
-     "C:/Program Files/Onworking/resources/app.asar/dist/main/cli/index.js" mcp
+claude mcp add onworking -- node "D:/Jeffrey/onworking-v2/dist/main/cli/index.js" mcp
 ```
 
 验证：`claude mcp list`，然后直接调工具（`bigtable.list` / `mapping.save` / `query.run` …）。
@@ -47,17 +44,16 @@ claude mcp add onworking \
 {
   "mcpServers": {
     "onworking": {
-      "command": "C:/Program Files/Onworking/Onworking.exe",
-      "args": ["C:/Program Files/Onworking/resources/app.asar/dist/main/cli/index.js", "mcp"],
-      "env": { "ELECTRON_RUN_AS_NODE": "1" }
+      "command": "node",
+      "args": ["D:/Jeffrey/onworking-v2/dist/main/cli/index.js", "mcp"]
     }
   }
 }
 ```
 
-### 通用 stdio MCP（Cursor / IDE / 自研）
+### 通用 stdio MCP（Cursor / IDE / 豆包等支持自定义 stdio 的客户端）
 
-同一份 `{ command, args, env }` 结构（上面的 JSON 就是通用形状）。
+同一份 `{ command, args }` 结构，`command` 一律 `node`。
 
 ## 4. 工作区不用写死
 
@@ -96,7 +92,7 @@ prompts/get     { "name": "onworking-manual" }                → 同上,提示�
 ## 6. 注意事项
 
 - **路径用绝对路径**：`args` 里的 `app.asar` 路径是相对的，客户端工作目录不定，务必写成绝对路径。
-- **ABI**：打包时 electron-builder 会把 better-sqlite3 重建成 Electron 版（`npm run dist` 后本地 node_modules 是 Electron ABI，`npm run dev`/测试前需 `npm run rebuild:node`）。打包后的 CLI 用应用自带 Node，ABI 天然匹配，无需处理。
+- **ABI 单一化**：CLI/MCP 一律跑系统 node，electron-builder 配置了 `npmRebuild:false`（打包不重建原生模块），全链路只有系统 node 一个 ABI（137），`npm run dev`/`dist`/测试/MCP 不再互切、不再冲突。打包机器需装 node。
 - **Agent 只经命令操作**：接入后 Agent 能看到的工具 = 命令清单，配合 [agent-manual.md](agent-manual.md) 的约束，AI 只能经 MCP 工具读写工作区。
 - **不要同时双写**：better-sqlite3 是单进程设计，AI 与界面别在同一瞬间各跑一个写库管线。
 
