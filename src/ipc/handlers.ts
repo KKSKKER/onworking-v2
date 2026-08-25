@@ -12,7 +12,6 @@ import { parseCsvFile, parseExcelFile } from '../core/ingest/parser';
 import { PipelineEngine } from '../core/pipeline/engine';
 import {
   listTemplates,
-  saveTemplate,
   loadTemplate,
   applyTemplateToSheet,
 } from '../core/template/store';
@@ -30,6 +29,7 @@ import {
   toolRunPipeline,
   toolRunPipelines,
   toolPreviewCleanResult,
+  toolSaveTemplate,
   toolQuery,
   toolGetProjectState,
 } from '../core/agent/tools';
@@ -119,10 +119,7 @@ const handlers: { [K in SessionCommands]: HandlerFor<K> } = {
   },
 
   'template.list': async (ctx) => listTemplates(ctx.ws),
-  'template.save': async (ctx, p) => {
-    saveTemplate(ctx.ws, p.template);
-    return { saved: p.template.name };
-  },
+  'template.save': async (ctx, p) => toolSaveTemplate(ctx.ws, p.template),
   'template.apply': async (ctx, p) => applyTemplateToSheet(p.sheet, loadTemplate(ctx.ws, p.name)),
 
   'schema.tables': async (ctx) => ctx.getEngine().schemaTables(),

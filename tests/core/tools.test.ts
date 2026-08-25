@@ -7,7 +7,8 @@ import { initWorkspace, type Workspace } from '../../src/core/workspace/workspac
 import { saveBigTableConfig } from '../../src/core/bigtable/store';
 import { savePipeline } from '../../src/core/pipeline/store';
 import { saveRule } from '../../src/core/rule/store';
-import { toolRunPipeline, toolRunPipelines, toolPreviewCleanResult } from '../../src/core/agent/tools';
+import { toolRunPipeline, toolRunPipelines, toolPreviewCleanResult, toolSaveTemplate } from '../../src/core/agent/tools';
+import { listTemplates } from '../../src/core/template/store';
 
 describe('tools', () => {
   let dir: string;
@@ -93,5 +94,11 @@ describe('tools', () => {
     expect(res.rows).toHaveLength(2);
     const paged = toolPreviewCleanResult(ws, 'seq', { limit: 1, offset: 1 });
     expect(paged.rows).toHaveLength(1);
+  });
+
+  it('toolSaveTemplate persists a mapping template', () => {
+    const res = toolSaveTemplate(ws, { name: 'tpl1', mappings: [], createdAt: '2026-08-25T00:00:00.000Z' });
+    expect(res).toEqual({ saved: 'tpl1' });
+    expect(listTemplates(ws)).toContain('tpl1');
   });
 });

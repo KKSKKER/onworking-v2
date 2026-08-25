@@ -15,7 +15,7 @@ import { detectSourceConfig } from '../pipeline/setup';
 import { savePipeline, listPipelines, loadPipeline } from '../pipeline/store';
 import { PipelineEngine, type RunSummary } from '../pipeline/engine';
 import { ProjectState } from '../state/project';
-import { loadTemplate, applyTemplateToSheet } from '../template/store';
+import { loadTemplate, applyTemplateToSheet, saveTemplate, type MappingTemplate } from '../template/store';
 import type { FieldMapping } from '../etl/transform';
 import { openDatabase } from '../db/database';
 import { AppError } from '../errors';
@@ -113,6 +113,12 @@ export function toolCreateCleaningPipeline(
     createdAt: new Date().toISOString(),
   });
   return { pipelineId: id };
+}
+
+/** tool: 保存字段映射模板。 */
+export function toolSaveTemplate(ws: Workspace, tpl: MappingTemplate): { saved: string } {
+  saveTemplate(ws, tpl);
+  return { saved: tpl.name };
 }
 
 /** tool: 引用模板套用映射。 */
