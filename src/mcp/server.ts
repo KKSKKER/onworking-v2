@@ -28,8 +28,8 @@ export interface McpSession {
   getCtx(): ApiContext | null;
 }
 
-/** 注册的所有命令名(来自 handler 表 + 引导命令 workspace.open)。 */
-export const commandKinds = ['workspace.open', ...Object.keys(handlers).sort()];
+/** 注册的所有命令名(来自 handler 表 + 引导命令 workspace.open + 手册读取工具 manual.read)。 */
+export const commandKinds = ['workspace.open', 'manual.read', ...Object.keys(handlers).sort()];
 
 // ---- 工具 inputSchema(运行时 JSON Schema,让 MCP 客户端能正确传参) ----
 interface Prop {
@@ -55,6 +55,7 @@ function schema(properties: Record<string, Prop>, required: string[] = []): Tool
 /** 每个命令的入参 JSON Schema(与 CommandPayloads 对齐)。 */
 export const TOOL_SCHEMAS: Record<string, ToolSchema> = {
   'workspace.open': schema({ path: str }, ['path']),
+  'manual.read': schema({}),
   'bigtable.list': schema({}),
   'bigtable.get': schema({ folder: str }, ['folder']),
   'bigtable.save': schema({ folder: str, config: obj }, ['folder', 'config']),
@@ -187,6 +188,11 @@ export async function handleMcpRequest(
         id,
         result: { content: [{ type: 'text', text: JSON.stringify(ctx.ws) }] },
       };
+    }
+
+    // manual.read:返回 Agent 操作须知(AI 可经此工具读到手册并遵守)
+    if (name === 'manual.read') {
+      return { jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: MANUAL_TEXT }] } };
     }
 
     const ctx = session.getCtx();

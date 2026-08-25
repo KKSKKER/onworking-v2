@@ -71,12 +71,15 @@ tools/call { "name": "workspace.open", "arguments": { "path": "D:/某工作区" 
 
 ## 5. 操作手册怎么给 Agent
 
-MCP 侧已内置（`src/mcp/manual.ts`），Agent 可读：
+MCP 侧已内置（`src/mcp/manual.ts`），Agent 可用三种方式读到：
 
 ```
-resources/read  { "uri": "onworking://manual" }   → 返回操作须知(markdown)
-prompts/get     { "name": "onworking-manual" }    → 同上,以提示词形式
+tools/call      { "name": "manual.read", "arguments": {} }   → 返回操作须知(markdown)【推荐,Agent 在工具列表里能看到】
+resources/read  { "uri": "onworking://manual" }               → 同上,资源形式
+prompts/get     { "name": "onworking-manual" }                → 同上,提示词形式
 ```
+
+`manual.read` 是 tools/list 里的一个工具，AI 直接调用就能读到手册（含铁律/数据链/完成判据/工作流）。
 
 **但注意：MCP 无法「强制」模型读资源/提示词**——Agent 不去读就不会生效。硬保证是把须知注入**客户端系统提示**：
 

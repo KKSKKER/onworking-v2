@@ -146,6 +146,18 @@ describe('mcp server', () => {
     expect(res).toBeNull();
   });
 
+  it('manual.read tool returns the operations manual text', async () => {
+    const res = await handleMcpRequest(session, {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: { name: 'manual.read', arguments: {} },
+    });
+    const text = String((res?.result as { content?: { text?: string }[] } | undefined)?.content?.[0]?.text ?? '');
+    expect(text).toContain('铁律');
+    expect(text).toContain('总表 master.db');
+  });
+
   it('exposes the operations manual as a resource', async () => {
     const list = await handleMcpRequest(session, { jsonrpc: '2.0', id: 1, method: 'resources/list' });
     const res = (list?.result as { resources: { uri: string }[] }).resources;
