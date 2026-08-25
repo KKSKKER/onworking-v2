@@ -27,7 +27,7 @@ import {
   toolCreateCleaningPipeline,
   toolCreateSqlCleanPipeline,
   toolCreateQueryPipeline,
-  toolRunCleaning,
+  toolRunPipeline,
   toolMergeBigTable,
   toolMergeAll,
   toolBuildMasterForBigTable,
@@ -89,7 +89,7 @@ const handlers: { [K in SessionCommands]: HandlerFor<K> } = {
     deletePipeline(ctx.ws, p.id);
     return { deleted: p.id };
   },
-  'pipeline.run': async (ctx, p) => toolRunCleaning(ctx.ws, p.id),
+  'pipeline.run': async (ctx, p) => toolRunPipeline(ctx.ws, p.id),
   'pipeline.mergeBigTable': async (ctx, p) => toolMergeBigTable(ctx.ws, p.folder),
   'pipeline.mergeAll': async (ctx) => toolMergeAll(ctx.ws),
   'pipeline.buildMasterBigTable': async (ctx, p) => toolBuildMasterForBigTable(ctx.ws, p.folder),

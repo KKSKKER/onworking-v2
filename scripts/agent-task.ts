@@ -9,11 +9,9 @@ import {
   toolSetBigTableFields,
   toolSetMapping,
   toolCreateCleaningPipeline,
-  toolRunCleaning,
   toolCreateSqlCleanPipeline,
-  toolBuildMasterTable,
   toolCreateQueryPipeline,
-  toolRunQueryPipeline,
+  toolRunPipeline,
   toolQuery,
 } from '../src/core/agent/tools';
 import { useConsoleLogging } from '../src/core/logging';
@@ -63,8 +61,8 @@ async function main(): Promise<void> {
   console.log(`✓ ⑤.5 toolCreateCleaningPipeline: ${pipelineId}`);
 
   // 第 6 步:清洗入大表
-  const clean = await toolRunCleaning(ws, pipelineId);
-  console.log(`✓ ⑥ toolRunCleaning: ${clean.rows} 行`);
+  const clean = await toolRunPipeline(ws, pipelineId);
+  console.log(`✓ ⑥ toolRunPipeline: ${clean.rows} 行`);
 
   // 第 7 步:SQL 清洗管线 → 总表 master
   const { pipelineId: mId } = toolCreateSqlCleanPipeline(ws, 'm1', {
@@ -72,8 +70,8 @@ async function main(): Promise<void> {
     sql: 'SELECT "借方余额", "贷方余额", "年份" FROM "bt_序时账".seq',
     resultTable: 'seq',
   });
-  const master = await toolBuildMasterTable(ws, mId);
-  console.log(`✓ ⑦ toolBuildMasterTable: ${master.rows} 行`);
+  const master = await toolRunPipeline(ws, mId);
+  console.log(`✓ ⑦ toolRunPipeline: ${master.rows} 行`);
 
   // 第 8 步:查询管线 —— 借方余额 5000 元一档,记个数
   toolCreateQueryPipeline(ws, 'q_bucket', {
@@ -81,8 +79,8 @@ async function main(): Promise<void> {
     dependencies: ['seq'],
     resultTable: 'buckets',
   });
-  const qr = await toolRunQueryPipeline(ws, 'q_bucket');
-  console.log(`✓ ⑧ toolRunQueryPipeline: ${qr.ok ? `OK ${qr.rows} 行` : `失败 ${qr.error}`}`);
+  const qr = await toolRunPipeline(ws, 'q_bucket');
+  console.log(`✓ ⑧ toolRunPipeline: ${qr.ok ? `OK ${qr.rows} 行` : `失败 ${qr.error}`}`);
 
   // 第 9 步:取查询结果(结果已保存到总表 DB 的 buckets 表)
   const result = toolQuery(ws, 'SELECT * FROM buckets ORDER BY bucket');

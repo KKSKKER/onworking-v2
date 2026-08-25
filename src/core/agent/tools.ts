@@ -126,11 +126,11 @@ export function toolApplyTemplate(
   return applyTemplateToSheet(sheet, loadTemplate(ws, templateName));
 }
 
-/** tool: 运行清洗管线(源→大表独立 DB)。 */
-export async function toolRunCleaning(ws: Workspace, pipelineId: string): Promise<RunSummary> {
+/** tool: 运行任意管线(按 kind 交给 engine.run:clean→大表 DB,sql-clean/query→总表 DB)。 */
+export async function toolRunPipeline(ws: Workspace, id: string): Promise<RunSummary> {
   const eng = new PipelineEngine(ws);
   try {
-    return await eng.run(pipelineId);
+    return await eng.run(id);
   } finally {
     eng.close();
   }
@@ -160,19 +160,6 @@ export async function toolMergeBigTable(ws: Workspace, folder: string): Promise<
 export async function toolMergeAll(ws: Workspace): Promise<RunSummary[]> {
   const ids = listPipelines(ws).filter((id) => loadPipeline(ws, id).kind === 'clean');
   return runCleanPipelines(ws, ids);
-}
-
-/** tool: 构建总表(SQL 清洗管线:各大表 DB → 总表 DB)。 */
-export async function toolBuildMasterTable(
-  ws: Workspace,
-  sqlCleanPipelineId: string,
-): Promise<RunSummary> {
-  const eng = new PipelineEngine(ws);
-  try {
-    return await eng.run(sqlCleanPipelineId);
-  } finally {
-    eng.close();
-  }
 }
 
 async function runSqlCleanPipelines(ws: Workspace, ids: string[]): Promise<RunSummary[]> {
@@ -235,16 +222,6 @@ export function toolCreateSqlCleanPipeline(
     createdAt: new Date().toISOString(),
   });
   return { pipelineId: id };
-}
-
-/** tool: 运行查询管线(SQL → 物化结果表,总表 DB)。 */
-export async function toolRunQueryPipeline(ws: Workspace, id: string): Promise<RunSummary> {
-  const eng = new PipelineEngine(ws);
-  try {
-    return await eng.run(id);
-  } finally {
-    eng.close();
-  }
 }
 
 /** tool: 临时查询(ad-hoc,SQL 工作台等价)。 */

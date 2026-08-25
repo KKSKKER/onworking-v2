@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as XLSX from 'xlsx';
 import { runInitialSetupFlow } from '../../src/core/agent/flow';
-import { toolCreateQueryPipeline, toolRunQueryPipeline, toolQuery } from '../../src/core/agent/tools';
+import { toolCreateQueryPipeline, toolRunPipeline, toolQuery } from '../../src/core/agent/tools';
 import { openWorkspace } from '../../src/core/workspace/workspace';
 
 describe('agent flow (initial setup via AI tools)', () => {
@@ -53,7 +53,7 @@ describe('agent flow (initial setup via AI tools)', () => {
       dependencies: ['seq'],
       resultTable: 'q_result',
     });
-    const qr = await toolRunQueryPipeline(ws, 'q1');
+    const qr = await toolRunPipeline(ws, 'q1');
     expect(qr.ok).toBe(true);
     const out = toolQuery(ws, 'SELECT * FROM q_result');
     expect(out.rowCount).toBe(1);

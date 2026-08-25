@@ -3,7 +3,7 @@
 // 用法: npm run demo:agent -- <工作区> <源目录> [大表名]
 import { rmSync } from 'node:fs';
 import { runInitialSetupFlow } from '../src/core/agent/flow';
-import { toolCreateQueryPipeline, toolRunQueryPipeline, toolQuery } from '../src/core/agent/tools';
+import { toolCreateQueryPipeline, toolRunPipeline, toolQuery } from '../src/core/agent/tools';
 import { openWorkspace } from '../src/core/workspace/workspace';
 import { useConsoleLogging } from '../src/core/logging';
 
@@ -49,7 +49,7 @@ async function main(): Promise<void> {
     });
     console.log(`  ✓ createQueryPipeline: q_total (SUM "${amountCol}")`);
     // 3. 运行查询管线 → 生成查询表
-    const qr = await toolRunQueryPipeline(ws, 'q_total');
+    const qr = await toolRunPipeline(ws, 'q_total');
     console.log(`  ✓ runQueryPipeline: ${qr.ok ? `OK ${qr.rows} 行` : `失败 ${qr.error}`}`);
     // 4. ad-hoc 查询结果
     const q = toolQuery(ws, 'SELECT * FROM total');

@@ -15,8 +15,7 @@ import {
   toolSetBigTableFields,
   toolSetMapping,
   toolCreateCleaningPipeline,
-  toolRunCleaning,
-  toolBuildMasterTable,
+  toolRunPipeline,
   toolVerifyData,
 } from './tools';
 
@@ -121,9 +120,9 @@ export async function runInitialSetupFlow(opts: {
     });
     steps.push({ tool: 'saveSqlClean', ok: true, detail: sqlId });
 
-    const cleanRes = (await push('runCleaning', async () => toolRunCleaning(ws, pipelineId))) as RunSummary;
+    const cleanRes = (await push('runCleaning', async () => toolRunPipeline(ws, pipelineId))) as RunSummary;
     const masterRes = (await push('buildMasterTable', async () =>
-      toolBuildMasterTable(ws, sqlId),
+      toolRunPipeline(ws, sqlId),
     )) as RunSummary;
     void cleanRes;
     void masterRes;
