@@ -24,7 +24,7 @@ export interface CommandPayloads {
   'bigtable.previewRows': { folder: string; limit?: number; offset?: number };
   'bigtable.addFiles': { folder: string; files: string[]; overwrite?: boolean };
   'bigtable.exportCsv': { folder: string; path?: string; includeLineage?: boolean };
-  'mapping.save': { folder: string; headerRow?: number; mappings: FieldMapping[]; ruleName?: string };
+  'mapping.save': { folder: string; headerRow?: number; mappings: FieldMapping[]; ruleName?: string; sheetName?: string };
   'pipeline.list': {};
   'pipeline.save': { config: PipelineConfig };
   'pipeline.delete': { id: string };

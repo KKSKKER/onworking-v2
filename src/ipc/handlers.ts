@@ -90,7 +90,7 @@ export const handlers: { [K in SessionCommands]: HandlerFor<K> } = {
     return toolCreateCleaningPipeline(ctx.ws, config.id, config.bigTableFolder, config.sourceDir);
   },
   'mapping.save': async (ctx, p) =>
-    toolSetMapping(ctx.ws, p.folder, p.headerRow ?? 1, p.mappings, { ruleName: p.ruleName }),
+    toolSetMapping(ctx.ws, p.folder, p.headerRow ?? 1, p.mappings, { ruleName: p.ruleName, sheetName: p.sheetName }),
   'pipeline.delete': async (ctx, p) => {
     deletePipeline(ctx.ws, p.id);
     return { deleted: p.id };

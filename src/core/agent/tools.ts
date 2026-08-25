@@ -151,20 +151,20 @@ export function toolImportFiles(ws: Workspace, bigTableFolder: string, sourceDir
   return files;
 }
 
-/** tool: 设置字段映射 —— 只写 YAML 规则,不生成管线。ruleName 缺省 `<folder>_rule`,可传不同名追加第 N 份。 */
+/** tool: 设置字段映射 —— 只写 YAML 规则,不生成管线。ruleName 缺省 `<folder>_rule`,可传不同名追加第 N 份;sheetName 指定只导入某个 sheet。 */
 export function toolSetMapping(
   ws: Workspace,
   bigTableFolder: string,
   headerRow: number,
   mappings: FieldMapping[],
-  opts?: { ruleName?: string },
+  opts?: { ruleName?: string; sheetName?: string },
 ): { ruleFile: string } {
   const name = opts?.ruleName ?? `${bigTableFolder}_rule`;
   const rule: RuleYaml = {
     name,
     display: `提取规则: ${name}`,
     version: 1,
-    sources: [{ pattern: '**/*', headerRow }],
+    sources: [{ pattern: '**/*', headerRow, ...(opts?.sheetName ? { sheetName: opts.sheetName } : {}) }],
     fields: mappings.map((m, i) => ({
       sourceHeader: m.sourceHeader,
       outputName: m.outputName,

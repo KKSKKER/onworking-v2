@@ -9,7 +9,7 @@ import { savePipeline } from '../../src/core/pipeline/store';
 import { saveRule } from '../../src/core/rule/store';
 import { toolRunPipeline, toolRunPipelines, toolPreviewCleanResult, toolSaveTemplate, toolSetMapping, toolAddFilesToBigTable, toolExportBigTableCsv } from '../../src/core/agent/tools';
 import { listTemplates } from '../../src/core/template/store';
-import { listRules } from '../../src/core/rule/store';
+import { listRules, loadRules } from '../../src/core/rule/store';
 import { PipelineEngine } from '../../src/core/pipeline/engine';
 
 describe('tools', () => {
@@ -184,5 +184,34 @@ describe('tools', () => {
     const res = toolExportBigTableCsv(ws, 'seq', { path: custom });
     expect(res.file).toBe(custom);
     expect(existsSync(custom)).toBe(true);
+  });
+
+  it('toolSetMapping writes sheetName into the rule sources', () => {
+    toolSetMapping(ws, 'seq', 1, [
+      { sourceHeader: '日期', outputName: 'date', transform: 'none' },
+    ], { sheetName: '202208' });
+    const rule = loadRules(ws, 'seq')[0];
+    expect(rule.sources[0].sheetName).toBe('202208');
+  });
+
+  it('clean imports only the configured sheet', async () => {
+    // 多 sheet 文件:Sheet1 一行,202208 两行
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['日期', '借方金额'], ['2024-01', 100]]), 'Sheet1');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['日期', '借方金额'], ['2024-05', 500], ['2024-06', 600]]), '202208');
+    XLSX.writeFile(wb, join(sourceDir, 'multi.xlsx'));
+    // 规则指定 202208(覆盖 beforeEach 的默认规则)
+    toolSetMapping(ws, 'seq', 1, [
+      { sourceHeader: '日期', outputName: 'date', transform: 'normalize-date' },
+      { sourceHeader: '借方金额', outputName: 'debit', transform: 'to-cents' },
+    ], { sheetName: '202208' });
+    const eng = new PipelineEngine(ws);
+    const r = await eng.run('c1');
+    eng.close();
+    expect(r.ok).toBe(true);
+    expect(r.rows).toBe(2); // 只 202208 的 2 行(Sheet1 与 a.xlsx 无 202208 sheet,跳过)
+    const preview = toolPreviewCleanResult(ws, 'seq');
+    expect(preview.total).toBe(2);
+    expect(preview.rows[0].date).toBe('2024-05');
   });
 });
