@@ -22,7 +22,7 @@ export interface CommandPayloads {
   'bigtable.save': { folder: string; config: BigTableConfig };
   'bigtable.sourceFiles': { folder: string };
   'bigtable.previewRows': { folder: string; limit?: number; offset?: number };
-  'mapping.save': { folder: string; headerRow?: number; mappings: FieldMapping[] };
+  'mapping.save': { folder: string; headerRow?: number; mappings: FieldMapping[]; ruleName?: string };
   'pipeline.list': {};
   'pipeline.save': { config: PipelineConfig };
   'pipeline.delete': { id: string };

@@ -96,7 +96,7 @@ export async function runCleanPipeline(
     });
   }
 
-  // 映射与来源唯一来自规则 YAML
+  // 映射与来源唯一来自规则 YAML;多份规则按 (pattern|sheetName|headerRow) 去重来源、按 outputName 去重字段
   const rules = loadRules(ws, cfg.bigTableFolder);
   if (rules.length === 0) {
     throw new AppError({
@@ -106,14 +106,26 @@ export async function runCleanPipeline(
       data: { bigTableFolder: cfg.bigTableFolder },
     });
   }
-  const compiled = compileRule(rules[0]);
-  const mappings = compiled.mappings;
-  const sources = compiled.sources;
+  const sources: CompiledSource[] = [];
+  const mappings: FieldMapping[] = [];
+  const seenSource = new Set<string>();
+  for (const rule of rules) {
+    const compiled = compileRule(rule);
+    for (const s of compiled.sources) {
+      const key = `${s.pattern}|${s.sheetName ?? ''}|${s.headerRow}`;
+      if (seenSource.has(key)) continue;
+      seenSource.add(key);
+      sources.push(s);
+    }
+    for (const m of compiled.mappings) {
+      if (!mappings.some((e) => e.outputName === m.outputName)) mappings.push(m);
+    }
+  }
   if (mappings.length === 0) {
     throw new AppError({
       module: 'pipeline/clean',
       code: 'CLEAN_NO_FIELDS',
-      message: `rule for ${cfg.bigTableFolder} has no included fields`,
+      message: `rules for ${cfg.bigTableFolder} have no included fields`,
       data: { bigTableFolder: cfg.bigTableFolder },
     });
   }

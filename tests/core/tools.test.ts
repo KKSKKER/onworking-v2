@@ -7,8 +7,10 @@ import { initWorkspace, type Workspace } from '../../src/core/workspace/workspac
 import { saveBigTableConfig } from '../../src/core/bigtable/store';
 import { savePipeline } from '../../src/core/pipeline/store';
 import { saveRule } from '../../src/core/rule/store';
-import { toolRunPipeline, toolRunPipelines, toolPreviewCleanResult, toolSaveTemplate } from '../../src/core/agent/tools';
+import { toolRunPipeline, toolRunPipelines, toolPreviewCleanResult, toolSaveTemplate, toolSetMapping } from '../../src/core/agent/tools';
 import { listTemplates } from '../../src/core/template/store';
+import { listRules } from '../../src/core/rule/store';
+import { PipelineEngine } from '../../src/core/pipeline/engine';
 
 describe('tools', () => {
   let dir: string;
@@ -100,5 +102,36 @@ describe('tools', () => {
     const res = toolSaveTemplate(ws, { name: 'tpl1', mappings: [], createdAt: '2026-08-25T00:00:00.000Z' });
     expect(res).toEqual({ saved: 'tpl1' });
     expect(listTemplates(ws)).toContain('tpl1');
+  });
+
+  it('toolSetMapping appends a second named rule, both apply on clean', async () => {
+    // 在现有 sourceDir 里追加一个带「摘要」列的源文件(两个文件共 4 行)
+    const wsx = XLSX.utils.aoa_to_sheet([
+      ['日期', '借方金额', '摘要'],
+      ['2024-03', 300, '工资'],
+      ['2024-04', 400, '报销'],
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, wsx, 'Sheet1');
+    XLSX.writeFile(wb, join(sourceDir, 'b.xlsx'));
+
+    // 第一份规则(默认名):日期/借方
+    toolSetMapping(ws, 'seq', 1, [
+      { sourceHeader: '日期', outputName: 'date', transform: 'normalize-date' },
+      { sourceHeader: '借方金额', outputName: 'debit', transform: 'to-cents' },
+    ]);
+    // 追加第二份规则:摘要(不同 ruleName,不覆盖)
+    toolSetMapping(ws, 'seq', 1, [
+      { sourceHeader: '摘要', outputName: 'note', transform: 'trim' },
+    ], { ruleName: 'seq_rule_2' });
+    expect(listRules(ws, 'seq').length).toBe(2);
+
+    const eng = new PipelineEngine(ws);
+    const r = await eng.run('c1');
+    eng.close();
+    expect(r.ok).toBe(true);
+    const preview = toolPreviewCleanResult(ws, 'seq');
+    expect(preview.columns).toContain('note');
+    expect(preview.total).toBe(4); // a.xlsx 2 行 + b.xlsx 2 行
   });
 });
