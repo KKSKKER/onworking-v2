@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as XLSX from 'xlsx';
@@ -7,7 +7,7 @@ import { initWorkspace, type Workspace } from '../../src/core/workspace/workspac
 import { saveBigTableConfig } from '../../src/core/bigtable/store';
 import { savePipeline } from '../../src/core/pipeline/store';
 import { saveRule } from '../../src/core/rule/store';
-import { toolRunPipeline, toolRunPipelines, toolPreviewCleanResult, toolSaveTemplate, toolSetMapping } from '../../src/core/agent/tools';
+import { toolRunPipeline, toolRunPipelines, toolPreviewCleanResult, toolSaveTemplate, toolSetMapping, toolAddFilesToBigTable } from '../../src/core/agent/tools';
 import { listTemplates } from '../../src/core/template/store';
 import { listRules } from '../../src/core/rule/store';
 import { PipelineEngine } from '../../src/core/pipeline/engine';
@@ -133,5 +133,32 @@ describe('tools', () => {
     const preview = toolPreviewCleanResult(ws, 'seq');
     expect(preview.columns).toContain('note');
     expect(preview.total).toBe(4); // a.xlsx 2 行 + b.xlsx 2 行
+  });
+
+  it('toolAddFilesToBigTable copies files into the big table source dir', () => {
+    const srcFile = join(dir, 'a.xlsx');
+    writeFileSync(srcFile, 'content-a');
+    const r1 = toolAddFilesToBigTable(ws, 'seq', [srcFile]);
+    expect(r1.added).toEqual(['a.xlsx']);
+    expect(r1.overwritten).toEqual([]);
+    expect(r1.skipped).toEqual([]);
+    const dest = join(ws.onworkingDir, 'bigtables', 'seq', 'source', 'a.xlsx');
+    expect(existsSync(dest)).toBe(true);
+    expect(readFileSync(dest, 'utf-8')).toBe('content-a');
+
+    // 同名 + 默认不覆盖 → skipped
+    const r2 = toolAddFilesToBigTable(ws, 'seq', [srcFile]);
+    expect(r2.skipped).toEqual(['a.xlsx']);
+    expect(r2.added).toEqual([]);
+
+    // 同名 + overwrite=true → overwritten,内容更新
+    writeFileSync(srcFile, 'content-b');
+    const r3 = toolAddFilesToBigTable(ws, 'seq', [srcFile], { overwrite: true });
+    expect(r3.overwritten).toEqual(['a.xlsx']);
+    expect(readFileSync(dest, 'utf-8')).toBe('content-b');
+  });
+
+  it('toolAddFilesToBigTable throws FILE_NOT_FOUND for a missing source file', () => {
+    expect(() => toolAddFilesToBigTable(ws, 'seq', [join(dir, 'nope.xlsx')])).toThrow(/not found/);
   });
 });

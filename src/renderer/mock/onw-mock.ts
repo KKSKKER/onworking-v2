@@ -46,6 +46,8 @@ async function mockDispatch(command: ApiCommand): Promise<ApiResult<unknown>> {
         rowCount: 1,
         total: 1,
       });
+    case 'bigtable.addFiles':
+      return ok({ added: command.files, overwritten: [], skipped: [] });
     case 'pipeline.list':
       return ok(['c1', 'q1']);
     case 'pipeline.save':

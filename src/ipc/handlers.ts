@@ -4,8 +4,7 @@
 // handler 表按 CommandPayloads/CommandResults 强类型:载荷字段由命令名收窄,零 as never/String() 强转。
 import type { Workspace } from '../core/workspace/workspace';
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { listBigTables, loadBigTableConfig } from '../core/bigtable/store';
+import { listBigTables, loadBigTableConfig, bigTableSourceDir } from '../core/bigtable/store';
 import { listPipelines, deletePipeline } from '../core/pipeline/store';
 import { scanSourceDir } from '../core/ingest/scanner';
 import { parseCsvFile, parseExcelFile } from '../core/ingest/parser';
@@ -30,6 +29,7 @@ import {
   toolRunPipelines,
   toolPreviewCleanResult,
   toolSaveTemplate,
+  toolAddFilesToBigTable,
   toolQuery,
   toolGetProjectState,
 } from '../core/agent/tools';
@@ -59,11 +59,13 @@ export const handlers: { [K in SessionCommands]: HandlerFor<K> } = {
     return { saved: p.folder };
   },
   'bigtable.sourceFiles': async (ctx, p) => {
-    const dir = join(ctx.ws.onworkingDir, 'bigtables', p.folder, 'source');
+    const dir = bigTableSourceDir(ctx.ws, p.folder);
     return existsSync(dir) ? scanSourceDir(dir).map((f) => f.path) : [];
   },
   'bigtable.previewRows': async (ctx, p) =>
     toolPreviewCleanResult(ctx.ws, p.folder, { limit: p.limit, offset: p.offset }),
+  'bigtable.addFiles': async (ctx, p) =>
+    toolAddFilesToBigTable(ctx.ws, p.folder, p.files, { overwrite: p.overwrite }),
 
   'pipeline.list': async (ctx) => listPipelines(ctx.ws),
   'pipeline.save': async (ctx, p) => {

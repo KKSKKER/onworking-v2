@@ -1,12 +1,15 @@
 // src/core/agent/tools.ts
 // AI 工具函数层:SVG 泳道图里 AI(Agent)调用的每个 tool 封装成一个函数。
 // 入参 AI 友好,返回结构化结果(含下一步可用的项目状态)。底层复用 core。
+import { copyFileSync, mkdirSync, existsSync } from 'node:fs';
+import { basename, join } from 'node:path';
 import { openWorkspace, type Workspace } from '../workspace/workspace';
 import {
   saveBigTableConfig,
   listBigTables,
   loadBigTableConfig,
   bigTableDbPath,
+  bigTableSourceDir,
 } from '../bigtable/store';
 import type { BigTableConfig, BigTableField } from '../bigtable/schema';
 import { scanSourceDir, type ScannedFile } from '../ingest/scanner';
@@ -36,6 +39,42 @@ export function toolGetProjectState(ws: Workspace): string {
 /** tool: 创建大表。 */
 export function toolCreateBigTable(ws: Workspace, folder: string, config: BigTableConfig): void {
   saveBigTableConfig(ws, folder, config);
+}
+
+/** tool: 给大表增加源文件 —— 拷贝到大表自己的 source/ 目录。同名文件:overwrite=false(缺省)跳过,overwrite=true 覆盖。 */
+export function toolAddFilesToBigTable(
+  ws: Workspace,
+  folder: string,
+  files: string[],
+  opts?: { overwrite?: boolean },
+): { added: string[]; overwritten: string[]; skipped: string[] } {
+  const destDir = bigTableSourceDir(ws, folder);
+  mkdirSync(destDir, { recursive: true });
+  const overwrite = opts?.overwrite ?? false;
+  const added: string[] = [];
+  const overwritten: string[] = [];
+  const skipped: string[] = [];
+  for (const file of files) {
+    if (!existsSync(file)) {
+      throw new AppError({
+        module: 'bigtable/addFiles',
+        code: 'FILE_NOT_FOUND',
+        message: `source file not found: ${file}`,
+        data: { file },
+      });
+    }
+    const base = basename(file);
+    const target = join(destDir, base);
+    const existed = existsSync(target);
+    if (existed && !overwrite) {
+      skipped.push(base);
+      continue;
+    }
+    copyFileSync(file, target);
+    if (existed) overwritten.push(base);
+    else added.push(base);
+  }
+  return { added, overwritten, skipped };
 }
 
 /** tool: 设置大表字段。 */

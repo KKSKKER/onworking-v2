@@ -60,12 +60,25 @@ echo '{"reqId":1,"cmd":"workspace.open","path":"D:/ws"}' | npm run onw -- open D
 | `bigtable.save` | `{ folder, config: BigTableConfig }` | `{ saved: folder }` |
 | `bigtable.sourceFiles` | `{ folder }` | `string[]`（源文件绝对路径） |
 | `bigtable.previewRows` | `{ folder, limit?, offset? }` | `{ columns, rows, rowCount, total }`（只读查大表 DB） |
+| `bigtable.addFiles` | `{ folder, files: string[], overwrite? }` | `{ added, overwritten, skipped }`（拷贝源文件到大表 `source/` 目录） |
 
 ```bash
 # 预览大表清洗结果(前 20 行)
 echo '{"reqId":1,"cmd":"bigtable.previewRows","folder":"seq","limit":20}' \
   | npm run onw -- open D:/ws
+
+# 给大表增加源文件(默认不覆盖同名文件)
+echo '{"reqId":1,"cmd":"bigtable.addFiles","folder":"seq","files":["D:/data/a.xlsx","D:/data/b.xlsx"]}' \
+  | npm run onw -- open D:/ws
+# → {"added":["a.xlsx","b.xlsx"],"overwritten":[],"skipped":[]}
+
+# 同名文件强制覆盖
+echo '{"reqId":1,"cmd":"bigtable.addFiles","folder":"seq","files":["D:/data/a.xlsx"],"overwrite":true}' \
+  | npm run onw -- open D:/ws
+# → {"added":[],"overwritten":["a.xlsx"],"skipped":[]}
 ```
+
+> `bigtable.addFiles` 只负责把文件拷贝进大表的 `source/` 目录（文件管理）。加完后需重跑 `pipeline.run` 才导入数据；`bigtable.sourceFiles` 会列出已加文件（仅扫描 `.xlsx/.xls/.csv`）。同名文件：`overwrite` 缺省 `false` → 跳过并计入 `skipped`，`true` → 覆盖并计入 `overwritten`。
 
 ### 字段映射（规则 YAML）
 

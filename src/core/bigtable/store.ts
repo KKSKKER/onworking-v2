@@ -14,6 +14,11 @@ export function bigTableDbPath(ws: Workspace, folder: string): string {
   return join(bigTableDir(ws, folder), 'db', 'onworking.db');
 }
 
+/** 大表自己的源文件目录(import/addFiles 的目标;sourceFiles 列它)。 */
+export function bigTableSourceDir(ws: Workspace, folder: string): string {
+  return join(bigTableDir(ws, folder), 'source');
+}
+
 export function listBigTables(ws: Workspace): string[] {
   const dir = join(ws.onworkingDir, 'bigtables');
   if (!existsSync(dir)) return [];
