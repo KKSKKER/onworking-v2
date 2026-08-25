@@ -36,7 +36,7 @@
 
 - **总表 master.db 不会自动生成**。只有建了 sql-clean 管线并跑它，才会把大表数据汇进总表。`query.run` / `schema.tables` 查的都是 master.db —— 没走到 ② 之前总表是空的，`schema.tables` 查不到表。
 - `pipeline.run` 写哪个 DB 由管线 kind 决定：`clean` → 大表 DB；`sql-clean` / `query` → 总表 DB。
-- **一条完整任务必须走到 ②（总表）**；需要结果表/查数再走 ③。做到大表就停 = 任务没完成。
+- **生成总表是铁律（见 §2 铁律第 5 条）**：任何数据任务必须走到 ②（总表）；需要结果表/查数再走 ③。做到大表就停 = 任务没完成。
 - `bigtable.previewRows` 预览的是大表 DB（①→② 的中间产物）；`query.run` / `schema.tables` 查的是总表（② 之后的最终库）。
 
 **一句话标准链：** 打开工作区 → 建大表 → 加文件 → 写映射 → 建并跑 clean（进大表）→ 建并跑 sql-clean（进总表）→ 建并跑 query / query.run 查数。
@@ -52,6 +52,10 @@
    - 想看文件内容 → `setup.preview` / `setup.detectSource`（源文件）、`bigtable.previewRows`（大表数据）、`query.run` / `schema.tables`（总表 DB）
    - 想改配置 → 对应 `save` 命令（`bigtable.save` / `mapping.save` / `pipeline.save` / `template.save`）
    - 想加文件 → `bigtable.addFiles`（只拷贝，不直接写文件）
+5. **任何数据导入/清洗任务必须生成总表 master.db**（硬性要求，不可省略）：
+   - 只把数据做到大表（`bigtable.previewRows` 有数据）**不算完成**。
+   - 必须建 sql-clean 管线（`pipeline.save`，`kind:'sql-clean'`）并 `pipeline.run`，把大表汇进总表。
+   - **完成判据**：`schema.tables` 在总表能查到结果表、`query.run` 能查到数据。二者任一不满足，任务未完成，继续补建/重跑，不得宣告完成。
 
 ---
 
@@ -144,7 +148,7 @@ $lines | npm run --silent onw -- open D:/ws
 11. `pipeline.save` —— 建 sql-clean 管线（大表→总表），`pipeline.run`
 12. `schema.tables` / `query.run` —— 在总表上查数验证
 
-> **不要停在大表**：走到第 8~10 步只是完成了「大表」，此时**总表 master.db 还没生成**。凡需要查数/产出结果，必须继续第 11 步（sql-clean → 总表）和第 12 步。判断任务是否完成，以总表（`query.run`/`schema.tables`）能查到数据为准。
+> **强制：必须生成总表（铁律第 5 条）**。第 8~10 步只是完成「大表」，此时总表 master.db 还没生成。**任何数据任务都必须继续第 11 步（sql-clean → 总表）和第 12 步**，否则不算完成。完成判据：`schema.tables` 在总表查到结果表、`query.run` 查到数据。只汇报「大表已生成」= 未完成任务。
 
 ---
 
