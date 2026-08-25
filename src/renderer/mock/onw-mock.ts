@@ -96,6 +96,8 @@ async function mockDispatch(command: ApiCommand): Promise<ApiResult<unknown>> {
       return ok(['序时账', '科目余额表', '凭证明细']);
     case 'setup.detectSource':
       return ok({ sheetName: '序时账', headerRow: 1, headers: ['日期', '借方金额', '摘要'] });
+    case 'setup.exportCsv':
+      return ok({ file: `D:/演示工作区/exports/${command.filePath.split(/[\\/]/).pop()}.csv`, rows: 100 });
     case 'setup.preview':
       return ok({
         sheetName: '序时账',
@@ -125,7 +127,7 @@ async function mockDispatch(command: ApiCommand): Promise<ApiResult<unknown>> {
     case 'template.apply':
       return ok({ mappings: [], matched: 0, skipped: [] });
     case 'schema.tables':
-      return ok(SAMPLE_TABLES.map((name) => ({ name })));
+      return ok(SAMPLE_TABLES.map((name) => ({ name, columns: [{ name: 'col1', type: 'TEXT' }] })));
     case 'state.summary':
       return ok('workspace=演示\n序时账: cleaned (files=3, mappedFields=3, pipelines=1)');
     case 'vcs.status':

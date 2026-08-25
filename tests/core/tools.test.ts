@@ -7,7 +7,7 @@ import { initWorkspace, type Workspace } from '../../src/core/workspace/workspac
 import { saveBigTableConfig } from '../../src/core/bigtable/store';
 import { savePipeline } from '../../src/core/pipeline/store';
 import { saveRule } from '../../src/core/rule/store';
-import { toolRunPipeline, toolRunPipelines, toolPreviewCleanResult, toolSaveTemplate, toolSetMapping, toolAddFilesToBigTable, toolExportBigTableCsv, toolExportQueryCsv, toolGetBigTableContext } from '../../src/core/agent/tools';
+import { toolRunPipeline, toolRunPipelines, toolPreviewCleanResult, toolSaveTemplate, toolSetMapping, toolAddFilesToBigTable, toolExportBigTableCsv, toolExportQueryCsv, toolExportSourceCsv, toolGetBigTableContext } from '../../src/core/agent/tools';
 import { listTemplates } from '../../src/core/template/store';
 import { listRules, loadRules } from '../../src/core/rule/store';
 import { PipelineEngine } from '../../src/core/pipeline/engine';
@@ -270,6 +270,13 @@ describe('tools', () => {
 
   it('toolExportQueryCsv rejects non-SELECT', () => {
     expect(() => toolExportQueryCsv(ws, 'DELETE FROM seq')).toThrow(/only SELECT/);
+  });
+
+  it('toolExportSourceCsv exports a source file sheet to CSV', () => {
+    const res = toolExportSourceCsv(ws, join(sourceDir, 'a.xlsx'), { sheetName: 'Sheet1', headerRow: 1 });
+    expect(res.rows).toBe(2);
+    expect(existsSync(res.file)).toBe(true);
+    expect(readFileSync(res.file, 'utf-8').split('\n')[0]).toBe('日期,借方金额');
   });
 
   it('toolGetBigTableContext returns config, rules and related pipelines', () => {

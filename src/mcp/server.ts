@@ -77,6 +77,7 @@ export const TOOL_SCHEMAS: Record<string, ToolSchema> = {
   'setup.detectSource': schema({ filePath: str, sheetName: str }, ['filePath']),
   'setup.sheets': schema({ filePath: str }, ['filePath']),
   'setup.preview': schema({ filePath: str, sheetName: str, headerRow: int, offset: int, limit: int }, ['filePath']),
+  'setup.exportCsv': schema({ filePath: str, sheetName: str, headerRow: int, path: str }, ['filePath']),
   'query.run': schema({ sql: str, limit: int }, ['sql']),
   'query.exportCsv': schema({ sql: str, path: str }, ['sql']),
   'template.list': schema({}),

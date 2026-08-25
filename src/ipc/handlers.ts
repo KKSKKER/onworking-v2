@@ -32,6 +32,7 @@ import {
   toolAddFilesToBigTable,
   toolExportBigTableCsv,
   toolExportQueryCsv,
+  toolExportSourceCsv,
   toolGetBigTableContext,
   toolQuery,
   toolGetProjectState,
@@ -126,6 +127,8 @@ export const handlers: { [K in SessionCommands]: HandlerFor<K> } = {
     const rows = full.slice(headerRow).slice(offset, offset + limit);
     return { sheetName: sheet.sheetName, headerRow, headers, rows, total: full.length - headerRow };
   },
+  'setup.exportCsv': async (ctx, p) =>
+    toolExportSourceCsv(ctx.ws, p.filePath, { sheetName: p.sheetName, headerRow: p.headerRow, path: p.path }),
 
   'template.list': async (ctx) => listTemplates(ctx.ws),
   'template.save': async (ctx, p) => toolSaveTemplate(ctx.ws, p.template),

@@ -40,6 +40,7 @@ export interface CommandPayloads {
   'setup.detectSource': { filePath: string; sheetName?: string };
   'setup.sheets': { filePath: string };
   'setup.preview': { filePath: string; sheetName?: string; headerRow?: number; offset?: number; limit?: number };
+  'setup.exportCsv': { filePath: string; sheetName?: string; headerRow?: number; path?: string };
   'query.run': { sql: string; limit?: number };
   'query.exportCsv': { sql: string; path?: string };
   'template.list': {};
@@ -75,12 +76,13 @@ export interface CommandResults {
   'setup.detectSource': SourceConfig;
   'setup.sheets': string[];
   'setup.preview': { sheetName: string; headerRow: number; headers: string[]; rows: unknown[][]; total: number };
+  'setup.exportCsv': { file: string; rows: number };
   'query.run': QueryOutcome;
   'query.exportCsv': { file: string; rows: number };
   'template.list': string[];
   'template.save': { saved: string };
   'template.apply': { mappings: FieldMapping[]; matched: number; skipped: string[] };
-  'schema.tables': { name: string }[];
+  'schema.tables': { name: string; columns: { name: string; type: string }[] }[];
   'state.summary': string;
   'vcs.status': { staged: string[]; unstaged: string[]; untracked: string[] };
 }

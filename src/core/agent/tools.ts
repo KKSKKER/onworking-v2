@@ -129,6 +129,27 @@ export function toolGetBigTableContext(ws: Workspace, folder: string): {
   return { config, rules, pipelines };
 }
 
+/** tool: 导出源文件指定 sheet 为 CSV(与预览同视角,含表头行)。 */
+export function toolExportSourceCsv(
+  ws: Workspace,
+  filePath: string,
+  opts?: { sheetName?: string; headerRow?: number; path?: string },
+): { file: string; rows: number } {
+  const headerRow = opts?.headerRow ?? 1;
+  const sheets = filePath.toLowerCase().endsWith('.csv')
+    ? parseCsvFile(filePath, { headerRow })
+    : parseExcelFile(filePath, { headerRow });
+  const sheet = (opts?.sheetName ? sheets.find((s) => s.sheetName === opts.sheetName) : undefined) ?? sheets[0];
+  const cols = sheet.headers;
+  const lines = [cols.join(',')];
+  for (const row of sheet.rows) lines.push(cols.map((_, j) => csvEscape(row[j])).join(','));
+  const base = basename(filePath).replace(/\.(xlsx|xls|csv)$/i, '');
+  const file = opts?.path ?? join(ws.root, 'exports', `${base}.csv`);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, lines.join('\n'), 'utf-8');
+  return { file, rows: sheet.rows.length };
+}
+
 /** tool: 给大表增加源文件 —— 拷贝到大表自己的 source/ 目录。同名文件:overwrite=false(缺省)跳过,overwrite=true 覆盖。 */
 export function toolAddFilesToBigTable(
   ws: Workspace,

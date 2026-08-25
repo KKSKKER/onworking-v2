@@ -131,11 +131,11 @@ export class PipelineEngine {
     }
   }
 
-  /** 临时 SQL 查询(工作台),跑在总表 DB。 */
-  query(sql: string, limit = 500): QueryOutcome {
+  /** 临时 SQL 查询(工作台),跑在总表 DB。limit 缺省不限(由前端分页/导出控制)。 */
+  query(sql: string, limit?: number): QueryOutcome {
     const db = openDatabase(this.masterDb(), { wal: false });
     try {
-      const finalSql = /\blimit\b/i.test(sql) ? sql : `${sql} LIMIT ${limit}`;
+      const finalSql = limit === undefined ? sql : (/\blimit\b/i.test(sql) ? sql : `${sql} LIMIT ${limit}`);
       const rows = db.prepare(finalSql).all() as Record<string, unknown>[];
       const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
       return { columns, rows, rowCount: rows.length };
@@ -144,12 +144,19 @@ export class PipelineEngine {
     }
   }
 
-  schemaTables(): { name: string }[] {
+  /** 总表表清单(含各表列结构,供前端侧边栏展示)。 */
+  schemaTables(): { name: string; columns: { name: string; type: string }[] }[] {
     const db = openDatabase(this.masterDb(), { wal: false });
     try {
-      return db
+      const tables = db
         .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
         .all() as { name: string }[];
+      return tables.map((t) => {
+        const cols = db
+          .prepare(`PRAGMA table_info("${t.name.replace(/"/g, '""')}")`)
+          .all() as { name: string; type: string }[];
+        return { name: t.name, columns: cols.map((c) => ({ name: c.name, type: c.type })) };
+      });
     } finally {
       db.close();
     }
