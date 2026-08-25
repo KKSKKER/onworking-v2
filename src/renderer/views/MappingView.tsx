@@ -20,6 +20,16 @@ const TRANSFORM_OPTIONS: { value: ValueTransform; label: string }[] = [
   { value: 'trim', label: '去空格' },
 ];
 
+/** 规则 transform kind → 前端 ValueTransform。 */
+function kindToTransform(kind: string): ValueTransform {
+  switch (kind) {
+    case 'coerce_cents': return 'to-cents';
+    case 'coerce_date': return 'normalize-date';
+    case 'coerce_string': return 'trim';
+    default: return 'none';
+  }
+}
+
 interface FieldRow {
   included: boolean;
   sourceHeader: string;
@@ -48,6 +58,45 @@ export function MappingView() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFile]);
+
+  // 选中大表 → 读取已有规则 YAML 并回填字段表(打开视图即有已配置内容)
+  useEffect(() => {
+    if (selectedFolder) {
+      void loadExistingRules(selectedFolder);
+    } else {
+      setFields([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFolder]);
+
+  async function loadExistingRules(folder: string) {
+    const res = await sendCli({ cmd: 'bigtable.config', folder });
+    if (!res.ok) return;
+    const ctx = res.data as {
+      rules: {
+        name: string;
+        sources: { pattern: string; sheetName?: string; headerRow: number }[];
+        fields: { sourceHeader: string; outputName: string; order: number; transforms?: { kind: string }[] }[];
+      }[];
+    };
+    const rule = ctx.rules[0];
+    if (!rule) return;
+    const src = rule.sources[0];
+    if (src?.headerRow) setHeaderRow(src.headerRow);
+    if (src?.sheetName) {
+      setSheet(src.sheetName);
+      if (sheets.length === 0 && filePath) void loadSheets(filePath);
+    }
+    setFields(
+      rule.fields.map((f) => ({
+        included: true,
+        sourceHeader: f.sourceHeader,
+        outputName: f.outputName,
+        transform: kindToTransform(f.transforms?.[0]?.kind ?? 'none'),
+      })),
+    );
+    setMsg(`已载入规则: ${rule.name}`);
+  }
 
   async function loadSheets(path: string) {
     const res = await sendCli({ cmd: 'setup.sheets', filePath: path });
