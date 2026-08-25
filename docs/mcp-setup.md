@@ -92,7 +92,7 @@ prompts/get     { "name": "onworking-manual" }                → 同上,提示�
 ## 6. 注意事项
 
 - **路径用绝对路径**：`args` 里的 `app.asar` 路径是相对的，客户端工作目录不定，务必写成绝对路径。
-- **ABI 双装载（已免疫）**：`src/core/db/sqlite.ts` 按进程 ABI 自动选——系统 node（137）用 `better-sqlite3`，Electron node（115）用 `better-sqlite3-electron` 副本。客户端怎么 spawn 都不怕。装完依赖后跑一次 `npm run build:dual-abi` 生成 115 副本（`scripts/build-dual-abi.ts`，node-gyp 直建副本、不动原件）。
+- **ABI 双装载（已免疫）**：`src/core/db/sqlite.ts` 按进程 ABI 自动选——系统 node（137）用 `better-sqlite3`，Electron 内置 node（本机 31.7.7 = 125）用 `better-sqlite3-electron` 副本。客户端怎么 spawn 都不怕。装完依赖跑一次 `npm run build:dual-abi`（先重建原件到 137、再 node-gyp 建副本匹配本机 Electron；原件被 app/MCP 占用时先关掉再跑）。
 - **Agent 只经命令操作**：接入后 Agent 能看到的工具 = 命令清单，配合 [agent-manual.md](agent-manual.md) 的约束，AI 只能经 MCP 工具读写工作区。
 - **不要同时双写**：better-sqlite3 是单进程设计，AI 与界面别在同一瞬间各跑一个写库管线。
 
