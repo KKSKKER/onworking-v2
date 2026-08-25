@@ -71,6 +71,12 @@ async function mockDispatch(command: ApiCommand): Promise<ApiResult<unknown>> {
       return ok({ added: command.files, overwritten: [], skipped: [] });
     case 'bigtable.exportCsv':
       return ok({ file: `D:/演示工作区/exports/${command.folder}.csv`, rows: 12345 });
+    case 'bigtable.config':
+      return ok({
+        config: { tableName: 'seq', autoIncrement: true, fields: [{ name: 'date', type: 'TEXT', order: 1 }] },
+        rules: [{ name: 'seq_rule', sources: [{ pattern: '**/*', headerRow: 1 }], fields: [] }],
+        pipelines: [{ id: 'c1', kind: 'clean', label: '' }],
+      });
     case 'pipeline.list':
       return ok(['c1', 'q1']);
     case 'pipeline.save':

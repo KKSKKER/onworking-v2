@@ -61,6 +61,7 @@ export const TOOL_SCHEMAS: Record<string, ToolSchema> = {
   'bigtable.previewRows': schema({ folder: str, limit: int, offset: int }, ['folder']),
   'bigtable.addFiles': schema({ folder: str, files: objArr, overwrite: bool }, ['folder', 'files']),
   'bigtable.exportCsv': schema({ folder: str, path: str, includeLineage: bool }, ['folder']),
+  'bigtable.config': schema({ folder: str }, ['folder']),
   'mapping.save': schema({ folder: str, headerRow: int, mappings: objArr, ruleName: str, sheetName: str, pattern: str }, ['folder', 'mappings']),
   'pipeline.list': schema({}),
   'pipeline.save': schema({ config: obj }, ['config']),

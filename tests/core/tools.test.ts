@@ -7,7 +7,7 @@ import { initWorkspace, type Workspace } from '../../src/core/workspace/workspac
 import { saveBigTableConfig } from '../../src/core/bigtable/store';
 import { savePipeline } from '../../src/core/pipeline/store';
 import { saveRule } from '../../src/core/rule/store';
-import { toolRunPipeline, toolRunPipelines, toolPreviewCleanResult, toolSaveTemplate, toolSetMapping, toolAddFilesToBigTable, toolExportBigTableCsv, toolExportQueryCsv } from '../../src/core/agent/tools';
+import { toolRunPipeline, toolRunPipelines, toolPreviewCleanResult, toolSaveTemplate, toolSetMapping, toolAddFilesToBigTable, toolExportBigTableCsv, toolExportQueryCsv, toolGetBigTableContext } from '../../src/core/agent/tools';
 import { listTemplates } from '../../src/core/template/store';
 import { listRules, loadRules } from '../../src/core/rule/store';
 import { PipelineEngine } from '../../src/core/pipeline/engine';
@@ -270,5 +270,13 @@ describe('tools', () => {
 
   it('toolExportQueryCsv rejects non-SELECT', () => {
     expect(() => toolExportQueryCsv(ws, 'DELETE FROM seq')).toThrow(/only SELECT/);
+  });
+
+  it('toolGetBigTableContext returns config, rules and related pipelines', () => {
+    const ctx = toolGetBigTableContext(ws, 'seq');
+    expect(ctx.config.tableName).toBe('seq');
+    expect(ctx.rules.length).toBe(1);
+    const ids = ctx.pipelines.map((p) => p.id);
+    expect(ids).toEqual(expect.arrayContaining(['c1', 'm1'])); // clean(直接引用)+ sql-clean(引用其表)
   });
 });

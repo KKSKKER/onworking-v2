@@ -9,6 +9,7 @@ import type { FieldMapping } from '../core/etl/transform';
 import type { Workspace } from '../core/workspace/workspace';
 import type { RunSummary, QueryOutcome } from '../core/pipeline/engine';
 import type { SourceConfig } from '../core/pipeline/setup';
+import type { RuleYaml } from '../core/rule/rule';
 
 export type ApiResult<T> =
   | { ok: true; data: T }
@@ -24,6 +25,7 @@ export interface CommandPayloads {
   'bigtable.previewRows': { folder: string; limit?: number; offset?: number };
   'bigtable.addFiles': { folder: string; files: string[]; overwrite?: boolean };
   'bigtable.exportCsv': { folder: string; path?: string; includeLineage?: boolean };
+  'bigtable.config': { folder: string };
   'mapping.save': { folder: string; headerRow?: number; mappings: FieldMapping[]; ruleName?: string; sheetName?: string; pattern?: string };
   'pipeline.list': {};
   'pipeline.save': { config: PipelineConfig };
@@ -58,6 +60,7 @@ export interface CommandResults {
   'bigtable.previewRows': { columns: string[]; rows: Record<string, unknown>[]; rowCount: number; total: number };
   'bigtable.addFiles': { added: string[]; overwritten: string[]; skipped: string[] };
   'bigtable.exportCsv': { file: string; rows: number };
+  'bigtable.config': { config: BigTableConfig; rules: RuleYaml[]; pipelines: PipelineConfig[] };
   'mapping.save': { ruleFile: string };
   'pipeline.list': string[];
   'pipeline.save': { pipelineId: string };

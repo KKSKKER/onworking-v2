@@ -22,9 +22,10 @@ import { loadTemplate, applyTemplateToSheet, saveTemplate, type MappingTemplate 
 import type { FieldMapping } from '../etl/transform';
 import { openDatabase } from '../db/database';
 import { AppError } from '../errors';
-import { saveRule } from '../rule/store';
+import { saveRule, loadRules } from '../rule/store';
 import type { RuleYaml } from '../rule/rule';
 import { transformToKind } from '../rule/compile';
+import type { PipelineConfig } from '../pipeline/config';
 
 /** tool: 打开/初始化工作区。 */
 export function toolOpenWorkspace(path: string): Workspace {
@@ -108,6 +109,24 @@ export function toolExportQueryCsv(
   } finally {
     db.close();
   }
+}
+
+/** tool: 读取选中大表关联的全部配置(大表配置 + 规则 YAML + 关联管线),供前端实时渲染。 */
+export function toolGetBigTableContext(ws: Workspace, folder: string): {
+  config: BigTableConfig;
+  rules: RuleYaml[];
+  pipelines: PipelineConfig[];
+} {
+  const config = loadBigTableConfig(ws, folder);
+  const rules = loadRules(ws, folder);
+  const pipelines = listPipelines(ws)
+    .map((id) => loadPipeline(ws, id))
+    .filter((p) =>
+      p.kind === 'clean' ? p.bigTableFolder === folder
+      : p.kind === 'sql-clean' ? p.bigTables.includes(folder)
+      : false,
+    );
+  return { config, rules, pipelines };
 }
 
 /** tool: 给大表增加源文件 —— 拷贝到大表自己的 source/ 目录。同名文件:overwrite=false(缺省)跳过,overwrite=true 覆盖。 */

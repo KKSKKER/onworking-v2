@@ -32,6 +32,7 @@ import {
   toolAddFilesToBigTable,
   toolExportBigTableCsv,
   toolExportQueryCsv,
+  toolGetBigTableContext,
   toolQuery,
   toolGetProjectState,
 } from '../core/agent/tools';
@@ -70,6 +71,7 @@ export const handlers: { [K in SessionCommands]: HandlerFor<K> } = {
     toolAddFilesToBigTable(ctx.ws, p.folder, p.files, { overwrite: p.overwrite }),
   'bigtable.exportCsv': async (ctx, p) =>
     toolExportBigTableCsv(ctx.ws, p.folder, { path: p.path, includeLineage: p.includeLineage }),
+  'bigtable.config': async (ctx, p) => toolGetBigTableContext(ctx.ws, p.folder),
 
   'pipeline.list': async (ctx) => listPipelines(ctx.ws),
   'pipeline.save': async (ctx, p) => {
