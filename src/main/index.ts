@@ -10,10 +10,11 @@ import type { IpcRequest } from '../ipc/contracts';
 useConsoleLogging('info');
 
 // ---- CLI 桥:前端 → onw CLI 子进程(NDJSON),main 只转发 + 回推 ----
-// 注意:必须 spawn 'node'(PATH 解析),不能用 process.execPath —— Electron 主进程里它是 electron.exe,不是 node。
+// 用 ELECTRON_RUN_AS_NODE=1 + process.execPath(应用自带 node):不依赖系统 node,dev 与打包一致。
 const bridge = createCliBridge({
-  command: 'node',
+  command: process.execPath,
   args: [join(app.getAppPath(), 'dist', 'main', 'cli', 'index.js'), 'open'],
+  env: { ELECTRON_RUN_AS_NODE: '1' },
 });
 let watchTimer: NodeJS.Timeout | null = null;
 

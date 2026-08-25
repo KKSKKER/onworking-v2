@@ -10,6 +10,8 @@ export interface CliBridgeOptions {
   args: string[];
   /** 是否经 shell 启动。spawn 真实 exe(如 node)必须 false,否则路径带空格(Program Files)会被拆坏;测试 spawn npm 才用 true。 */
   shell?: boolean;
+  /** 追加到子进程的环境变量(如 ELECTRON_RUN_AS_NODE=1,让 electron.exe 当 node 跑 CLI)。 */
+  env?: Record<string, string>;
 }
 
 export interface CliBridge {
@@ -43,6 +45,7 @@ export function createCliBridge(opts: CliBridgeOptions): CliBridge {
     child = spawn(opts.command, [...opts.args, wsPath], {
       shell: opts.shell ?? false,
       stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env, ...opts.env },
     });
     stdoutBuf = '';
     stderrBuf = '';
