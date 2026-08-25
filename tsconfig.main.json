@@ -12,5 +12,5 @@
     "rootDir": "src",
     "sourceMap": true
   },
-  "include": ["src/main", "src/ipc", "src/core", "src/app", "src/cli"]
+  "include": ["src/main", "src/ipc", "src/core", "src/app", "src/cli", "src/mcp"]
 }

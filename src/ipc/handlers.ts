@@ -51,7 +51,7 @@ type HandlerFor<K extends keyof CommandPayloads> = (
 /** 会话命令(排除传输层引导命令 workspace.open)。 */
 type SessionCommands = Exclude<keyof CommandPayloads, 'workspace.open'>;
 
-const handlers: { [K in SessionCommands]: HandlerFor<K> } = {
+export const handlers: { [K in SessionCommands]: HandlerFor<K> } = {
   'bigtable.list': async (ctx) => listBigTables(ctx.ws),
   'bigtable.get': async (ctx, p) => loadBigTableConfig(ctx.ws, p.folder),
   'bigtable.save': async (ctx, p) => {

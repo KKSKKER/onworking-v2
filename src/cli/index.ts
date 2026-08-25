@@ -8,6 +8,7 @@ import { createInterface } from 'node:readline';
 import { createContext } from '../app/context';
 import { dispatchIpc, type ApiContext } from '../ipc/handlers';
 import type { IpcRequest } from '../ipc/contracts';
+import { handleMcpRequest, type McpRequest } from '../mcp/server';
 import { useConsoleLogging } from '../core/logging';
 
 export interface CliWriter {
@@ -56,6 +57,23 @@ export async function main(
   stdin: AsyncIterable<string>,
   writer: CliWriter,
 ): Promise<number> {
+  if (argv[0] === 'mcp' && argv[1]) {
+    const ctx = createContext(argv[1]);
+    for await (const line of stdin) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      let req: McpRequest;
+      try {
+        req = JSON.parse(trimmed) as McpRequest;
+      } catch {
+        writer.stderr(JSON.stringify({ error: 'invalid JSON', line: trimmed.slice(0, 200) }));
+        continue;
+      }
+      const res = await handleMcpRequest(ctx, req);
+      if (res) writer.stdout(JSON.stringify(res));
+    }
+    return 0;
+  }
   const state = createCliState(writer);
   const openIdx = argv.indexOf('open');
   if (openIdx >= 0 && argv[openIdx + 1]) state.open(argv[openIdx + 1]);
