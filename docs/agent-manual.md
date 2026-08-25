@@ -203,7 +203,7 @@ $lines | npm run --silent onw -- open D:/ws
 | `FILE_NOT_FOUND` | `bigtable.addFiles` 源文件不存在 | 检查文件路径 |
 | `QUERY_NOT_SELECT` | `query.run` 非 SELECT/WITH | 改查询语句 |
 | `TEMPLATE_NOT_FOUND` | 模板不存在 | `template.list` 查名 |
-| 环境：`better-sqlite3` ABI 不匹配 | 报 `NODE_MODULE_VERSION` 不符 | 跑 `npm run rebuild:node`（测试/CLI 用）；跑 Electron 应用前需 `npm run rebuild:electron`（两者互斥，按用途重建） |
+| 环境：`better-sqlite3` ABI 不匹配 | 报 `NODE_MODULE_VERSION` 不符 | 跑 `npm run rebuild:node`。Electron 主进程已不再加载该原生模块（执行都在 node 的 CLI/MCP 进程里），`npm run dev`/`start` 已改为自动 `rebuild:node`，无需再 `rebuild:electron` |
 
 ---
 
