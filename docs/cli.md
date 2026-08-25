@@ -9,18 +9,22 @@ CLI 是同一个 `dispatch` 的 stdio 前端：Electron 渲染层、CLI、MCP �
 
 ## 1. 启动与协议
 
+> **脚本化/管道使用请加 `--silent`**：`npm run onw` 会把 npm 的 banner（`> onworking@0.2.0 onw`）打到 stdout，污染「一行一响应」的解析。脚本用下面两种方式拿**干净 stdout**：
+> - `npm run --silent onw -- open /path`（加 `--silent`）
+> - 编译产物：`node dist/main/cli/index.js open /path`（需先 `npm run build:main`，无 banner）
+
 ```bash
 # 打开工作区,之后从 stdin 逐行读命令(交互式)
-npm run onw -- open /path/to/workspace
+npm run --silent onw -- open /path/to/workspace
 
 # 非交互:管道喂命令,一行一命令,stdout 一行一响应
-echo '{"reqId":1,"cmd":"state.summary"}' | npm run onw -- open /path/to/workspace
+echo '{"reqId":1,"cmd":"state.summary"}' | npm run --silent onw -- open /path/to/workspace
 
 # 一次多命令
 printf '%s\n%s\n' \
   '{"reqId":1,"cmd":"bigtable.list"}' \
   '{"reqId":2,"cmd":"pipeline.list"}' \
-  | npm run onw -- open /path/to/workspace
+  | npm run --silent onw -- open /path/to/workspace
 ```
 
 **协议（NDJSON）：**
