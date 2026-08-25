@@ -89,6 +89,8 @@ async function mockDispatch(command: ApiCommand): Promise<ApiResult<unknown>> {
         ],
         rowCount: 2,
       });
+    case 'query.exportCsv':
+      return ok({ file: 'D:/演示工作区/exports/query.csv', rows: 2 });
     case 'template.list':
       return ok([]);
     case 'template.save':

@@ -24,7 +24,7 @@ export interface CommandPayloads {
   'bigtable.previewRows': { folder: string; limit?: number; offset?: number };
   'bigtable.addFiles': { folder: string; files: string[]; overwrite?: boolean };
   'bigtable.exportCsv': { folder: string; path?: string; includeLineage?: boolean };
-  'mapping.save': { folder: string; headerRow?: number; mappings: FieldMapping[]; ruleName?: string; sheetName?: string };
+  'mapping.save': { folder: string; headerRow?: number; mappings: FieldMapping[]; ruleName?: string; sheetName?: string; pattern?: string };
   'pipeline.list': {};
   'pipeline.save': { config: PipelineConfig };
   'pipeline.delete': { id: string };
@@ -39,6 +39,7 @@ export interface CommandPayloads {
   'setup.sheets': { filePath: string };
   'setup.preview': { filePath: string; sheetName?: string; headerRow?: number; offset?: number; limit?: number };
   'query.run': { sql: string; limit?: number };
+  'query.exportCsv': { sql: string; path?: string };
   'template.list': {};
   'template.save': { template: MappingTemplate };
   'template.apply': { name: string; sheet: ParsedSheet };
@@ -72,6 +73,7 @@ export interface CommandResults {
   'setup.sheets': string[];
   'setup.preview': { sheetName: string; headerRow: number; headers: string[]; rows: unknown[][]; total: number };
   'query.run': QueryOutcome;
+  'query.exportCsv': { file: string; rows: number };
   'template.list': string[];
   'template.save': { saved: string };
   'template.apply': { mappings: FieldMapping[]; matched: number; skipped: string[] };

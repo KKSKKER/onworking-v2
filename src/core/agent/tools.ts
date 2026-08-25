@@ -3,7 +3,7 @@
 // 入参 AI 友好,返回结构化结果(含下一步可用的项目状态)。底层复用 core。
 import { copyFileSync, mkdirSync, existsSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
-import { openWorkspace, type Workspace } from '../workspace/workspace';
+import { openWorkspace, masterDbPath, type Workspace } from '../workspace/workspace';
 import {
   saveBigTableConfig,
   listBigTables,
@@ -80,6 +80,36 @@ export function toolExportBigTableCsv(
   return { file, rows: rows.length };
 }
 
+/** tool: 从总表导出查询结果到 CSV(交付清洗后的总表)。仅 SELECT/WITH。 */
+export function toolExportQueryCsv(
+  ws: Workspace,
+  sql: string,
+  opts?: { path?: string },
+): { file: string; rows: number } {
+  const trimmed = sql.trim();
+  if (!/^(SELECT|WITH)\b/i.test(trimmed)) {
+    throw new AppError({
+      module: 'query',
+      code: 'QUERY_NOT_SELECT',
+      message: 'only SELECT/WITH queries are allowed in the workbench',
+      data: { sql },
+    });
+  }
+  const db = openDatabase(masterDbPath(ws), { wal: false });
+  try {
+    const rows = db.prepare(trimmed).all() as Record<string, unknown>[];
+    const cols = rows.length > 0 ? Object.keys(rows[0]) : [];
+    const lines = [cols.join(',')];
+    for (const r of rows) lines.push(cols.map((c) => csvEscape(r[c])).join(','));
+    const file = opts?.path ?? join(ws.root, 'exports', 'query.csv');
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, lines.join('\n'), 'utf-8');
+    return { file, rows: rows.length };
+  } finally {
+    db.close();
+  }
+}
+
 /** tool: 给大表增加源文件 —— 拷贝到大表自己的 source/ 目录。同名文件:overwrite=false(缺省)跳过,overwrite=true 覆盖。 */
 export function toolAddFilesToBigTable(
   ws: Workspace,
@@ -151,20 +181,24 @@ export function toolImportFiles(ws: Workspace, bigTableFolder: string, sourceDir
   return files;
 }
 
-/** tool: 设置字段映射 —— 只写 YAML 规则,不生成管线。ruleName 缺省 `<folder>_rule`,可传不同名追加第 N 份;sheetName 指定只导入某个 sheet。 */
+/** tool: 设置字段映射 —— 只写 YAML 规则,不生成管线。ruleName 缺省 `<folder>_rule`,可传不同名追加第 N 份;pattern 指定文件匹配(缺省匹配全部文件),sheetName 指定某个 sheet —— 一个规则 = 一个「文件 × sheet」映射。 */
 export function toolSetMapping(
   ws: Workspace,
   bigTableFolder: string,
   headerRow: number,
   mappings: FieldMapping[],
-  opts?: { ruleName?: string; sheetName?: string },
+  opts?: { ruleName?: string; sheetName?: string; pattern?: string },
 ): { ruleFile: string } {
   const name = opts?.ruleName ?? `${bigTableFolder}_rule`;
   const rule: RuleYaml = {
     name,
     display: `提取规则: ${name}`,
     version: 1,
-    sources: [{ pattern: '**/*', headerRow, ...(opts?.sheetName ? { sheetName: opts.sheetName } : {}) }],
+    sources: [{
+      pattern: opts?.pattern ?? '**/*',
+      headerRow,
+      ...(opts?.sheetName ? { sheetName: opts.sheetName } : {}),
+    }],
     fields: mappings.map((m, i) => ({
       sourceHeader: m.sourceHeader,
       outputName: m.outputName,

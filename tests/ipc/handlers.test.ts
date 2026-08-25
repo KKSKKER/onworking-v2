@@ -148,6 +148,18 @@ describe('ipc handlers', () => {
     expect(res.ok).toBe(false);
   });
 
+  it('query.exportCsv exports the master table via ipc', async () => {
+    await dispatch({ cmd: 'pipeline.run', id: 'c1' }, ctx);
+    await dispatch({ cmd: 'pipeline.run', id: 'm1' }, ctx);
+    const res = await dispatch({ cmd: 'query.exportCsv', sql: 'SELECT date, debit FROM seq' }, ctx);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      const d = res.data as { file: string; rows: number };
+      expect(d.rows).toBe(1);
+      expect(existsSync(d.file)).toBe(true);
+    }
+  });
+
   it('bigtable.exportCsv exports via ipc', async () => {
     await dispatch({ cmd: 'pipeline.run', id: 'c1' }, ctx);
     const res = await dispatch({ cmd: 'bigtable.exportCsv', folder: 'seq' }, ctx);

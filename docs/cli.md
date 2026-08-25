@@ -89,7 +89,7 @@ echo '{"reqId":1,"cmd":"bigtable.addFiles","folder":"seq","files":["D:/data/a.xl
 
 | 命令 | 载荷 | 返回 |
 |---|---|---|
-| `mapping.save` | `{ folder, headerRow?, mappings: FieldMapping[], ruleName?, sheetName? }` | `{ ruleFile: string }`（`sheetName` 指定只导入某个 sheet） |
+| `mapping.save` | `{ folder, headerRow?, mappings, ruleName?, sheetName?, pattern? }` | `{ ruleFile: string }`（`sheetName` 指定 sheet、`pattern` 指定文件匹配 —— 一个规则 = 一个「文件 × sheet」映射；`pattern` 缺省匹配全部文件） |
 
 - `mappings`：`{ sourceHeader, outputName, transform }[]`，`transform ∈ 'none' | 'to-cents' | 'normalize-date' | 'trim'`
 - `ruleName` 缺省 `<folder>_rule`；传不同 `ruleName` = 追加第 N 份映射（不覆盖）。clean 运行时会合并所有规则（按 source key / outputName 去重）。
@@ -142,6 +142,7 @@ echo '{"reqId":1,"cmd":"setup.detectSource","filePath":"D:/data/a.xlsx"}' \
 | 命令 | 载荷 | 返回 |
 |---|---|---|
 | `query.run` | `{ sql, limit? }` | `{ columns[], rows[], rowCount }` |
+| `query.exportCsv` | `{ sql, path? }` | `{ file, rows }`（在总表跑 SELECT 落 CSV，交付清洗后的总表；缺省写工作区 `exports/query.csv`） |
 
 - 仅允许 `SELECT`/`WITH`（否则错误码 `QUERY_NOT_SELECT`）
 - 跑在**总表 DB** 上（临时查询，不建管线）；`limit` 载荷字段当前保留但未生效（引擎默认 500 行）
@@ -240,7 +241,7 @@ echo '{"reqId":1,"cmd":"query.run","sql":"SELECT * FROM seq LIMIT 5"}' | npm run
 
 ## 6. 已知限制
 
-- **多 sheet 只默认导第一张**：`mapping.save` 不传 `sheetName` 时，每个文件只导入 `sheets.slice(0,1)`（第一张表）。
-- **小计/页脚/空行不自动剔除**：源表若含「小计」行、签名行、空行，需在导出后自行过滤（当前无内置过滤规则）。
+- **多 sheet 默认只导第一张**：`mapping.save` 不传 `sheetName` 时，每个文件只导入 `sheets.slice(0,1)`；按「文件 × sheet」建映射请用 `pattern` + `sheetName`（每个组合一条规则，clean 合并）。
+- **行级清理在总表做**：大表是初步映射，剔「小计/页脚/空行」请写在 sql-clean 的 SQL（WHERE）或导出前的查询里；`query.exportCsv` 导出的就是过滤后的总表。
 - **重复表头歧义**：同一列名出现两次时，`sourceHeader` 映射无法区分是哪一列。
 - **`previewRows` 分页语义**：`rowCount` = 当页行数，`total` = 总行数；一次导全量请用 `bigtable.exportCsv`。

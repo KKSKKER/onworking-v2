@@ -7,7 +7,7 @@ import { initWorkspace, type Workspace } from '../../src/core/workspace/workspac
 import { saveBigTableConfig } from '../../src/core/bigtable/store';
 import { savePipeline } from '../../src/core/pipeline/store';
 import { saveRule } from '../../src/core/rule/store';
-import { toolRunPipeline, toolRunPipelines, toolPreviewCleanResult, toolSaveTemplate, toolSetMapping, toolAddFilesToBigTable, toolExportBigTableCsv } from '../../src/core/agent/tools';
+import { toolRunPipeline, toolRunPipelines, toolPreviewCleanResult, toolSaveTemplate, toolSetMapping, toolAddFilesToBigTable, toolExportBigTableCsv, toolExportQueryCsv } from '../../src/core/agent/tools';
 import { listTemplates } from '../../src/core/template/store';
 import { listRules, loadRules } from '../../src/core/rule/store';
 import { PipelineEngine } from '../../src/core/pipeline/engine';
@@ -194,6 +194,45 @@ describe('tools', () => {
     expect(rule.sources[0].sheetName).toBe('202208');
   });
 
+  it('toolSetMapping writes pattern and sheetName into the rule sources', () => {
+    toolSetMapping(ws, 'seq', 1, [
+      { sourceHeader: '日期', outputName: 'date', transform: 'none' },
+    ], { pattern: 'a.xlsx', sheetName: '202208' });
+    const rule = loadRules(ws, 'seq')[0];
+    expect(rule.sources[0]).toMatchObject({ pattern: 'a.xlsx', headerRow: 1, sheetName: '202208' });
+  });
+
+  it('clean imports per (file, sheet) via pattern rules', async () => {
+    // b.xlsx: sheet B(姓名/金额);c.xlsx: 无任何规则匹配,不应被导入
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['姓名', '金额'], ['张三', 999]]), 'B');
+    XLSX.writeFile(wb, join(sourceDir, 'b.xlsx'));
+    const wc = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wc, XLSX.utils.aoa_to_sheet([['日期', '借方金额'], ['2024-09', 900]]), 'Sheet1');
+    XLSX.writeFile(wc, join(sourceDir, 'c.xlsx'));
+    // 规则1: 只匹配 a*.xlsx 的 Sheet1 → date/debit(覆盖默认 seq_rule)
+    toolSetMapping(ws, 'seq', 1, [
+      { sourceHeader: '日期', outputName: 'date', transform: 'normalize-date' },
+      { sourceHeader: '借方金额', outputName: 'debit', transform: 'to-cents' },
+    ], { pattern: 'a*.xlsx', sheetName: 'Sheet1' });
+    // 规则2: 只匹配 b.xlsx 的 B → name/amount
+    toolSetMapping(ws, 'seq', 1, [
+      { sourceHeader: '姓名', outputName: 'name', transform: 'none' },
+      { sourceHeader: '金额', outputName: 'amount', transform: 'to-cents' },
+    ], { ruleName: 'seq_rule_2', pattern: 'b.xlsx', sheetName: 'B' });
+    expect(listRules(ws, 'seq').length).toBe(2);
+
+    const eng = new PipelineEngine(ws);
+    const r = await eng.run('c1');
+    eng.close();
+    expect(r.ok).toBe(true);
+    expect(r.rows).toBe(3); // a.xlsx 2 行 + b.xlsx 1 行(c.xlsx 无规则匹配,不入)
+    const preview = toolPreviewCleanResult(ws, 'seq');
+    expect(preview.total).toBe(3);
+    expect(preview.columns).toContain('debit'); // a 的列
+    expect(preview.columns).toContain('name'); // b 的列
+  });
+
   it('clean imports only the configured sheet', async () => {
     // 多 sheet 文件:Sheet1 一行,202208 两行
     const wb = XLSX.utils.book_new();
@@ -213,5 +252,23 @@ describe('tools', () => {
     const preview = toolPreviewCleanResult(ws, 'seq');
     expect(preview.total).toBe(2);
     expect(preview.rows[0].date).toBe('2024-05');
+  });
+
+  it('toolExportQueryCsv exports a query result from the master DB', async () => {
+    // 先跑 clean + sql-clean,总表有数据
+    const eng = new PipelineEngine(ws);
+    await eng.run('c1');
+    await eng.run('m1');
+    eng.close();
+    const res = toolExportQueryCsv(ws, 'SELECT date, debit FROM seq ORDER BY date');
+    expect(res.rows).toBe(2);
+    expect(existsSync(res.file)).toBe(true);
+    const header = readFileSync(res.file, 'utf-8').split('\n')[0];
+    expect(header).toBe('date,debit');
+    expect(readFileSync(res.file, 'utf-8')).toContain('2024-01');
+  });
+
+  it('toolExportQueryCsv rejects non-SELECT', () => {
+    expect(() => toolExportQueryCsv(ws, 'DELETE FROM seq')).toThrow(/only SELECT/);
   });
 });

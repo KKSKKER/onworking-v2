@@ -31,6 +31,7 @@ import {
   toolSaveTemplate,
   toolAddFilesToBigTable,
   toolExportBigTableCsv,
+  toolExportQueryCsv,
   toolQuery,
   toolGetProjectState,
 } from '../core/agent/tools';
@@ -90,7 +91,7 @@ export const handlers: { [K in SessionCommands]: HandlerFor<K> } = {
     return toolCreateCleaningPipeline(ctx.ws, config.id, config.bigTableFolder, config.sourceDir);
   },
   'mapping.save': async (ctx, p) =>
-    toolSetMapping(ctx.ws, p.folder, p.headerRow ?? 1, p.mappings, { ruleName: p.ruleName, sheetName: p.sheetName }),
+    toolSetMapping(ctx.ws, p.folder, p.headerRow ?? 1, p.mappings, { ruleName: p.ruleName, sheetName: p.sheetName, pattern: p.pattern }),
   'pipeline.delete': async (ctx, p) => {
     deletePipeline(ctx.ws, p.id);
     return { deleted: p.id };
@@ -142,6 +143,8 @@ export const handlers: { [K in SessionCommands]: HandlerFor<K> } = {
     }
     return toolQuery(ctx.ws, sql);
   },
+
+  'query.exportCsv': async (ctx, p) => toolExportQueryCsv(ctx.ws, p.sql, { path: p.path }),
 
   'state.summary': async (ctx) => toolGetProjectState(ctx.ws),
 

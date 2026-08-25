@@ -38,8 +38,10 @@
 - `pipeline.run` 写哪个 DB 由管线 kind 决定：`clean` → 大表 DB；`sql-clean` / `query` → 总表 DB。
 - **生成总表是铁律（见 §2 铁律第 5 条）**：任何数据任务必须走到 ②（总表）；需要结果表/查数再走 ③。做到大表就停 = 任务没完成。
 - `bigtable.previewRows` 预览的是大表 DB（①→② 的中间产物）；`query.run` / `schema.tables` 查的是总表（② 之后的最终库）。
+- **大表 = 初步映射**：每个「文件 × sheet」一条 `mapping.save`（`pattern` + `sheetName`），全部合并进大表，**不做行级清理**。行级清理（剔合计/签名行、加月份列）一律写在 ② 的 sql-clean SQL 里。
+- **交付用 `query.exportCsv`**：清洗在总表，导出的 CSV 应从总表来（`query.exportCsv {sql, path?}`），而不是大表。
 
-**一句话标准链：** 打开工作区 → 建大表 → 加文件 → 写映射 → 建并跑 clean（进大表）→ 建并跑 sql-clean（进总表）→ 建并跑 query / query.run 查数。
+**一句话标准链：** 打开工作区 → 建大表 → 加文件 → 每个「文件 × sheet」写一条映射 → 建并跑 clean（进大表，初步映射）→ 建并跑 sql-clean（SQL 里选月份 sheet + 加月份列 + 剔垃圾，进总表）→ `query.exportCsv` 导出交付。
 
 ---
 
@@ -80,7 +82,7 @@
 ### 字段映射（规则 YAML）
 | 命令 | 用途 |
 |---|---|
-| `mapping.save {folder, headerRow?, mappings[], ruleName?, sheetName?}` | 写字段映射规则（唯一改映射的途径）；不同 `ruleName` = 追加第 N 份；`sheetName` = 只导入指定 sheet |
+| `mapping.save {folder, headerRow?, mappings[], ruleName?, sheetName?, pattern?}` | 写字段映射规则（唯一改映射的途径）；不同 `ruleName` = 追加第 N 份；`pattern` + `sheetName` = 一个规则对应一个「文件 × sheet」映射 |
 
 ### 管线
 | 命令 | 用途 |
@@ -98,6 +100,7 @@
 |---|---|
 | `setup.sheets {filePath}` / `setup.detectSource {filePath}` / `setup.preview {filePath}` | 读源文件表头/预览 |
 | `query.run {sql}` | 总表 DB 临时查询（仅 SELECT/WITH） |
+| `query.exportCsv {sql, path?}` | 在总表跑 SELECT 落 CSV（交付清洗后的总表） |
 | `template.list` / `template.save {template}` / `template.apply {name, sheet}` | 映射模板管理 |
 | `schema.tables` | 总表 DB 表清单 |
 | `state.summary` | 项目状态摘要（决定下一步） |
