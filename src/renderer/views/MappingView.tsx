@@ -48,12 +48,10 @@ export function MappingView() {
   const [fields, setFields] = useState<FieldRow[]>([]);
   const [msg, setMsg] = useState('');
 
-  // 跟随左侧栏选中的文件
+  // 跟随左侧栏选中的文件(只更新文件路径/加载 sheet;不清空已载入的大表规则字段)
   useEffect(() => {
     if (selectedFile) {
       setFilePath(selectedFile);
-      setDetected(null);
-      setFields([]);
       loadSheets(selectedFile);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
