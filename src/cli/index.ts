@@ -8,7 +8,7 @@ import { createInterface } from 'node:readline';
 import { createContext } from '../app/context';
 import { dispatchIpc, type ApiContext } from '../ipc/handlers';
 import type { IpcRequest } from '../ipc/contracts';
-import { handleMcpRequest, type McpRequest } from '../mcp/server';
+import { handleMcpRequest, type McpRequest, type McpSession } from '../mcp/server';
 import { useConsoleLogging } from '../core/logging';
 
 export interface CliWriter {
@@ -57,8 +57,13 @@ export async function main(
   stdin: AsyncIterable<string>,
   writer: CliWriter,
 ): Promise<number> {
-  if (argv[0] === 'mcp' && argv[1]) {
-    const ctx = createContext(argv[1]);
+  if (argv[0] === 'mcp') {
+    // 不写死工作区:onw mcp 可无路径启动,agent 用 workspace.open 打开/切换
+    let ctx: ApiContext | null = argv[1] ? createContext(argv[1]) : null;
+    const session: McpSession = {
+      open: (path) => (ctx = createContext(path)),
+      getCtx: () => ctx,
+    };
     for await (const line of stdin) {
       const trimmed = line.trim();
       if (!trimmed) continue;
@@ -69,7 +74,7 @@ export async function main(
         writer.stderr(JSON.stringify({ error: 'invalid JSON', line: trimmed.slice(0, 200) }));
         continue;
       }
-      const res = await handleMcpRequest(ctx, req);
+      const res = await handleMcpRequest(session, req);
       if (res) writer.stdout(JSON.stringify(res));
     }
     return 0;

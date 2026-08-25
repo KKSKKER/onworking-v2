@@ -188,18 +188,22 @@ echo '{"reqId":1,"cmd":"state.summary"}' | npm run onw -- open D:/ws
 ## 4. MCP 子命令（JSON-RPC 2.0 / stdio）
 
 ```bash
-npm run onw -- mcp /path/to/workspace
+# 客户端绑定模型:客户端启动 → 拉起 onw mcp(不写死工作区)
+npm run onw -- mcp            # 无路径启动,agent 用 workspace.open 打开/切换
+npm run onw -- mcp D:/ws      # 兼容:启动时预打开 D:/ws
 ```
 
 - stdin/stdout 走 JSON-RPC 2.0（newline-delimited），每个 `ApiCommand` 映射成一个 MCP tool
 - 支持：`initialize`、`tools/list`、`tools/call`；`notifications/*` 不回包
+- `workspace.open` **是 MCP tool**：agent 随时调用 `{ name: 'workspace.open', arguments: { path } }` 打开/切换工作区（重复调用即切换）；未打开工作区时调数据工具返回 `NO_WORKSPACE`
 - 用 MCP 客户端连接后即可把命令当作工具调用（工具名 = 命令名）
 
 ```bash
-printf '%s\n%s\n' \
+printf '%s\n%s\n%s\n' \
   '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
-  '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"state.summary","arguments":{}}}' \
-  | npm run onw -- mcp D:/ws
+  '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"workspace.open","arguments":{"path":"D:/ws"}}}' \
+  '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"state.summary","arguments":{}}}' \
+  | npm run onw -- mcp
 ```
 
 ---

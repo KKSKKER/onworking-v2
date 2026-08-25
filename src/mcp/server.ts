@@ -21,12 +21,18 @@ export interface McpResponse {
   error?: { code: number; message: string };
 }
 
-/** 注册的所有命令名(来自 handler 表,运行时可查,无类型漂移)。 */
-export const commandKinds = Object.keys(handlers).sort();
+/** MCP 会话:持有可变更的工作区 ctx,agent 可随时用 workspace.open 打开/切换。 */
+export interface McpSession {
+  open(path: string): ApiContext;
+  getCtx(): ApiContext | null;
+}
+
+/** 注册的所有命令名(来自 handler 表 + 引导命令 workspace.open)。 */
+export const commandKinds = ['workspace.open', ...Object.keys(handlers).sort()];
 
 /** 处理一条 JSON-RPC 请求;notification 无 id,返回 null 表示不回包。 */
 export async function handleMcpRequest(
-  ctx: ApiContext,
+  session: McpSession,
   req: McpRequest,
 ): Promise<McpResponse | null> {
   const id = req.id ?? null;
@@ -64,6 +70,33 @@ export async function handleMcpRequest(
     if (!name || !commandKinds.includes(name)) {
       return { jsonrpc: '2.0', id, error: { code: -32602, message: `unknown tool: ${String(name)}` } };
     }
+
+    // workspace.open 由会话层处理(打开/切换工作区),不进 dispatch
+    if (name === 'workspace.open') {
+      const path = args.path as string | undefined;
+      if (!path) {
+        return { jsonrpc: '2.0', id, error: { code: -32602, message: 'workspace.open requires a path argument' } };
+      }
+      const ctx = session.open(path);
+      return {
+        jsonrpc: '2.0',
+        id,
+        result: { content: [{ type: 'text', text: JSON.stringify(ctx.ws) }] },
+      };
+    }
+
+    const ctx = session.getCtx();
+    if (!ctx) {
+      return {
+        jsonrpc: '2.0',
+        id,
+        result: {
+          content: [{ type: 'text', text: JSON.stringify({ code: 'NO_WORKSPACE', message: 'no workspace opened; call workspace.open first' }) }],
+          isError: true,
+        },
+      };
+    }
+
     // name 已在上方用 commandKinds 校验过,拼装后按契约强转
     const request = { ...(args as Record<string, unknown>), cmd: name, reqId: 1 } as IpcRequest;
     const env = (await dispatchIpc(request, ctx)) as { reqId: number; result: ApiResult<unknown> };

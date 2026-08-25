@@ -32,7 +32,7 @@
 ### 工作区
 | 命令 | 用途 |
 |---|---|
-| `workspace.open {path}` | 打开/初始化工作区（引导命令） |
+| `workspace.open {path}` | 打开/初始化工作区；MCP 下也是 tool，**重复调用即切换工作区**，是改工作区的唯一入口 |
 
 ### 大表
 | 命令 | 用途 |
@@ -78,7 +78,7 @@
 
 以「新建一个大表并导入数据」为例（每一步用命令，不得绕过）：
 
-1. `workspace.open {path}` —— 打开工作区
+1. `workspace.open {path}` —— 打开工作区（MCP 下服务器无路径启动时，这是第一个动作；要换工作区就再调一次）
 2. `state.summary` —— 看当前状态
 3. `bigtable.save {folder, config}` —— 建大表（`config.tableName/fields/autoIncrement`）
 4. `bigtable.addFiles {folder, files[]}` —— 把源文件加进大表 source/ 目录

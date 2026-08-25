@@ -31,9 +31,9 @@ function check(name: string, cond: boolean, detail = ''): void {
 async function main(): Promise<void> {
   const ws = mkdtempSync(join(tmpdir(), 'onw-mcp-client-'));
   console.log(`工作区: ${ws}`);
-  console.log('== MCP 客户端绑定测试(onw mcp <ws>) ==');
+  console.log('== MCP 客户端绑定测试(onw mcp 无路径启动,agent 用 workspace.open 打开) ==');
 
-  const child = spawn('npm', ['run', '--silent', 'onw', '--', 'mcp', ws], {
+  const child = spawn('npm', ['run', '--silent', 'onw', '--', 'mcp'], {
     shell: process.platform === 'win32',
     stdio: ['pipe', 'pipe', 'pipe'],
   });
@@ -85,16 +85,26 @@ async function main(): Promise<void> {
     const tools = (list.result as { tools?: { name: string }[] } | undefined)?.tools ?? [];
     check('tools/list 返回工具列表', tools.length > 0, `count=${tools.length}`);
     const names = tools.map((t) => t.name);
-    check('含 state.summary / bigtable.list', names.includes('state.summary') && names.includes('bigtable.list'), names.join(','));
+    check('含 workspace.open / state.summary', names.includes('workspace.open') && names.includes('state.summary'), names.join(','));
 
-    // 4) tools/call:state.summary
-    const summary = await send(3, 'tools/call', { name: 'state.summary', arguments: {} });
+    // 4) 未打开工作区时调数据工具 → NO_WORKSPACE
+    const noWs = await send(3, 'tools/call', { name: 'state.summary', arguments: {} });
+    const noWsText = String((noWs.result as { content?: { text?: string }[] } | undefined)?.content?.[0]?.text ?? '');
+    check('未打开工作区返回 NO_WORKSPACE', (noWs.result as { isError?: boolean } | undefined)?.isError === true && noWsText.includes('NO_WORKSPACE'), noWsText);
+
+    // 5) workspace.open {path} → 打开工作区(不写死路径,agent 自选)
+    const open = await send(4, 'tools/call', { name: 'workspace.open', arguments: { path: ws } });
+    const openText = String((open.result as { content?: { text?: string }[] } | undefined)?.content?.[0]?.text ?? '');
+    check('workspace.open 返回工作区', (JSON.parse(openText) as { root?: string })?.root === ws, openText);
+
+    // 6) tools/call:state.summary
+    const summary = await send(5, 'tools/call', { name: 'state.summary', arguments: {} });
     const summaryText = String((summary.result as { content?: { text?: string }[] } | undefined)?.content?.[0]?.text ?? '');
     check('tools/call state.summary 返回文本', summaryText.length > 0, summaryText.slice(0, 60));
     check('state.summary 内容含 workspace', summaryText.includes('workspace'));
 
-    // 5) tools/call:bigtable.save → bigtable.list
-    const save = await send(4, 'tools/call', {
+    // 7) tools/call:bigtable.save → bigtable.list
+    const save = await send(6, 'tools/call', {
       name: 'bigtable.save',
       arguments: {
         folder: 'seq',
@@ -102,16 +112,16 @@ async function main(): Promise<void> {
       },
     });
     check('tools/call bigtable.save 成功', (save.result as { isError?: boolean } | undefined)?.isError !== true, JSON.stringify(save.result ?? save.error));
-    const btList = await send(5, 'tools/call', { name: 'bigtable.list', arguments: {} });
+    const btList = await send(7, 'tools/call', { name: 'bigtable.list', arguments: {} });
     const btText = String((btList.result as { content?: { text?: string }[] } | undefined)?.content?.[0]?.text ?? '');
     check('bigtable.list 含 seq', btText.includes('seq'), btText);
 
-    // 6) tools/call:未知工具 → -32602
-    const bad = await send(6, 'tools/call', { name: 'no.such.tool', arguments: {} });
+    // 8) tools/call:未知工具 → -32602
+    const bad = await send(8, 'tools/call', { name: 'no.such.tool', arguments: {} });
     check('未知工具返回 -32602', bad.error?.code === -32602, JSON.stringify(bad.error));
 
-    // 7) 未知方法 → -32601
-    const unknown = await send(7, 'nope', {});
+    // 9) 未知方法 → -32601
+    const unknown = await send(9, 'nope', {});
     check('未知方法返回 -32601', unknown.error?.code === -32601, JSON.stringify(unknown.error));
   } finally {
     // 关闭 stdin 让服务器退出

@@ -1,49 +1,54 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { initWorkspace, type Workspace } from '../../src/core/workspace/workspace';
-import { PipelineEngine } from '../../src/core/pipeline/engine';
+import { join, basename } from 'node:path';
+import { createContext } from '../../src/app/context';
 import type { ApiContext } from '../../src/ipc/handlers';
-import { handleMcpRequest } from '../../src/mcp/server';
+import { handleMcpRequest, type McpSession } from '../../src/mcp/server';
 
 describe('mcp server', () => {
   let dir: string;
-  let ws: Workspace;
-  let ctx: ApiContext;
-  let engine: PipelineEngine | null = null;
+  let session: McpSession;
+  const opened: ApiContext[] = [];
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'mcp-'));
-    ws = initWorkspace(dir);
-    ctx = {
-      ws,
-      dbPath: join(ws.onworkingDir, 'db', 'master.db'),
-      getEngine: () => (engine ??= new PipelineEngine(ws)),
+    let current: ApiContext | null = null;
+    session = {
+      open: (path: string): ApiContext => {
+        const ctx = createContext(path);
+        opened.push(ctx);
+        current = ctx;
+        return ctx;
+      },
+      getCtx: (): ApiContext | null => current,
     };
+    session.open(dir); // 预打开一个工作区,供大多数用例使用
   });
 
   afterEach(() => {
-    engine?.close();
-    engine = null;
+    for (const ctx of opened) ctx.getEngine().close();
+    opened.length = 0;
     rmSync(dir, { recursive: true, force: true });
   });
 
   it('answers initialize with protocol version', async () => {
-    const res = await handleMcpRequest(ctx, { jsonrpc: '2.0', id: 1, method: 'initialize', params: {} });
+    const res = await handleMcpRequest(session, { jsonrpc: '2.0', id: 1, method: 'initialize', params: {} });
     expect(res?.id).toBe(1);
     expect((res?.result as { protocolVersion?: string })?.protocolVersion).toBeTruthy();
   });
 
-  it('lists one tool per api command', async () => {
-    const res = await handleMcpRequest(ctx, { jsonrpc: '2.0', id: 2, method: 'tools/list' });
+  it('lists one tool per api command including workspace.open', async () => {
+    const res = await handleMcpRequest(session, { jsonrpc: '2.0', id: 2, method: 'tools/list' });
     const tools = (res?.result as { tools: { name: string }[] }).tools;
     expect(tools.length).toBeGreaterThan(5);
-    expect(tools.map((t) => t.name)).toContain('state.summary');
+    const names = tools.map((t) => t.name);
+    expect(names).toContain('workspace.open');
+    expect(names).toContain('state.summary');
   });
 
   it('calls a tool and returns the dispatch result as text content', async () => {
-    const res = await handleMcpRequest(ctx, {
+    const res = await handleMcpRequest(session, {
       jsonrpc: '2.0',
       id: 3,
       method: 'tools/call',
@@ -54,10 +59,66 @@ describe('mcp server', () => {
     expect(content[0].text).toContain('workspace');
   });
 
+  it('tools/call workspace.open opens a workspace and returns it', async () => {
+    const res = await handleMcpRequest(session, {
+      jsonrpc: '2.0',
+      id: 4,
+      method: 'tools/call',
+      params: { name: 'workspace.open', arguments: { path: dir } },
+    });
+    const text = String((res?.result as { content?: { text?: string }[] } | undefined)?.content?.[0]?.text ?? '');
+    expect((JSON.parse(text) as { root: string }).root).toBe(dir);
+  });
+
+  it('tools/call workspace.open switches the active workspace', async () => {
+    const dir2 = mkdtempSync(join(tmpdir(), 'mcp2-'));
+    try {
+      await handleMcpRequest(session, {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'workspace.open', arguments: { path: dir2 } },
+      });
+      const s = await handleMcpRequest(session, {
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'tools/call',
+        params: { name: 'state.summary', arguments: {} },
+      });
+      const sText = String((s?.result as { content?: { text?: string }[] } | undefined)?.content?.[0]?.text ?? '');
+      expect(sText).toContain(basename(dir2));
+    } finally {
+      rmSync(dir2, { recursive: true, force: true });
+    }
+  });
+
+  it('returns NO_WORKSPACE for data tools before any workspace.open', async () => {
+    const fresh: McpSession = { open: (p) => createContext(p), getCtx: () => null };
+    const res = await handleMcpRequest(fresh, {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: { name: 'state.summary', arguments: {} },
+    });
+    const content = (res?.result as { content?: { text?: string }[]; isError?: boolean } | undefined);
+    expect(content?.isError).toBe(true);
+    expect(String(content?.content?.[0]?.text ?? '')).toContain('NO_WORKSPACE');
+  });
+
+  it('workspace.open without a path returns -32602', async () => {
+    const res = await handleMcpRequest(session, {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: { name: 'workspace.open', arguments: {} },
+    });
+    expect(res?.error?.code).toBe(-32602);
+  });
+
   it('returns a JSON-RPC error for unknown method or tool', async () => {
-    const unknownMethod = await handleMcpRequest(ctx, { jsonrpc: '2.0', id: 4, method: 'nope' });
+    const unknownMethod = await handleMcpRequest(session, { jsonrpc: '2.0', id: 4, method: 'nope' });
     expect(unknownMethod?.error?.code).toBe(-32601);
-    const unknownTool = await handleMcpRequest(ctx, {
+    const unknownTool = await handleMcpRequest(session, {
       jsonrpc: '2.0',
       id: 5,
       method: 'tools/call',
@@ -67,7 +128,7 @@ describe('mcp server', () => {
   });
 
   it('returns null for notifications (no reply expected)', async () => {
-    const res = await handleMcpRequest(ctx, { jsonrpc: '2.0', method: 'notifications/initialized' });
+    const res = await handleMcpRequest(session, { jsonrpc: '2.0', method: 'notifications/initialized' });
     expect(res).toBeNull();
   });
 });
