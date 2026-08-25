@@ -41,13 +41,14 @@
 | `bigtable.get {folder}` | 读大表配置 |
 | `bigtable.save {folder, config}` | 新建/覆盖大表配置 |
 | `bigtable.sourceFiles {folder}` | 列大表 source/ 目录已登记文件 |
-| `bigtable.previewRows {folder, limit?, offset?}` | 只读预览大表清洗结果（含血缘列） |
+| `bigtable.previewRows {folder, limit?, offset?}` | 只读预览大表清洗结果（含血缘列；`rowCount`=当页行数，`total`=总数） |
 | `bigtable.addFiles {folder, files[], overwrite?}` | 拷贝源文件进大表 source/ 目录（默认不覆盖） |
+| `bigtable.exportCsv {folder, path?, includeLineage?}` | 导出大表为 CSV（缺省不含血缘列，写工作区 `exports/`） |
 
 ### 字段映射（规则 YAML）
 | 命令 | 用途 |
 |---|---|
-| `mapping.save {folder, headerRow?, mappings[], ruleName?}` | 写字段映射规则（唯一改映射的途径）；不同 `ruleName` = 追加第 N 份 |
+| `mapping.save {folder, headerRow?, mappings[], ruleName?, sheetName?}` | 写字段映射规则（唯一改映射的途径）；不同 `ruleName` = 追加第 N 份；`sheetName` = 只导入指定 sheet |
 
 ### 管线
 | 命令 | 用途 |
@@ -72,6 +73,30 @@
 
 完整参数与返回形状见 [docs/cli.md](cli.md) 第 2 节。
 
+### Shell 适配（Windows PowerShell）
+
+环境是 PowerShell（不是 bash）时，注意：`printf`、`&&`、heredoc 不可用。等价写法：
+
+```powershell
+# 单命令(单引号包裹 JSON,避免 $ 与引号被解析)
+'{"reqId":1,"cmd":"state.summary"}' | npm run --silent onw -- open D:/ws
+
+# 多命令:用数组拼接后管道
+@(
+  '{"reqId":1,"cmd":"bigtable.list"}',
+  '{"reqId":2,"cmd":"pipeline.list"}'
+) | npm run --silent onw -- open D:/ws
+
+# 若 JSON 里要带路径等含引号内容,可先写入临时文件再喂:
+$lines = @'
+{"reqId":1,"cmd":"bigtable.get","folder":"seq"}
+'@
+$lines | npm run --silent onw -- open D:/ws
+```
+
+- 交互式：直接 `npm run --silent onw -- open D:/ws`，之后逐行粘贴 JSON 回车即可。
+- 若 `npm` 本身在 PowerShell 管道里有问题，退路是编译产物：`node dist/main/cli/index.js open D:/ws`（先 `npm run build:main`）。
+
 ---
 
 ## 3. 标准工作流
@@ -83,12 +108,13 @@
 3. `bigtable.save {folder, config}` —— 建大表（`config.tableName/fields/autoIncrement`）
 4. `bigtable.addFiles {folder, files[]}` —— 把源文件加进大表 source/ 目录
 5. `setup.detectSource {filePath}` —— 检测源文件表头行与表头
-6. `mapping.save {folder, headerRow, mappings[]}` —— 写字段映射（源表头→大表列）
+6. `mapping.save {folder, headerRow, mappings[], sheetName?}` —— 写字段映射（源表头→大表列）；多 sheet 文件用 `sheetName` 指定要导入的那张，不指定则只导第一张
 7. `pipeline.save` —— 建 clean 管线（`kind:'clean'`, `sourceDir` 指向源目录）
 8. `pipeline.run {id}` —— 清洗入大表
 9. `bigtable.previewRows {folder}` —— 验证清洗结果
-10. `pipeline.save` —— 建 sql-clean 管线（大表→总表），`pipeline.run`
-11. `schema.tables` / `query.run` —— 在总表上查数验证
+10. `bigtable.exportCsv {folder}` —— （可选）导出清洗结果为 CSV，交付放 `<工作区根>/exports/`
+11. `pipeline.save` —— 建 sql-clean 管线（大表→总表），`pipeline.run`
+12. `schema.tables` / `query.run` —— 在总表上查数验证
 
 ---
 
@@ -99,7 +125,12 @@
 - **`overwrite` 缺省 `false`**：`bigtable.addFiles` 遇到同名文件默认跳过（`skipped`）；要覆盖必须显式 `overwrite:true`。
 - **规则 YAML 是 clean 映射的唯一事实来源**：不要指望管线 config 里带映射；改映射只能 `mapping.save`。
 - **`sourceDir` 决定源文件，规则 `sources[].pattern` 决定匹配**：想加别处文件，拷进 sourceDir 或改规则。
-- **血缘列自动附加**：`__source_file` / `__source_row` / `__extracted_at` 每行都有，可用于追溯。
+- **血缘列自动附加**：`__source_file` / `__source_row` / `__extracted_at` 每行都有，可用于追溯；`bigtable.exportCsv` 默认不含它们（`includeLineage:true` 才带）。
+- **多 sheet 文件**：`mapping.save` 传 `sheetName` 指定导入哪张表；不传则每文件只导**第一张**（`sheets.slice(0,1)`）。
+- **导出用命令**：`bigtable.exportCsv` 落盘 CSV，缺省 `<工作区根>/exports/<tableName>.csv`；禁止自己拼 CSV 写文件。
+- **`previewRows` 语义**：`rowCount`=当页行数、`total`=总数（分页时两者不同）。
+- **小计/页脚/空行不会自动剔除**：若源表含「小计」行、签名行、空行，需在后续处理中过滤（当前无内置过滤，属已知限制）。
+- **重复表头会歧义**：同一列名出现两次时按 `sourceHeader` 映射无法区分（属已知限制，需先处理源文件）。
 - **pipeline id 由调用方显式传入**：禁止用 `Date.now()` 等不可复现的 id。
 - **`query.run` 只读**：只允许 `SELECT`/`WITH`，不可用 `DELETE`/`UPDATE`/`INSERT` 等。
 
@@ -118,6 +149,8 @@
 | 看总表有哪些表 | 读 master.db | `schema.tables` |
 | 查总表数据 | 直接开 sqlite | `query.run` |
 | 加源文件 | `cp x.xlsx …/source/` | `bigtable.addFiles` |
+| 导出数据到 CSV | 自己拼字符串写文件 | `bigtable.exportCsv` |
+| 指定导入某个 sheet | 只导第一张将就 | `mapping.save` 的 `sheetName` |
 | 改映射 | 手写 rules/*.yaml | `mapping.save` |
 | 建/改管线 | 手写 pipelines/*.json | `pipeline.save` |
 
@@ -133,3 +166,4 @@
 | `FILE_NOT_FOUND` | `bigtable.addFiles` 源文件不存在 | 检查文件路径 |
 | `QUERY_NOT_SELECT` | `query.run` 非 SELECT/WITH | 改查询语句 |
 | `TEMPLATE_NOT_FOUND` | 模板不存在 | `template.list` 查名 |
+| 环境：`better-sqlite3` ABI 不匹配 | 报 `NODE_MODULE_VERSION` 不符 | 跑 `npm run rebuild:node`（测试/CLI 用）；跑 Electron 应用前需 `npm run rebuild:electron`（两者互斥，按用途重建） |

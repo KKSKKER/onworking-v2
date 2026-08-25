@@ -65,6 +65,7 @@ echo '{"reqId":1,"cmd":"workspace.open","path":"D:/ws"}' | npm run onw -- open D
 | `bigtable.sourceFiles` | `{ folder }` | `string[]`（源文件绝对路径） |
 | `bigtable.previewRows` | `{ folder, limit?, offset? }` | `{ columns, rows, rowCount, total }`（只读查大表 DB） |
 | `bigtable.addFiles` | `{ folder, files: string[], overwrite? }` | `{ added, overwritten, skipped }`（拷贝源文件到大表 `source/` 目录） |
+| `bigtable.exportCsv` | `{ folder, path?, includeLineage? }` | `{ file, rows }`（导出 CSV，缺省不含血缘列、写工作区 `exports/`） |
 
 ```bash
 # 预览大表清洗结果(前 20 行)
@@ -88,7 +89,7 @@ echo '{"reqId":1,"cmd":"bigtable.addFiles","folder":"seq","files":["D:/data/a.xl
 
 | 命令 | 载荷 | 返回 |
 |---|---|---|
-| `mapping.save` | `{ folder, headerRow?, mappings: FieldMapping[], ruleName? }` | `{ ruleFile: string }` |
+| `mapping.save` | `{ folder, headerRow?, mappings: FieldMapping[], ruleName?, sheetName? }` | `{ ruleFile: string }`（`sheetName` 指定只导入某个 sheet） |
 
 - `mappings`：`{ sourceHeader, outputName, transform }[]`，`transform ∈ 'none' | 'to-cents' | 'normalize-date' | 'trim'`
 - `ruleName` 缺省 `<folder>_rule`；传不同 `ruleName` = 追加第 N 份映射（不覆盖）。clean 运行时会合并所有规则（按 source key / outputName 去重）。
@@ -228,8 +229,18 @@ echo '{"reqId":1,"cmd":"mapping.save","folder":"seq","headerRow":1,"mappings":[{
 echo '{"reqId":1,"cmd":"pipeline.save","config":{"kind":"clean","id":"c1","label":"seq 清洗","bigTableFolder":"seq","sourceDir":"D:/data","createdAt":"2026-08-25"}}' \
   | npm run onw -- open D:/ws
 
-# 4) 清洗入大表 → 预览结果 → 临时查询
+# 4) 清洗入大表 → 预览结果 → 导出 CSV → 临时查询
 echo '{"reqId":1,"cmd":"pipeline.run","id":"c1"}' | npm run onw -- open D:/ws
 echo '{"reqId":1,"cmd":"bigtable.previewRows","folder":"seq"}' | npm run onw -- open D:/ws
+echo '{"reqId":1,"cmd":"bigtable.exportCsv","folder":"seq"}' | npm run onw -- open D:/ws
 echo '{"reqId":1,"cmd":"query.run","sql":"SELECT * FROM seq LIMIT 5"}' | npm run onw -- open D:/ws
 ```
+
+---
+
+## 6. 已知限制
+
+- **多 sheet 只默认导第一张**：`mapping.save` 不传 `sheetName` 时，每个文件只导入 `sheets.slice(0,1)`（第一张表）。
+- **小计/页脚/空行不自动剔除**：源表若含「小计」行、签名行、空行，需在导出后自行过滤（当前无内置过滤规则）。
+- **重复表头歧义**：同一列名出现两次时，`sourceHeader` 映射无法区分是哪一列。
+- **`previewRows` 分页语义**：`rowCount` = 当页行数，`total` = 总行数；一次导全量请用 `bigtable.exportCsv`。
