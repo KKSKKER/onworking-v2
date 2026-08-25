@@ -8,6 +8,8 @@ export interface CliBridgeOptions {
   /** 要 spawn 的命令,如 'node';args 前段,如 ['dist/main/cli/index.js','open'];open 时追加工作区路径。 */
   command: string;
   args: string[];
+  /** 是否经 shell 启动。spawn 真实 exe(如 node)必须 false,否则路径带空格(Program Files)会被拆坏;测试 spawn npm 才用 true。 */
+  shell?: boolean;
 }
 
 export interface CliBridge {
@@ -39,7 +41,7 @@ export function createCliBridge(opts: CliBridgeOptions): CliBridge {
   function open(wsPath: string): void {
     if (child && !child.killed) child.kill();
     child = spawn(opts.command, [...opts.args, wsPath], {
-      shell: process.platform === 'win32',
+      shell: opts.shell ?? false,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     stdoutBuf = '';

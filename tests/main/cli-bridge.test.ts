@@ -13,7 +13,7 @@ describe('cli-bridge', () => {
 
   it('spawns the CLI, forwards requests, and delivers response lines', async () => {
     const ws = mkdtempSync(join(tmpdir(), 'bridge-'));
-    const bridge = createCliBridge({ command: 'npm', args: ['run', '--silent', 'onw', '--', 'open'] });
+    const bridge = createCliBridge({ command: 'npm', args: ['run', '--silent', 'onw', '--', 'open'], shell: process.platform === 'win32' });
     const got: string[] = [];
     bridge.onLine((l) => got.push(l));
     bridge.open(ws);
