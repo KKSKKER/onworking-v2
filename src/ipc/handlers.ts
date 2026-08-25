@@ -30,6 +30,7 @@ import {
   toolPreviewCleanResult,
   toolSaveTemplate,
   toolAddFilesToBigTable,
+  toolExportBigTableCsv,
   toolQuery,
   toolGetProjectState,
 } from '../core/agent/tools';
@@ -66,6 +67,8 @@ export const handlers: { [K in SessionCommands]: HandlerFor<K> } = {
     toolPreviewCleanResult(ctx.ws, p.folder, { limit: p.limit, offset: p.offset }),
   'bigtable.addFiles': async (ctx, p) =>
     toolAddFilesToBigTable(ctx.ws, p.folder, p.files, { overwrite: p.overwrite }),
+  'bigtable.exportCsv': async (ctx, p) =>
+    toolExportBigTableCsv(ctx.ws, p.folder, { path: p.path, includeLineage: p.includeLineage }),
 
   'pipeline.list': async (ctx) => listPipelines(ctx.ws),
   'pipeline.save': async (ctx, p) => {

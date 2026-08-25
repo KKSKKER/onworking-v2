@@ -48,6 +48,8 @@ async function mockDispatch(command: ApiCommand): Promise<ApiResult<unknown>> {
       });
     case 'bigtable.addFiles':
       return ok({ added: command.files, overwritten: [], skipped: [] });
+    case 'bigtable.exportCsv':
+      return ok({ file: `D:/演示工作区/exports/${command.folder}.csv`, rows: 12345 });
     case 'pipeline.list':
       return ok(['c1', 'q1']);
     case 'pipeline.save':

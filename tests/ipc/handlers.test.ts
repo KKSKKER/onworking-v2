@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as XLSX from 'xlsx';
@@ -131,6 +131,17 @@ describe('ipc handlers', () => {
   it('query.run rejects non-SELECT sql', async () => {
     const res = await dispatch({ cmd: 'query.run', sql: 'DELETE FROM seq' }, ctx);
     expect(res.ok).toBe(false);
+  });
+
+  it('bigtable.exportCsv exports via ipc', async () => {
+    await dispatch({ cmd: 'pipeline.run', id: 'c1' }, ctx);
+    const res = await dispatch({ cmd: 'bigtable.exportCsv', folder: 'seq' }, ctx);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      const d = res.data as { file: string; rows: number };
+      expect(d.rows).toBe(1);
+      expect(existsSync(d.file)).toBe(true);
+    }
   });
 
   it('bigtable.addFiles copies files into the big table source dir via ipc', async () => {

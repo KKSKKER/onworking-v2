@@ -1,8 +1,8 @@
 // src/core/agent/tools.ts
 // AI 工具函数层:SVG 泳道图里 AI(Agent)调用的每个 tool 封装成一个函数。
 // 入参 AI 友好,返回结构化结果(含下一步可用的项目状态)。底层复用 core。
-import { copyFileSync, mkdirSync, existsSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { copyFileSync, mkdirSync, existsSync, writeFileSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import { openWorkspace, type Workspace } from '../workspace/workspace';
 import {
   saveBigTableConfig,
@@ -39,6 +39,45 @@ export function toolGetProjectState(ws: Workspace): string {
 /** tool: 创建大表。 */
 export function toolCreateBigTable(ws: Workspace, folder: string, config: BigTableConfig): void {
   saveBigTableConfig(ws, folder, config);
+}
+
+/** CSV 字段转义(RFC 4180):含逗号/引号/换行时用双引号包裹,内部引号翻倍。 */
+function csvEscape(v: unknown): string {
+  if (v === null || v === undefined) return '';
+  const s = String(v);
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/** tool: 导出大表数据到 CSV 文件。缺省不含血缘列,写 `<工作区根>/exports/<tableName>.csv`。未清洗/空表导出空 CSV(表头取配置字段名)。 */
+export function toolExportBigTableCsv(
+  ws: Workspace,
+  folder: string,
+  opts?: { path?: string; includeLineage?: boolean },
+): { file: string; rows: number } {
+  const cfg = loadBigTableConfig(ws, folder);
+  const dbPath = bigTableDbPath(ws, folder);
+  let rows: Record<string, unknown>[] = [];
+  if (existsSync(dbPath)) {
+    const db = openDatabase(dbPath);
+    try {
+      const tableExists = !!db
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?")
+        .get(cfg.tableName);
+      if (tableExists) {
+        rows = db.prepare(`SELECT * FROM "${cfg.tableName}"`).all() as Record<string, unknown>[];
+      }
+    } finally {
+      db.close();
+    }
+  }
+  const allCols = rows.length > 0 ? Object.keys(rows[0]) : cfg.fields.map((f) => f.name);
+  const cols = opts?.includeLineage ? allCols : allCols.filter((c) => !c.startsWith('__'));
+  const lines = [cols.join(',')];
+  for (const r of rows) lines.push(cols.map((c) => csvEscape(r[c])).join(','));
+  const file = opts?.path ?? join(ws.root, 'exports', `${cfg.tableName}.csv`);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, lines.join('\n'), 'utf-8');
+  return { file, rows: rows.length };
 }
 
 /** tool: 给大表增加源文件 —— 拷贝到大表自己的 source/ 目录。同名文件:overwrite=false(缺省)跳过,overwrite=true 覆盖。 */

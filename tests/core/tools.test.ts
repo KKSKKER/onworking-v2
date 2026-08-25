@@ -7,7 +7,7 @@ import { initWorkspace, type Workspace } from '../../src/core/workspace/workspac
 import { saveBigTableConfig } from '../../src/core/bigtable/store';
 import { savePipeline } from '../../src/core/pipeline/store';
 import { saveRule } from '../../src/core/rule/store';
-import { toolRunPipeline, toolRunPipelines, toolPreviewCleanResult, toolSaveTemplate, toolSetMapping, toolAddFilesToBigTable } from '../../src/core/agent/tools';
+import { toolRunPipeline, toolRunPipelines, toolPreviewCleanResult, toolSaveTemplate, toolSetMapping, toolAddFilesToBigTable, toolExportBigTableCsv } from '../../src/core/agent/tools';
 import { listTemplates } from '../../src/core/template/store';
 import { listRules } from '../../src/core/rule/store';
 import { PipelineEngine } from '../../src/core/pipeline/engine';
@@ -160,5 +160,29 @@ describe('tools', () => {
 
   it('toolAddFilesToBigTable throws FILE_NOT_FOUND for a missing source file', () => {
     expect(() => toolAddFilesToBigTable(ws, 'seq', [join(dir, 'nope.xlsx')])).toThrow(/not found/);
+  });
+
+  it('toolExportBigTableCsv exports the big table to a CSV file', async () => {
+    await toolRunPipeline(ws, 'c1');
+    const res = toolExportBigTableCsv(ws, 'seq');
+    expect(res.rows).toBe(2);
+    expect(existsSync(res.file)).toBe(true);
+    expect(res.file).toContain('exports');
+    const header = readFileSync(res.file, 'utf-8').split('\n')[0];
+    expect(header).toContain('date');
+    expect(header).toContain('debit');
+    expect(header).not.toContain('__source_file'); // 默认不带血缘列
+    expect(readFileSync(res.file, 'utf-8')).toContain('2024-01');
+
+    // includeLineage:true 带血缘列
+    const withLineage = toolExportBigTableCsv(ws, 'seq', { includeLineage: true });
+    expect(readFileSync(withLineage.file, 'utf-8').split('\n')[0]).toContain('__source_file');
+  });
+
+  it('toolExportBigTableCsv writes to a caller-supplied path', () => {
+    const custom = join(dir, 'out.csv');
+    const res = toolExportBigTableCsv(ws, 'seq', { path: custom });
+    expect(res.file).toBe(custom);
+    expect(existsSync(custom)).toBe(true);
   });
 });
