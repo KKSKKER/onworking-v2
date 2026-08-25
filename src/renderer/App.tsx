@@ -5,7 +5,7 @@ import 'dockview-react/dist/styles/dockview.css';
 import { TopBar, type ShellMode } from './shell/TopBar';
 import { SidebarLeft } from './shell/SidebarLeft';
 import { SidebarRight } from './shell/SidebarRight';
-import { BottomPanel } from './shell/BottomPanel';
+import { CliOutputPanel } from './shell/CliOutputPanel';
 import { ResizablePanel } from './shell/ResizableSidebar';
 import { SelectionProvider } from './state/SelectionContext';
 import { dockviewComponents, VIEWS } from './views/registry';
@@ -57,7 +57,7 @@ export function App() {
           </ResizablePanel>
         </div>
         <ResizablePanel axis="y" initial={130} min={60} max={400} dragEdge="top">
-          <BottomPanel />
+          <CliOutputPanel />
         </ResizablePanel>
       </div>
     </SelectionProvider>
