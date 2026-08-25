@@ -835,74 +835,152 @@ git commit -m "feat(bigtable): bigtable.config 读命令 —— 返回选中大�
 
 ---
 
-### Task 11: 选中对象配置实时渲染视图（`BigTableDetailView`）
+### Task 11: 选中对象配置实时渲染（扩展 `BigTableSettingsView`，不新建视图）
+
+> 与现有功能重合即合并：现「大表字段设置」已展示大表 config，本次**在其内扩展**规则 YAML + 关联管线展示，不新建 `BigTableDetailView`、不改 registry。
 
 **Files:**
-- Create: `src/renderer/views/BigTableDetailView.tsx`
-- Modify: `src/renderer/views/registry.tsx`（注册视图）
+- Modify: `src/renderer/views/BigTableSettingsView.tsx`（数据源换 `bigtable.config`，加规则/管线展示区）
+- Modify: `src/renderer/views/registry.tsx`（标题改为「大表配置」）
 - Modify: `src/renderer/views/PreviewView.tsx`（选中源文件自动加载）
 - Test: typecheck + 冒烟
 
 **Interfaces:**
 - Consumes: `sendCli`/`useApi`（Task 4/5）、`bigtable.config`（Task 10）、`workspace:changed` 自动刷新（Task 5）
 
-- [ ] **Step 1: 创建 `BigTableDetailView.tsx`**
+- [ ] **Step 1: 扩展 `BigTableSettingsView.tsx`**
+
+数据源从 `bigtable.get` 换成 `bigtable.config`（含 config + rules + pipelines）；字段编辑逻辑不变；在字段表下加「规则 YAML」「关联管线」两个只读区：
 
 ```tsx
-// 视图:选中大表详情 —— 实时渲染关联配置文件(大表配置 + 规则 YAML + 关联管线)。
+// 视图:大表配置 —— 字段可编辑(bigtable.save) + 规则 YAML/关联管线只读。
 // useApi 订阅 workspace:changed,AI/任何命令改了文件即自动刷新。
-import { useSelection } from '../state/SelectionContext';
+import { useEffect, useState } from 'react';
+import type { BigTableConfig } from '../../core/bigtable/schema';
 import { useApi } from './useApi';
+import { useSelection } from '../state/SelectionContext';
+import { sendCli } from '../cli';
+
+const FIELD_TYPES = ['TEXT', 'INTEGER', 'REAL'] as const;
 
 interface BigTableContext {
-  config: { tableName: string; fields: { name: string; type: string; order: number }[] };
-  rules: { name: string; sources: { pattern: string; sheetName?: string; headerRow: number }[]; fields: { sourceHeader: string; outputName: string; order: number }[] }[];
+  config: BigTableConfig;
+  rules: {
+    name: string;
+    sources: { pattern: string; sheetName?: string; headerRow: number }[];
+    fields: { sourceHeader: string; outputName: string; order: number }[];
+  }[];
   pipelines: { id: string; kind: string; label: string }[];
 }
 
-export function BigTableDetailView() {
+export function BigTableSettingsView() {
   const { selectedFolder } = useSelection();
-  const { data, error } = useApi<BigTableContext>(
-    selectedFolder ? { cmd: 'bigtable.config', folder: selectedFolder } : { cmd: 'bigtable.list' },
-    !!selectedFolder,
+  const { data: folders } = useApi<string[]>({ cmd: 'bigtable.list' });
+  const folder = selectedFolder ?? folders?.[0] ?? null;
+
+  const { data: ctx, reload } = useApi<BigTableContext>(
+    folder ? { cmd: 'bigtable.config', folder } : { cmd: 'bigtable.list' },
+    !!folder,
   );
-  if (!selectedFolder) return <div style={{ padding: 12 }}>在左侧栏选择一个大表,实时查看它的配置。</div>;
-  if (error) return <div style={{ padding: 12, color: 'red' }}>{error}</div>;
-  if (!data) return <div style={{ padding: 12 }}>加载中…</div>;
+  const [cfg, setCfg] = useState<BigTableConfig | null>(null);
+  const [saveMsg, setSaveMsg] = useState('');
+
+  useEffect(() => {
+    if (ctx) setCfg(JSON.parse(JSON.stringify(ctx.config)) as BigTableConfig);
+    setSaveMsg('');
+  }, [ctx]);
+
+  async function handleSave() {
+    if (!cfg || !folder) return;
+    const res = await sendCli({ cmd: 'bigtable.save', folder, config: cfg });
+    setSaveMsg(res.ok ? '已保存 ✓' : `保存失败: ${res.error.message}`);
+  }
+
+  if (!folder) {
+    return <div style={{ padding: 12 }}>在左侧栏选择一个大表开始。</div>;
+  }
 
   return (
     <div style={{ padding: 12 }}>
       <div style={{ marginBottom: 8 }}>
-        <b>大表: {selectedFolder}</b> 表名 <code>{data.config.tableName}</code>
+        大表: <b>{folder}</b>
+        <button onClick={reload}>刷新</button>
       </div>
-      <div style={{ marginBottom: 8 }}>
-        <b>字段({data.config.fields.length}):</b>{' '}
-        {data.config.fields.map((f) => `${f.name}:${f.type}`).join(' · ') || '(空)'}
-      </div>
-      <div style={{ marginBottom: 8 }}>
-        <b>规则 YAML({data.rules.length}):</b>
-        {data.rules.map((r, i) => (
-          <pre key={i} style={{ background: '#f6f8fa', padding: 8, overflow: 'auto', fontSize: 12 }}>
-            {JSON.stringify(r, null, 2)}
-          </pre>
-        ))}
-      </div>
-      <div>
-        <b>关联管线({data.pipelines.length}):</b>
-        {data.pipelines.map((p) => (
-          <div key={p.id}>{p.id} ({p.kind}) {p.label}</div>
-        ))}
-      </div>
+      {cfg ? (
+        <>
+          <div style={{ marginBottom: 8 }}>
+            表名 <input value={cfg.tableName} onChange={(e) => setCfg({ ...cfg, tableName: e.target.value })} />{' '}
+            自增主键{' '}
+            <input type="checkbox" checked={cfg.autoIncrement} onChange={(e) => setCfg({ ...cfg, autoIncrement: e.target.checked })} />
+          </div>
+          <table border={1} cellPadding={4} cellSpacing={0}>
+            {/* 字段编辑表格：与现有完全一致(setField/addField/removeField 逻辑保留) */}
+            <tbody>
+              {cfg.fields.map((f, i) => (
+                <tr key={f.name + i}>
+                  <td><input value={f.name} onChange={(e) => setField(i, 'name', e.target.value)} /></td>
+                  <td>
+                    <select value={f.type} onChange={(e) => setField(i, 'type', e.target.value)}>
+                      {FIELD_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </td>
+                  <td><input type="checkbox" checked={!!f.primaryKey} onChange={(e) => setField(i, 'primaryKey', e.target.checked)} /></td>
+                  <td>{f.order}</td>
+                  <td><button onClick={() => removeField(i)}>✕</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ marginTop: 8 }}>
+            <button onClick={addField}>+ 新增字段</button>{' '}
+            <button onClick={handleSave}>💾 保存设置</button>{' '}
+            <span>{saveMsg}</span>
+          </div>
+
+          <hr style={{ margin: '16px 0' }} />
+          <div style={{ marginBottom: 8 }}>
+            <b>规则 YAML({ctx?.rules.length ?? 0}):</b>
+            {(ctx?.rules ?? []).map((r, i) => (
+              <pre key={i} style={{ background: '#f6f8fa', padding: 8, overflow: 'auto', fontSize: 12 }}>
+                {JSON.stringify(r, null, 2)}
+              </pre>
+            ))}
+          </div>
+          <div>
+            <b>关联管线({ctx?.pipelines.length ?? 0}):</b>
+            {(ctx?.pipelines ?? []).map((p) => (
+              <div key={p.id}>{p.id} ({p.kind}) {p.label}</div>
+            ))}
+          </div>
+        </>
+      ) : (
+        <p>加载中…</p>
+      )}
     </div>
   );
+
+  function setField(index: number, key: 'name' | 'type' | 'primaryKey', value: unknown) {
+    if (!cfg) return;
+    const fields = cfg.fields.map((f, i) => (i === index ? { ...f, [key]: value } : f));
+    setCfg({ ...cfg, fields });
+  }
+  function addField() {
+    if (!cfg) return;
+    const order = cfg.fields.length + 1;
+    setCfg({ ...cfg, fields: [...cfg.fields, { name: `field${order}`, type: 'TEXT', order }] });
+  }
+  function removeField(index: number) {
+    if (!cfg) return;
+    setCfg({ ...cfg, fields: cfg.fields.filter((_, i) => i !== index) });
+  }
 }
 ```
 
-- [ ] **Step 2: 注册视图 + PreviewView 自动加载**
+- [ ] **Step 2: registry 改标题 + PreviewView 自动加载**
 
-`src/renderer/views/registry.tsx`：import 加 `BigTableDetailView`；`VIEWS` 加 `{ id: 'bigtable-detail', title: '大表配置', component: BigTableDetailView }`。
+`src/renderer/views/registry.tsx`：`{ id: 'bigtable-settings', title: '大表字段设置', ... }` → `{ id: 'bigtable-settings', title: '大表配置', ... }`（import 不变，仍是 `BigTableSettingsView`）。
 
-`src/renderer/views/PreviewView.tsx`：加选中源文件即自动加载（不再依赖点按钮）：
+`src/renderer/views/PreviewView.tsx`：加选中源文件即自动加载：
 
 ```tsx
 useEffect(() => {
@@ -921,13 +999,13 @@ Expected: PASS。
 
 - [ ] **Step 4: 冒烟（浏览器 dev / Electron）**
 
-`npm run dev:renderer` 或 `npm run dev`：选中一个大表 → 「大表配置」视图实时显示字段/规则 YAML/关联管线；用 CLI 或 MCP 改一下规则/管线文件 → 视图自动刷新（workspace:changed 生效）。
+`npm run dev:renderer` 或 `npm run dev`：选中一个大表 → 「大表配置」视图实时显示字段(可编辑)/规则 YAML/关联管线；用 CLI 或 MCP 改一下规则/管线文件 → 视图自动刷新（workspace:changed 生效）。
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/renderer/views/BigTableDetailView.tsx src/renderer/views/registry.tsx src/renderer/views/PreviewView.tsx
-git commit -m "feat(renderer): BigTableDetailView 实时渲染选中大表关联配置;PreviewView 选中即加载"
+git add src/renderer/views/BigTableSettingsView.tsx src/renderer/views/registry.tsx src/renderer/views/PreviewView.tsx
+git commit -m "feat(renderer): BigTableSettingsView 扩展实时渲染规则YAML/关联管线(合并,不新建视图);PreviewView 选中即加载"
 ```
 
 ---
