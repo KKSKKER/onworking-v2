@@ -174,3 +174,9 @@ export async function dispatch(command: ApiCommand, ctx: ApiContext): Promise<Ap
     return { ok: false, error: { code: appErr.code, message: appErr.message } };
   }
 }
+
+/** 带 reqId 信封的分发(CLI 与 Electron 传输层共用):请求带 reqId,响应回填同 reqId。 */
+export async function dispatchIpc(req: IpcRequest, ctx: ApiContext): Promise<IpcResponse> {
+  const result = await dispatch(req, ctx);
+  return { reqId: req.reqId, result };
+}

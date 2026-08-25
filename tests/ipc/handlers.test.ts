@@ -7,7 +7,7 @@ import { initWorkspace, type Workspace } from '../../src/core/workspace/workspac
 import { saveBigTableConfig } from '../../src/core/bigtable/store';
 import { savePipeline } from '../../src/core/pipeline/store';
 import { PipelineEngine } from '../../src/core/pipeline/engine';
-import { dispatch, type ApiContext } from '../../src/ipc/handlers';
+import { dispatch, dispatchIpc, type ApiContext } from '../../src/ipc/handlers';
 
 describe('ipc handlers', () => {
   let dir: string;
@@ -125,6 +125,13 @@ describe('ipc handlers', () => {
   it('query.run rejects non-SELECT sql', async () => {
     const res = await dispatch({ cmd: 'query.run', sql: 'DELETE FROM seq' }, ctx);
     expect(res.ok).toBe(false);
+  });
+
+  it('dispatchIpc echoes reqId so async requests can be reconciled', async () => {
+    const res = await dispatchIpc({ cmd: 'state.summary', reqId: 42 }, ctx);
+    expect(res.reqId).toBe(42);
+    if (!('result' in res)) throw new Error('expected a result envelope');
+    expect(res.result.ok).toBe(true);
   });
 
   it('setup.preview returns headers and rows for a source file', async () => {

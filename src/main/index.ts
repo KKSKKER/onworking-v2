@@ -34,17 +34,20 @@ function createWindow(): void {
 }
 
 ipcMain.handle('onw:invoke', async (_event, command: { cmd: string; [k: string]: unknown }) => {
-  if (command?.cmd === 'workspace.open') {
-    ctx = createContext(String(command.path));
+  const reqId = command && typeof command === 'object' && 'reqId' in command
+    ? (command as { reqId?: number }).reqId
+    : undefined;
+  const open = (path: string) => {
+    ctx = createContext(path);
     return { ok: true, data: ctx.ws };
-  }
+  };
+  if (command?.cmd === 'workspace.open') return open(String(command.path));
   if (command?.cmd === 'workspace.pick') {
     const res = await dialog.showOpenDialog({ properties: ['openDirectory'] });
     if (res.canceled || !res.filePaths[0]) {
       return { ok: false, error: { code: 'CANCELLED', message: 'cancelled' } };
     }
-    ctx = createContext(res.filePaths[0]);
-    return { ok: true, data: ctx.ws };
+    return open(res.filePaths[0]);
   }
   if (!ctx) {
     return { ok: false, error: { code: 'NO_WORKSPACE', message: 'no workspace opened' } };
@@ -53,7 +56,8 @@ ipcMain.handle('onw:invoke', async (_event, command: { cmd: string; [k: string]:
   if (win) {
     ctx.emitProgress = (payload) => win.webContents.send('onw:progress', payload);
   }
-  return dispatch(command as never, ctx);
+  const result = await dispatch(command as never, ctx);
+  return reqId === undefined ? result : { reqId, result };
 });
 
 app.whenReady().then(() => {
