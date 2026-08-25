@@ -50,7 +50,7 @@ export function SqlView() {
   }
 
   return (
-    <div style={{ padding: 12 }}>
+    <div style={{ padding: 12, height: '100%', boxSizing: 'border-box' }}>
       <div style={{ display: 'flex', gap: 12, height: '100%' }}>
         <div style={{ minWidth: 160 }}>
           <b>🗂 表</b>
@@ -78,12 +78,10 @@ export function SqlView() {
           {result && result.rows.length > 0 && (
             <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
               <PaginationBar page={page} pageSize={PAGE_SIZE} total={result.rowCount} onPageChange={setPage} />
-              <div style={{ flex: 1, overflow: 'auto' }}>
-                <DataTable
-                  columns={result.columns}
-                  rows={result.rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)}
-                />
-              </div>
+              <DataTable
+                columns={result.columns}
+                rows={result.rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)}
+              />
             </div>
           )}
           {result && result.rows.length === 0 && <p style={{ color: '#8b949e' }}>查询成功,0 行结果。</p>}

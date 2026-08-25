@@ -48,7 +48,7 @@ export function DataTable({ columns, rows }: DataTableProps) {
   const totalWidth = columns.reduce((s, c) => s + (widths[c] ?? 160), 0);
 
   return (
-    <div style={{ overflow: 'auto', maxHeight: '100%' }}>
+    <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
       <table style={{ borderCollapse: 'collapse', tableLayout: 'fixed', width: totalWidth }}>
         <thead>
           <tr>
