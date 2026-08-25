@@ -69,7 +69,28 @@ tools/call { "name": "workspace.open", "arguments": { "path": "D:/某工作区" 
 
 之后随时再调 `workspace.open` 切换工作区。未打开就调数据工具会返回 `NO_WORKSPACE`。
 
-## 5. 注意事项
+## 5. 操作手册怎么给 Agent
+
+MCP 侧已内置（`src/mcp/manual.ts`），Agent 可读：
+
+```
+resources/read  { "uri": "onworking://manual" }   → 返回操作须知(markdown)
+prompts/get     { "name": "onworking-manual" }    → 同上,以提示词形式
+```
+
+**但注意：MCP 无法「强制」模型读资源/提示词**——Agent 不去读就不会生效。硬保证是把须知注入**客户端系统提示**：
+
+| 客户端 | 做法 |
+|---|---|
+| Claude Desktop | 设置 → 自定义指令(Custom Instructions) 里贴 `resources/read` 返回的须知 |
+| Claude Code | 项目 `CLAUDE.md` / `AGENTS.md` 里放手册,或启动时作为 system prompt |
+| 自研客户端 | 把 `MANUAL_TEXT` 注入 system prompt(和工具描述一起) |
+
+**建议组合**：在客户端指令里写「每次会话第一步 `resources/read onworking://manual` 读操作须知并严格遵守」——这样既有 MCP 侧可取，又通过客户端指令让 Agent 每次都去读。
+
+> 须知是 `docs/agent-manual.md` 的浓缩版；完整手册见仓库 `docs/agent-manual.md`。
+
+## 6. 注意事项
 
 - **路径用绝对路径**：`args` 里的 `app.asar` 路径是相对的，客户端工作目录不定，务必写成绝对路径。
 - **ABI**：打包时 electron-builder 会把 better-sqlite3 重建成 Electron 版（`npm run dist` 后本地 node_modules 是 Electron ABI，`npm run dev`/测试前需 `npm run rebuild:node`）。打包后的 CLI 用应用自带 Node，ABI 天然匹配，无需处理。
