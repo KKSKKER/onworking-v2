@@ -96,22 +96,24 @@ export async function runCleanPipeline(
     });
   }
 
-  // 确定有效映射与来源(优先规则 YAML,否则 cfg)
+  // 映射与来源唯一来自规则 YAML
   const rules = loadRules(ws, cfg.bigTableFolder);
-  let mappings: FieldMapping[] | null = null;
-  let sources: CompiledSource[] | null = null;
-  if (rules.length > 0) {
-    const compiled = compileRule(rules[0]);
-    mappings = compiled.mappings;
-    sources = compiled.sources;
-  } else if (cfg.headerRow && cfg.mappings) {
-    mappings = cfg.mappings;
-  }
-  if (!mappings || mappings.length === 0) {
+  if (rules.length === 0) {
     throw new AppError({
       module: 'pipeline/clean',
-      code: 'CLEAN_NO_RULE_OR_MAPPING',
-      message: `big table ${cfg.bigTableFolder} has no rule YAML and cfg has no mappings`,
+      code: 'CLEAN_NO_RULE',
+      message: `big table ${cfg.bigTableFolder} has no rule YAML`,
+      data: { bigTableFolder: cfg.bigTableFolder },
+    });
+  }
+  const compiled = compileRule(rules[0]);
+  const mappings = compiled.mappings;
+  const sources = compiled.sources;
+  if (mappings.length === 0) {
+    throw new AppError({
+      module: 'pipeline/clean',
+      code: 'CLEAN_NO_FIELDS',
+      message: `rule for ${cfg.bigTableFolder} has no included fields`,
       data: { bigTableFolder: cfg.bigTableFolder },
     });
   }
@@ -122,43 +124,24 @@ export async function runCleanPipeline(
   const extractedAt = new Date().toISOString();
   const allRows: Record<string, unknown>[] = [];
 
-  if (sources) {
-    // 规则驱动:按规则 sources 处理
-    let processedFiles = 0;
-    for (const source of sources) {
-      const re = patternToRegex(source.pattern);
-      const matched = files.filter((f) => re.test(f.relPath) || re.test(f.path));
-      for (const file of matched) {
-        processedFiles++;
-        onProgress?.({ stage: 'parse', percent: Math.round((processedFiles / files.length) * 40) });
-        const sheets =
-          file.path.toLowerCase().endsWith('.csv')
-            ? parseCsvFile(file.path, { headerRow: source.headerRow })
-            : parseExcelFile(file.path, { headerRow: source.headerRow });
-        const target = source.sheetName
-          ? sheets.filter((s) => s.sheetName === source.sheetName)
-          : sheets.slice(0, 1);
-        for (const sheet of target) {
-          const mapped = applyMapping(sheet, mappings);
-          attachLineage(mapped, { sourceFile: file.path, sourceRow: source.headerRow + 1 }, extractedAt);
-          allRows.push(...mapped);
-        }
-      }
-    }
-  } else {
-    // cfg 驱动(无规则)
-    const headerRow = (cfg.headerRow as number) ?? 1;
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      onProgress?.({ stage: 'parse', percent: Math.round((i / files.length) * 40) });
+  // 按规则 sources 处理
+  let processedFiles = 0;
+  for (const source of sources) {
+    const re = patternToRegex(source.pattern);
+    const matched = files.filter((f) => re.test(f.relPath) || re.test(f.path));
+    for (const file of matched) {
+      processedFiles++;
+      onProgress?.({ stage: 'parse', percent: Math.round((processedFiles / files.length) * 40) });
       const sheets =
         file.path.toLowerCase().endsWith('.csv')
-          ? parseCsvFile(file.path, { headerRow })
-          : parseExcelFile(file.path, { headerRow });
-      const target = cfg.sheetName ? sheets.filter((s) => s.sheetName === cfg.sheetName) : sheets.slice(0, 1);
+          ? parseCsvFile(file.path, { headerRow: source.headerRow })
+          : parseExcelFile(file.path, { headerRow: source.headerRow });
+      const target = source.sheetName
+        ? sheets.filter((s) => s.sheetName === source.sheetName)
+        : sheets.slice(0, 1);
       for (const sheet of target) {
         const mapped = applyMapping(sheet, mappings);
-        attachLineage(mapped, { sourceFile: file.path, sourceRow: headerRow + 1 }, extractedAt);
+        attachLineage(mapped, { sourceFile: file.path, sourceRow: source.headerRow + 1 }, extractedAt);
         allRows.push(...mapped);
       }
     }

@@ -6,6 +6,7 @@ import * as XLSX from 'xlsx';
 import { initWorkspace, type Workspace } from '../../src/core/workspace/workspace';
 import { saveBigTableConfig } from '../../src/core/bigtable/store';
 import { savePipeline } from '../../src/core/pipeline/store';
+import { saveRule } from '../../src/core/rule/store';
 import { toolRunPipeline, toolRunPipelines } from '../../src/core/agent/tools';
 
 describe('tools', () => {
@@ -34,17 +35,22 @@ describe('tools', () => {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, wsx, 'Sheet1');
     XLSX.writeFile(wb, join(sourceDir, 'a.xlsx'));
+    saveRule(ws, 'seq', {
+      name: 'seq_rule',
+      display: '规则',
+      version: 1,
+      sources: [{ pattern: '**/*', headerRow: 1 }],
+      fields: [
+        { sourceHeader: '日期', outputName: 'date', included: true, order: 1, transforms: [{ kind: 'coerce_date' }] },
+        { sourceHeader: '借方金额', outputName: 'debit', included: true, order: 2, transforms: [{ kind: 'coerce_cents' }] },
+      ],
+    });
     savePipeline(ws, {
       kind: 'clean',
       id: 'c1',
       label: '',
       bigTableFolder: 'seq',
       sourceDir,
-      headerRow: 1,
-      mappings: [
-        { sourceHeader: '日期', outputName: 'date', transform: 'normalize-date' },
-        { sourceHeader: '借方金额', outputName: 'debit', transform: 'to-cents' },
-      ],
       createdAt: '',
     });
     savePipeline(ws, {

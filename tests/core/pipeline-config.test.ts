@@ -21,8 +21,6 @@ const cleanCfg = (): CleanPipelineConfig => ({
   label: 'seq 清洗',
   bigTableFolder: 'seq',
   sourceDir: '/data/seq',
-  headerRow: 1,
-  mappings: [{ sourceHeader: '日期', outputName: 'date', transform: 'normalize-date' }],
   createdAt: '2026-08-24',
 });
 
@@ -41,7 +39,7 @@ describe('pipeline config', () => {
     expect(validatePipeline(cleanCfg())).toEqual([]);
     expect(validatePipeline({ ...cleanCfg(), id: '' })).toContain('id');
     expect(validatePipeline({ ...cleanCfg(), sourceDir: '' })).toContain('sourceDir');
-    // headerRow/mappings 可选(规则驱动),但 bigTableFolder 必填
+    // 映射走规则 YAML(规则驱动),但 bigTableFolder 必填
     expect(validatePipeline({ ...cleanCfg(), bigTableFolder: '' })).toContain('bigTableFolder');
   });
 

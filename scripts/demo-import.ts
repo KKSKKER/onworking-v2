@@ -11,6 +11,8 @@ import { parseCsvFile, parseExcelFile } from '../src/core/ingest/parser';
 import { detectHeaderRow } from '../src/core/ingest/header-detect';
 import { saveBigTableConfig } from '../src/core/bigtable/store';
 import { savePipeline } from '../src/core/pipeline/store';
+import { saveRule } from '../src/core/rule/store';
+import { transformToKind } from '../src/core/rule/compile';
 import { PipelineEngine } from '../src/core/pipeline/engine';
 import type { FieldMapping } from '../src/core/etl/transform';
 
@@ -67,14 +69,25 @@ async function main(): Promise<void> {
     autoIncrement: true,
     fields: mappings.map((m, i) => ({ name: m.outputName, type: dbTypeForTransform(m.transform), order: i + 1 })),
   });
+  saveRule(ws, 'big', {
+    name: 'big_rule',
+    display: 'demo',
+    version: 1,
+    sources: [{ pattern: '**/*', headerRow }],
+    fields: mappings.map((m, i) => ({
+      sourceHeader: m.sourceHeader,
+      outputName: m.outputName,
+      included: true,
+      order: i + 1,
+      transforms: [{ kind: transformToKind(m.transform) }],
+    })),
+  });
   savePipeline(ws, {
     kind: 'clean',
     id: 'c1',
     label: 'demo',
     bigTableFolder: 'big',
     sourceDir,
-    headerRow,
-    mappings,
     createdAt: new Date().toISOString(),
   });
 

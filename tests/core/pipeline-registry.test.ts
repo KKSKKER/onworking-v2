@@ -10,8 +10,6 @@ describe('pipeline registry', () => {
       label: '',
       bigTableFolder: 'seq',
       sourceDir: '/d/seq',
-      headerRow: 1,
-      mappings: [],
       createdAt: '',
     };
     const q1: QueryPipelineConfig = {

@@ -11,6 +11,7 @@ import { masterDbPath } from '../workspace/workspace';
 import { LineageGraph } from '../lineage/graph';
 import { listBigTables, loadBigTableConfig, bigTableDbPath } from '../bigtable/store';
 import { listPipelines, loadPipeline } from './store';
+import { loadRules } from '../rule/store';
 import { buildLineageGraph } from './registry';
 import { runCleanPipeline } from './clean-runner';
 import { runQueryPipeline } from './query-runner';
@@ -94,7 +95,7 @@ export class PipelineEngine {
         const st = new ProjectState(this.ws);
         st.setPhase(cfg.bigTableFolder, 'cleaned');
         st.registerFiles(cfg.bigTableFolder, result.files);
-        st.registerMapping(cfg.bigTableFolder, cfg.mappings?.length ?? 0);
+        st.registerMapping(cfg.bigTableFolder, loadRules(this.ws, cfg.bigTableFolder).length);
         st.save();
         commitWorkspaceChanges(this.ws, `pipeline ${id} (clean) ran`);
         logger.info(MODULE, 'run ok', { pipelineId: id, kind: 'clean', rows: result.rowsInserted });

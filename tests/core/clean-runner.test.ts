@@ -12,6 +12,7 @@ import type { LogEntry } from '../../src/core/logging/logger';
 import type { CleanPipelineConfig } from '../../src/core/pipeline/config';
 import type { BigTableConfig } from '../../src/core/bigtable/schema';
 import { initWorkspace, type Workspace } from '../../src/core/workspace/workspace';
+import { saveRule } from '../../src/core/rule/store';
 
 describe('clean pipeline runner', () => {
   let dir: string;
@@ -34,18 +35,23 @@ describe('clean pipeline runner', () => {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, sheetWs, 'Sheet1');
     XLSX.writeFile(wb, join(sourceDir, 'a.xlsx'));
+    saveRule(workspace, 'seq', {
+      name: 'seq_rule',
+      display: '规则',
+      version: 1,
+      sources: [{ pattern: '**/*', headerRow: 1 }],
+      fields: [
+        { sourceHeader: '日期', outputName: 'date', included: true, order: 1, transforms: [{ kind: 'coerce_date' }] },
+        { sourceHeader: '借方金额', outputName: 'debit', included: true, order: 2, transforms: [{ kind: 'coerce_cents' }] },
+        { sourceHeader: '摘要', outputName: 'note', included: true, order: 3, transforms: [{ kind: 'coerce_string' }] },
+      ],
+    });
     cfg = {
       kind: 'clean',
       id: 'c1',
       label: '',
       bigTableFolder: 'seq',
       sourceDir,
-      headerRow: 1,
-      mappings: [
-        { sourceHeader: '日期', outputName: 'date', transform: 'normalize-date' },
-        { sourceHeader: '借方金额', outputName: 'debit', transform: 'to-cents' },
-        { sourceHeader: '摘要', outputName: 'note', transform: 'trim' },
-      ],
       createdAt: '',
     };
   });
@@ -85,11 +91,19 @@ describe('clean pipeline runner', () => {
     expect(stages.join(',')).toMatch(/write:100/);
   });
 
-  it('re-runs with a different mapping rebuilds the table (no schema drift)', async () => {
+  it('re-runs with a different rule rebuilds the table (no schema drift)', async () => {
     await runCleanPipeline(workspace, db, cfg, bigTable); // 首次:date/debit/note
-    // 换映射:只留 date
-    const cfg2: CleanPipelineConfig = { ...cfg, id: 'c2', mappings: [cfg.mappings![0]] };
-    await runCleanPipeline(workspace, db, cfg2, bigTable);
+    // 覆盖同名规则 seq_rule 为「只有 date」→ 重跑重建表,去掉 debit/note
+    saveRule(workspace, 'seq', {
+      name: 'seq_rule',
+      display: '精简',
+      version: 1,
+      sources: [{ pattern: '**/*', headerRow: 1 }],
+      fields: [
+        { sourceHeader: '日期', outputName: 'date', included: true, order: 1, transforms: [{ kind: 'coerce_date' }] },
+      ],
+    });
+    await runCleanPipeline(workspace, db, cfg, bigTable);
     const cols = db.prepare('PRAGMA table_info(seq)').all() as { name: string }[];
     const names = cols.map((c) => c.name);
     expect(names).toContain('date');

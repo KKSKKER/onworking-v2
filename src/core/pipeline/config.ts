@@ -1,7 +1,5 @@
 // src/core/pipeline/config.ts
 // 管线配置类型与校验:清洗管线(源文件→大表)与查询管线(SQL→结果表)。
-import type { FieldMapping } from '../etl/transform';
-
 export type PipelineKind = 'clean' | 'sql-clean' | 'query';
 
 export interface CleanPipelineConfig {
@@ -12,11 +10,6 @@ export interface CleanPipelineConfig {
   bigTableFolder: string;
   /** 源文件目录(输入)。 */
   sourceDir: string;
-  sheetName?: string;
-  /** 表头行(1-based)。规则驱动时省略,由规则 sources 提供。 */
-  headerRow?: number;
-  /** 字段映射。规则驱动时省略,由规则 fields 提供。 */
-  mappings?: FieldMapping[];
   createdAt: string;
 }
 

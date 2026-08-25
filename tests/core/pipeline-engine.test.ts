@@ -7,6 +7,7 @@ import { initWorkspace, type Workspace } from '../../src/core/workspace/workspac
 import { saveBigTableConfig, bigTableDbPath } from '../../src/core/bigtable/store';
 import { openDatabase } from '../../src/core/db/database';
 import { savePipeline } from '../../src/core/pipeline/store';
+import { saveRule } from '../../src/core/rule/store';
 import { PipelineEngine } from '../../src/core/pipeline/engine';
 import { gitCurrentCommit } from '../../src/core/versioning/git';
 
@@ -36,17 +37,22 @@ describe('pipeline engine', () => {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, wsx, 'Sheet1');
     XLSX.writeFile(wb, join(sourceDir, 'a.xlsx'));
+    saveRule(ws, 'seq', {
+      name: 'seq_rule',
+      display: '规则',
+      version: 1,
+      sources: [{ pattern: '**/*', headerRow: 1 }],
+      fields: [
+        { sourceHeader: '日期', outputName: 'date', included: true, order: 1, transforms: [{ kind: 'coerce_date' }] },
+        { sourceHeader: '借方金额', outputName: 'debit', included: true, order: 2, transforms: [{ kind: 'coerce_cents' }] },
+      ],
+    });
     savePipeline(ws, {
       kind: 'clean',
       id: 'c1',
       label: '',
       bigTableFolder: 'seq',
       sourceDir,
-      headerRow: 1,
-      mappings: [
-        { sourceHeader: '日期', outputName: 'date', transform: 'normalize-date' },
-        { sourceHeader: '借方金额', outputName: 'debit', transform: 'to-cents' },
-      ],
       createdAt: '',
     });
     // SQL 清洗管线:大表 DB → 总表 DB
