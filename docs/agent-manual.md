@@ -203,7 +203,7 @@ $lines | npm run --silent onw -- open D:/ws
 | `FILE_NOT_FOUND` | `bigtable.addFiles` 源文件不存在 | 检查文件路径 |
 | `QUERY_NOT_SELECT` | `query.run` 非 SELECT/WITH | 改查询语句 |
 | `TEMPLATE_NOT_FOUND` | 模板不存在 | `template.list` 查名 |
-| 环境：`better-sqlite3` ABI 不匹配 | 报 `NODE_MODULE_VERSION` 不符（如 `137 vs 115`） | CLI/MCP 一律跑系统 node，electron-builder 已设 `npmRebuild:false`（打包不重建原生模块），**全链路只有系统 node 一个 ABI**，不再互切。若仍报 `137 vs 115`，说明有进程跑在 Electron node 下（用了 `ELECTRON_RUN_AS_NODE`）——改为 spawn 系统 `node` 即可。注意：**app 开着时别 `rebuild`**（模块被占用会 EPERM），先关掉再重建 |
+| 环境：`better-sqlite3` ABI 不匹配 | 报 `NODE_MODULE_VERSION` 不符（如 `137 vs 115`） | **已双装载免疫**：`sqlite.ts` 按进程 ABI 自动选（137 用 `better-sqlite3`，115 用 `better-sqlite3-electron` 副本），客户端怎么 spawn 都通。装完依赖跑一次 `npm run build:dual-abi` 生成 115 副本（node-gyp 直建副本，app 开着也不 EPERM）。若仍报，先跑 `npm run build:dual-abi` 再试 |
 
 ---
 
