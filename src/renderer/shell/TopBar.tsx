@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { VIEWS } from '../views/registry';
 import { useSelection } from '../state/SelectionContext';
+import { sendCli } from '../cli';
 
 export type ShellMode = 'files' | 'query';
 
@@ -33,11 +34,8 @@ export function TopBar({
   async function handlePick() {
     const path = await window.onw.pickWorkspace();
     if (!path) return;
-    const res = await window.onw.invoke({ cmd: 'workspace.open', path });
-    if (res.ok) {
-      const ws = res.data as { root: string };
-      setWsName(ws.root);
-    }
+    const res = await window.onw.openWorkspace(path);
+    if (res.ok) setWsName(path);
   }
 
   async function doAction(kind: 'mergeOne' | 'mergeAll' | 'masterOne' | 'masterAll') {
@@ -53,7 +51,7 @@ export function TopBar({
       : kind === 'mergeAll' ? ({ cmd: 'pipeline.mergeAll' } as const)
       : kind === 'masterOne' ? ({ cmd: 'pipeline.buildMasterBigTable', folder: folder as string } as const)
       : ({ cmd: 'pipeline.buildMasterAll' } as const);
-    const res = await window.onw.invoke(cmd);
+    const res = await sendCli(cmd);
     setBusy(false);
     if (!res.ok) {
       setMergeMsg(`失败: ${res.error.message}`);

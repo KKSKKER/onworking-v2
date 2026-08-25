@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useSelection } from '../state/SelectionContext';
 import type { MappingTemplate } from '../../core/template/store';
 import type { FieldMapping } from '../../core/etl/transform';
+import { sendCli } from '../cli';
 
 interface DetectResult {
   sheetName: string;
@@ -49,7 +50,7 @@ export function MappingView() {
   }, [selectedFile]);
 
   async function loadSheets(path: string) {
-    const res = await window.onw.invoke({ cmd: 'setup.sheets', filePath: path });
+    const res = await sendCli({ cmd: 'setup.sheets', filePath: path });
     if (res.ok) {
       const names = res.data as string[];
       setSheets(names);
@@ -61,7 +62,7 @@ export function MappingView() {
     if (!filePath.trim()) return;
     setMsg('');
     if (sheets.length === 0) await loadSheets(filePath);
-    const res = await window.onw.invoke({ cmd: 'setup.detectSource', filePath, sheetName: sheet || undefined });
+    const res = await sendCli({ cmd: 'setup.detectSource', filePath, sheetName: sheet || undefined });
     if (!res.ok) {
       setMsg(`检测失败: ${res.error.message}`);
       return;
@@ -91,7 +92,7 @@ export function MappingView() {
       return;
     }
     // 只保存字段映射(YAML 规则),不生成管线
-    const res = await window.onw.invoke({
+    const res = await sendCli({
       cmd: 'mapping.save',
       folder: selectedFolder,
       headerRow,
@@ -110,7 +111,7 @@ export function MappingView() {
       mappings: buildMappings(),
       createdAt: new Date().toISOString(),
     };
-    const res = await window.onw.invoke({ cmd: 'template.save', template: tpl });
+    const res = await sendCli({ cmd: 'template.save', template: tpl });
     setMsg(res.ok ? `模板已保存: ${tpl.name}` : `保存失败: ${res.error.message}`);
   }
 

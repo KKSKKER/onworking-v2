@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useApi } from './useApi';
 import { DataTable } from '../components/DataTable';
 import { PaginationBar } from '../components/PaginationBar';
+import { sendCli } from '../cli';
 
 interface TableInfo {
   name: string;
@@ -28,7 +29,7 @@ export function SqlView() {
   async function handleRun() {
     setErr('');
     setBusy(true);
-    const res = await window.onw.invoke({ cmd: 'query.run', sql });
+    const res = await sendCli({ cmd: 'query.run', sql });
     setBusy(false);
     if (!res.ok) {
       setErr(res.error.message);
@@ -40,7 +41,7 @@ export function SqlView() {
   }
 
   async function handleCopyStructure() {
-    const res = await window.onw.invoke({ cmd: 'schema.tables' });
+    const res = await sendCli({ cmd: 'schema.tables' });
     if (res.ok) {
       const list = (res.data as TableInfo[]).map((t) => `表: ${t.name}`).join('\n');
       await navigator.clipboard?.writeText(list);

@@ -1,6 +1,7 @@
 // 视图:查询。已保存查询管线的列表 + 运行/重算。
 import { useState } from 'react';
 import { useApi } from './useApi';
+import { sendCli } from '../cli';
 
 interface RunSummary {
   pipelineId: string;
@@ -17,14 +18,14 @@ export function QueryView() {
 
   async function runAll() {
     setBusy(true);
-    const res = await window.onw.invoke({ cmd: 'pipeline.recomputeAll' });
+    const res = await sendCli({ cmd: 'pipeline.recomputeAll' });
     if (res.ok) setResults(res.data as RunSummary[]);
     setBusy(false);
   }
 
   async function runOne(id: string) {
     setBusy(true);
-    const res = await window.onw.invoke({ cmd: 'pipeline.run', id });
+    const res = await sendCli({ cmd: 'pipeline.run', id });
     if (res.ok) setResults([res.data as RunSummary]);
     setBusy(false);
   }

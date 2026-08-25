@@ -1,9 +1,10 @@
 // 视图:预览。真实读取源文件数据(setup.preview,服务端分页),表头行可调。
 // 结果表用 DataTable(可拖列宽)+ PaginationBar(分页)。
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSelection } from '../state/SelectionContext';
 import { DataTable } from '../components/DataTable';
 import { PaginationBar } from '../components/PaginationBar';
+import { sendCli } from '../cli';
 
 interface PreviewData {
   sheetName: string;
@@ -23,10 +24,19 @@ export function PreviewView() {
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
+  // 选中源文件即自动加载预览(实时)
+  useEffect(() => {
+    if (selectedFile) {
+      setPage(0);
+      void loadPage(0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFile]);
+
   async function loadPage(p: number) {
     if (!selectedFile) return;
     setBusy(true);
-    const res = await window.onw.invoke({
+    const res = await sendCli({
       cmd: 'setup.preview',
       filePath: selectedFile,
       headerRow,

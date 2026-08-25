@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import type { BigTableConfig } from '../../core/bigtable/schema';
 import { useApi } from './useApi';
 import { useSelection } from '../state/SelectionContext';
+import { sendCli } from '../cli';
 
 const FIELD_TYPES = ['TEXT', 'INTEGER', 'REAL'] as const;
 
@@ -25,7 +26,7 @@ export function BigTableSettingsView() {
 
   async function handleSave() {
     if (!cfg || !folder) return;
-    const res = await window.onw.invoke({ cmd: 'bigtable.save', folder, config: cfg });
+    const res = await sendCli({ cmd: 'bigtable.save', folder, config: cfg });
     setSaveMsg(res.ok ? '已保存 ✓' : `保存失败: ${res.error.message}`);
   }
 
