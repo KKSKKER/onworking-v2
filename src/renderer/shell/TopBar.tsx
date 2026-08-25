@@ -1,5 +1,5 @@
 // 顶栏:文件/查询管理切换 · 合并(当前/全部) · 增加视图 · AI开放模式 · 语言 · 打开工作区。
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { VIEWS } from '../views/registry';
 import { useSelection } from '../state/SelectionContext';
 import { sendCli } from '../cli';
@@ -25,12 +25,18 @@ export function TopBar({
 }) {
   const [aiMode, setAiMode] = useState<'off' | 'external' | 'local'>('off');
 
-  // 读取工作区 AI 开放模式(存于 .onworking/settings.json)
-  useEffect(() => {
+  // 读取工作区 AI 开放模式(存于 .onworking/settings.json)。挂载/打开工作区/工作区变化时读,保持同步。
+  const loadAiMode = useCallback(() => {
     void sendCli({ cmd: 'settings.get' }).then((res) => {
       if (res.ok) setAiMode((res.data as { aiOpenMode: 'off' | 'external' | 'local' }).aiOpenMode);
     });
   }, []);
+
+  useEffect(() => { loadAiMode(); }, [loadAiMode]);
+  useEffect(() => {
+    const unsub = window.onw.onWorkspaceChanged(loadAiMode);
+    return unsub;
+  }, [loadAiMode]);
   const [lang, setLang] = useState('zh');
   const [wsName, setWsName] = useState('未打开');
   const [addingView, setAddingView] = useState(false);
@@ -42,7 +48,10 @@ export function TopBar({
     const path = await window.onw.pickWorkspace();
     if (!path) return;
     const res = await window.onw.openWorkspace(path);
-    if (res.ok) setWsName(path);
+    if (res.ok) {
+      setWsName(path);
+      loadAiMode(); // 打开工作区后重读 AI 模式
+    }
   }
 
   async function doAction(kind: 'mergeOne' | 'mergeAll' | 'masterOne' | 'masterAll') {
