@@ -145,4 +145,23 @@ describe('mcp server', () => {
     const res = await handleMcpRequest(session, { jsonrpc: '2.0', method: 'notifications/initialized' });
     expect(res).toBeNull();
   });
+
+  it('exposes the operations manual as a resource', async () => {
+    const list = await handleMcpRequest(session, { jsonrpc: '2.0', id: 1, method: 'resources/list' });
+    const res = (list?.result as { resources: { uri: string }[] }).resources;
+    expect(res[0].uri).toBe('onworking://manual');
+    const read = await handleMcpRequest(session, { jsonrpc: '2.0', id: 2, method: 'resources/read', params: { uri: 'onworking://manual' } });
+    const text = (read?.result as { contents: { text: string }[] }).contents[0].text;
+    expect(text).toContain('铁律');
+    expect(text).toContain('总表 master.db');
+  });
+
+  it('exposes the operations manual as a prompt', async () => {
+    const list = await handleMcpRequest(session, { jsonrpc: '2.0', id: 1, method: 'prompts/list' });
+    const names = (list?.result as { prompts: { name: string }[] }).prompts.map((p) => p.name);
+    expect(names).toContain('onworking-manual');
+    const get = await handleMcpRequest(session, { jsonrpc: '2.0', id: 2, method: 'prompts/get', params: { name: 'onworking-manual' } });
+    const text = (get?.result as { messages: { content: { text: string }[] }[] }).messages[0].content[0].text;
+    expect(text).toContain('铁律');
+  });
 });

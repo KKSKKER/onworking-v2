@@ -4,6 +4,7 @@
 import { dispatchIpc, handlers } from '../ipc/handlers';
 import type { ApiResult, IpcRequest } from '../ipc/contracts';
 import type { ApiContext } from '../ipc/handlers';
+import { MANUAL_TEXT } from './manual';
 
 const PROTOCOL_VERSION = '2024-11-05';
 
@@ -118,6 +119,52 @@ export async function handleMcpRequest(
         })),
       },
     };
+  }
+
+  // 资源:Agent 可读操作须知(手册)。注意:MCP 无法强制模型读取,客户端侧注入才是硬保证。
+  if (req.method === 'resources/list') {
+    return {
+      jsonrpc: '2.0',
+      id,
+      result: {
+        resources: [
+          { uri: 'onworking://manual', name: 'Agent 操作须知', description: 'Onworking Agent 操作须知(浓缩版,完整见 docs/agent-manual.md)', mimeType: 'text/markdown' },
+        ],
+      },
+    };
+  }
+
+  if (req.method === 'resources/read') {
+    const uri = req.params?.uri as string | undefined;
+    if (uri === 'onworking://manual') {
+      return { jsonrpc: '2.0', id, result: { contents: [{ uri, mimeType: 'text/markdown', text: MANUAL_TEXT }] } };
+    }
+    return { jsonrpc: '2.0', id, error: { code: -32002, message: `resource not found: ${String(uri)}` } };
+  }
+
+  // 提示词:Agent 可调 prompts/get 取操作须知。
+  if (req.method === 'prompts/list') {
+    return {
+      jsonrpc: '2.0',
+      id,
+      result: {
+        prompts: [
+          { name: 'onworking-manual', description: 'Onworking Agent 操作须知(完整见 docs/agent-manual.md)', arguments: [] },
+        ],
+      },
+    };
+  }
+
+  if (req.method === 'prompts/get') {
+    const name = req.params?.name as string | undefined;
+    if (name === 'onworking-manual') {
+      return {
+        jsonrpc: '2.0',
+        id,
+        result: { messages: [{ role: 'user', content: [{ type: 'text', text: MANUAL_TEXT }] }] },
+      };
+    }
+    return { jsonrpc: '2.0', id, error: { code: -32002, message: `prompt not found: ${String(name)}` } };
   }
 
   if (req.method === 'tools/call') {
