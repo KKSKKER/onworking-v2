@@ -13,13 +13,13 @@ function BigTableTree() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const { selectedFolder, selectedFile, selectFolder, selectFile } = useSelection();
 
-  // 自动选中第一个大表(避免空状态,单击即选中)
+  // 自动选中第一个大表(仅当完全没有选中时,避免与「选中文件」打架——否则选文件后 folder 变空又被抢回)
   useEffect(() => {
-    if (!selectedFolder && folders && folders.length > 0) {
+    if (!selectedFolder && !selectedFile && folders && folders.length > 0) {
       selectFolder(folders[0]);
       setExpanded(new Set([folders[0]]));
     }
-  }, [folders, selectedFolder, selectFolder]);
+  }, [folders, selectedFolder, selectedFile, selectFolder]);
 
   function toggleExpand(name: string): void {
     setExpanded((prev) => {

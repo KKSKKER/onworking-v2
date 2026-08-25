@@ -23,7 +23,10 @@ export function SelectionProvider({ children }: { children: ReactNode }) {
           setSelectedFolder(f);
           if (f) setSelectedFile(null); // 切大表时清掉文件选择
         },
-        selectFile: (f) => setSelectedFile(f),
+        selectFile: (f) => {
+          setSelectedFile(f);
+          if (f) setSelectedFolder(null); // 切文件时清掉大表选择(否则预览/详情会优先显示大表)
+        },
       }}
     >
       {children}
