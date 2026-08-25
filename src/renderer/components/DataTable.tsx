@@ -52,9 +52,9 @@ export function DataTable({ columns, rows }: DataTableProps) {
       <table style={{ borderCollapse: 'collapse', tableLayout: 'fixed', width: totalWidth }}>
         <thead>
           <tr>
-            {columns.map((c) => (
+            {columns.map((c, ci) => (
               <th
-                key={c}
+                key={ci}
                 style={{
                   border: '1px solid #e5e5e5',
                   padding: 0,
@@ -90,9 +90,9 @@ export function DataTable({ columns, rows }: DataTableProps) {
         <tbody>
           {rows.map((r, i) => (
             <tr key={i} style={{ borderBottom: '1px solid #f0f0f0' }}>
-              {columns.map((c) => (
+              {columns.map((c, ci) => (
                 <td
-                  key={c}
+                  key={ci}
                   style={{
                     border: '1px solid #f0f0f0',
                     padding: '2px 8px',

@@ -17,6 +17,16 @@ interface PreviewData {
 
 const PAGE_SIZE = 100;
 
+/** 表头去重:重复列名加后缀(其他 → 其他_2),避免预览时同名列互相覆盖(源文件常见重复表头)。 */
+function dedupeHeaders(headers: string[]): string[] {
+  const seen = new Map<string, number>();
+  return headers.map((h) => {
+    const n = seen.get(h) ?? 0;
+    seen.set(h, n + 1);
+    return n === 0 ? h : `${h}_${n + 1}`;
+  });
+}
+
 export function PreviewView() {
   const { selectedFolder, selectedFile } = useSelection();
   const [headerRow, setHeaderRow] = useState(1);
@@ -74,12 +84,13 @@ export function PreviewView() {
     setBusy(false);
     if (!res.ok) { setErr(res.error.message); return; }
     const d = res.data as { sheetName?: string; headers: string[]; rows: unknown[][]; total: number };
+    const cols = dedupeHeaders(d.headers); // 重复表头加后缀,避免同名列互相覆盖
     const rows = d.rows.map((r) => {
       const rec: Record<string, unknown> = {};
-      d.headers.forEach((h, j) => { rec[h] = r[j]; });
+      cols.forEach((h, j) => { rec[h] = r[j]; });
       return rec;
     });
-    setPreview({ title: `${fileNameOf(filePath)} · ${sheetName || d.sheetName || ''}`, columns: d.headers, rows, total: d.total });
+    setPreview({ title: `${fileNameOf(filePath)} · ${sheetName || d.sheetName || ''}`, columns: cols, rows, total: d.total });
   }
 
   function handlePageChange(p: number) {
