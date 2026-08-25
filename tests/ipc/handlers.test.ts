@@ -127,6 +127,25 @@ describe('ipc handlers', () => {
     expect(res.ok).toBe(false);
   });
 
+  it('pipeline.save honours the caller-supplied id for clean pipelines', async () => {
+    const res = await dispatch(
+      {
+        cmd: 'pipeline.save',
+        config: {
+          kind: 'clean',
+          id: 'my-clean',
+          label: '',
+          bigTableFolder: 'seq',
+          sourceDir,
+          createdAt: '',
+        },
+      },
+      ctx,
+    );
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.data).toEqual({ pipelineId: 'my-clean' });
+  });
+
   it('dispatchIpc echoes reqId so async requests can be reconciled', async () => {
     const res = await dispatchIpc({ cmd: 'state.summary', reqId: 42 }, ctx);
     expect(res.reqId).toBe(42);

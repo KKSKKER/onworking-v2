@@ -82,7 +82,7 @@ const handlers: { [K in SessionCommands]: HandlerFor<K> } = {
         resultTable: config.resultTable,
       });
     }
-    return toolCreateCleaningPipeline(ctx.ws, config.bigTableFolder, config.sourceDir);
+    return toolCreateCleaningPipeline(ctx.ws, config.id, config.bigTableFolder, config.sourceDir);
   },
   'mapping.save': async (ctx, p) => toolSetMapping(ctx.ws, p.folder, p.headerRow ?? 1, p.mappings),
   'pipeline.delete': async (ctx, p) => {

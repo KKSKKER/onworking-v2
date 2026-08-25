@@ -59,7 +59,7 @@ async function main(): Promise<void> {
   console.log('✓ ⑤ toolSetMapping: 写 YAML 规则');
 
   // 第 5.5 步:单独创建清洗管线(引用规则)
-  const { pipelineId } = toolCreateCleaningPipeline(ws, BIG_TABLE, sourceDir);
+  const { pipelineId } = toolCreateCleaningPipeline(ws, 'c1', BIG_TABLE, sourceDir);
   console.log(`✓ ⑤.5 toolCreateCleaningPipeline: ${pipelineId}`);
 
   // 第 6 步:清洗入大表

@@ -64,6 +64,10 @@ export async function runInitialSetupFlow(opts: {
   bigTableFolder: string;
   sourceDir: string;
   tableName?: string;
+  /** 显式 id(缺省 'c1');不再由 Date.now() 生成。 */
+  cleaningPipelineId?: string;
+  /** 显式 id(缺省 'm1');不再由 Date.now() 生成。 */
+  sqlCleanPipelineId?: string;
 }): Promise<SetupFlowResult> {
   const { workspacePath, bigTableFolder, sourceDir, tableName } = opts;
   const steps: SetupStep[] = [];
@@ -99,11 +103,11 @@ export async function runInitialSetupFlow(opts: {
     await push('setBigTableFields', () => toolSetBigTableFields(ws, bigTableFolder, fields));
     await push('setMapping', () => toolSetMapping(ws, bigTableFolder, headers.detected.headerRow, mappings));
     const { pipelineId } = (await push('createCleaningPipeline', () =>
-      toolCreateCleaningPipeline(ws, bigTableFolder, sourceDir),
+      toolCreateCleaningPipeline(ws, opts.cleaningPipelineId ?? 'c1', bigTableFolder, sourceDir),
     )) as { pipelineId: string };
 
     // 建立 SQL 清洗管线(大表 → 总表)
-    const sqlId = `m_${Date.now()}`;
+    const sqlId = opts.sqlCleanPipelineId ?? 'm1';
     const alias = `bt_${bigTableFolder.replace(/[^a-zA-Z0-9一-鿿_]/g, '_')}`;
     savePipeline(ws, {
       kind: 'sql-clean',

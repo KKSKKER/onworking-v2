@@ -97,22 +97,22 @@ export function toolSetMapping(
   return { ruleFile };
 }
 
-/** tool: 创建清洗管线(引用大表规则执行,不写规则)。 */
+/** tool: 创建清洗管线(引用大表规则执行,不写规则)。id 由调用方显式传入。 */
 export function toolCreateCleaningPipeline(
   ws: Workspace,
+  id: string,
   bigTableFolder: string,
   sourceDir: string,
 ): { pipelineId: string } {
-  const pipelineId = `c_${Date.now()}`;
   savePipeline(ws, {
     kind: 'clean',
-    id: pipelineId,
+    id,
     label: `${bigTableFolder}清洗`,
     bigTableFolder,
     sourceDir,
     createdAt: new Date().toISOString(),
   });
-  return { pipelineId };
+  return { pipelineId: id };
 }
 
 /** tool: 引用模板套用映射。 */
