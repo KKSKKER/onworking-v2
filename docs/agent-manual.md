@@ -204,3 +204,30 @@ $lines | npm run --silent onw -- open D:/ws
 | `QUERY_NOT_SELECT` | `query.run` 非 SELECT/WITH | 改查询语句 |
 | `TEMPLATE_NOT_FOUND` | 模板不存在 | `template.list` 查名 |
 | 环境：`better-sqlite3` ABI 不匹配 | 报 `NODE_MODULE_VERSION` 不符 | 跑 `npm run rebuild:node`（测试/CLI 用）；跑 Electron 应用前需 `npm run rebuild:electron`（两者互斥，按用途重建） |
+
+---
+
+## 8. 操作者 → Agent：快速出第一版提示词模板
+
+**先粗后细是默认姿态**：不要反复 `setup.preview` / `bigtable.previewRows` 预览确认——直接建映射 → 跑 clean → 跑 sql-clean → 导出 CSV，粗版出来再按需精修。一次生产实践证明：**「月份 sheet + 姓名/序号/基本工资 非空」一条朴素规则，就能同时挡掉子表、非月份 sheet、合计/签名/空行**，无需逐项排查。
+
+把下面这段（替换 `⟨…⟩`）粘给 Agent：
+
+```
+按手册标准链快速出第一版，不要追求完美，后面我再调。
+- 表头行号：⟨第 3 行⟩
+- 目标 sheet：sheet 名是月份的才导（⟨1月~12月 / 2025XX⟩），其他 sheet 全跳过
+- 大表：⟨已建好，字段已定义，直接复用，不要加新字段⟩
+- 清洗最低标准：姓名、序号、基本工资 非空即可；月份列从 sheet 名推导（⟨2025 文件→2025-XX⟩）
+- 跑完直接 query.exportCsv 导出，不要反复 preview 验证
+```
+
+**操作者应预先告诉 Agent 的信息**（填上这些 Agent 就完全不用猜/detect）：
+
+| 信息 | 说明 |
+|---|---|
+| 表头行号 | 第几行是字段名（省掉 detect） |
+| 目标 sheet 规则 | 哪些 sheet 算工资（按月份命名？） |
+| 大表字段 | 是否已建好、直接复用还是允许加字段 |
+| 清洗容忍度 | 先粗后细 / 一次到位 |
+| 月份/年份来源 | 从文件名还是 sheet 名推导 |
