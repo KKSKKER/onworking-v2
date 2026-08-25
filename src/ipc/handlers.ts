@@ -1,11 +1,12 @@
 // src/ipc/handlers.ts
 // API handlers:命令 → 工具函数层(前端与 AI 走同一套封装函数),统一返回 ApiResult。
 // 操作类命令委托给 src/core/agent/tools.ts 的 tool* 函数;读类命令直接走核心。
+// handler 表按 CommandPayloads/CommandResults 强类型:载荷字段由命令名收窄,零 as never/String() 强转。
 import type { Workspace } from '../core/workspace/workspace';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { listBigTables, loadBigTableConfig } from '../core/bigtable/store';
-import { listPipelines, deletePipeline, loadPipeline } from '../core/pipeline/store';
+import { listPipelines, deletePipeline } from '../core/pipeline/store';
 import { scanSourceDir } from '../core/ingest/scanner';
 import { parseCsvFile, parseExcelFile } from '../core/ingest/parser';
 import { PipelineEngine } from '../core/pipeline/engine';
@@ -18,7 +19,7 @@ import {
 import { gitStatus } from '../core/versioning/git';
 import { ensureWorkspaceVcs } from '../core/versioning/workspace-vcs';
 import { AppError, captureError } from '../core/errors';
-import type { ApiCommand, ApiResult } from './contracts';
+import type { ApiCommand, ApiResult, CommandPayloads, CommandResults, IpcRequest, IpcResponse } from './contracts';
 import {
   toolCreateBigTable,
   toolGetFileHeaders,
@@ -29,14 +30,11 @@ import {
   toolRunCleaning,
   toolMergeBigTable,
   toolMergeAll,
-  toolBuildMasterTable,
   toolBuildMasterForBigTable,
   toolBuildMasterAll,
-  toolRunQueryPipeline,
   toolQuery,
   toolGetProjectState,
 } from '../core/agent/tools';
-import type { PipelineConfig } from '../core/pipeline/config';
 
 export interface ApiContext {
   ws: Workspace;
@@ -47,28 +45,29 @@ export interface ApiContext {
   emitProgress?(payload: unknown): void;
 }
 
-type Payload = Record<string, unknown>;
-type Handler = (ctx: ApiContext, payload: Payload) => Promise<unknown>;
+type HandlerFor<K extends keyof CommandPayloads> = (
+  ctx: ApiContext,
+  payload: CommandPayloads[K],
+) => Promise<CommandResults[K]> | CommandResults[K];
 
-const handlers: Record<string, Handler> = {
-  'workspace.open': async (ctx) => ctx.ws,
+/** 会话命令(排除传输层引导命令 workspace.open / workspace.pick)。 */
+type SessionCommands = Exclude<keyof CommandPayloads, 'workspace.open' | 'workspace.pick'>;
 
+const handlers: { [K in SessionCommands]: HandlerFor<K> } = {
   'bigtable.list': async (ctx) => listBigTables(ctx.ws),
-  'bigtable.get': async (_ctx, p) => loadBigTableConfig(_ctx.ws, String(p.folder)),
+  'bigtable.get': async (ctx, p) => loadBigTableConfig(ctx.ws, p.folder),
   'bigtable.save': async (ctx, p) => {
-    // 前端保存大表配置 → 工具函数
-    toolCreateBigTable(ctx.ws, String(p.folder), p.config as never);
+    toolCreateBigTable(ctx.ws, p.folder, p.config);
     return { saved: p.folder };
   },
   'bigtable.sourceFiles': async (ctx, p) => {
-    const dir = join(ctx.ws.onworkingDir, 'bigtables', String(p.folder), 'source');
+    const dir = join(ctx.ws.onworkingDir, 'bigtables', p.folder, 'source');
     return existsSync(dir) ? scanSourceDir(dir).map((f) => f.path) : [];
   },
 
   'pipeline.list': async (ctx) => listPipelines(ctx.ws),
   'pipeline.save': async (ctx, p) => {
-    // 前端保存管线 → 按类型分发到工具函数(clean 只建管线,不写规则)
-    const config = p.config as PipelineConfig;
+    const config = p.config;
     if (config.kind === 'query') {
       return toolCreateQueryPipeline(ctx.ws, config.id, {
         sql: config.sql,
@@ -85,46 +84,34 @@ const handlers: Record<string, Handler> = {
     }
     return toolCreateCleaningPipeline(ctx.ws, config.bigTableFolder, config.sourceDir);
   },
-  'mapping.save': async (ctx, p) => {
-    // 文件字段映射:只写 YAML 规则,不生成管线
-    const folder = String(p.folder);
-    const headerRow = Number(p.headerRow ?? 1);
-    const mappings = p.mappings as never;
-    return toolSetMapping(ctx.ws, folder, headerRow, mappings);
-  },
+  'mapping.save': async (ctx, p) => toolSetMapping(ctx.ws, p.folder, p.headerRow ?? 1, p.mappings),
   'pipeline.delete': async (ctx, p) => {
-    deletePipeline(ctx.ws, String(p.id));
+    deletePipeline(ctx.ws, p.id);
     return { deleted: p.id };
   },
-  'pipeline.run': async (ctx, p) => {
-    // 前端运行管线 → 按类型分发到工具函数
-    const id = String(p.id);
-    const cfg = loadPipeline(ctx.ws, id);
-    if (cfg.kind === 'clean') return toolRunCleaning(ctx.ws, id);
-    if (cfg.kind === 'sql-clean') return toolBuildMasterTable(ctx.ws, id);
-    return toolRunQueryPipeline(ctx.ws, id);
-  },
-  'pipeline.mergeBigTable': async (ctx, p) => toolMergeBigTable(ctx.ws, String(p.folder)),
+  'pipeline.run': async (ctx, p) => toolRunCleaning(ctx.ws, p.id),
+  'pipeline.mergeBigTable': async (ctx, p) => toolMergeBigTable(ctx.ws, p.folder),
   'pipeline.mergeAll': async (ctx) => toolMergeAll(ctx.ws),
-  'pipeline.buildMasterBigTable': async (ctx, p) => toolBuildMasterForBigTable(ctx.ws, String(p.folder)),
+  'pipeline.buildMasterBigTable': async (ctx, p) => toolBuildMasterForBigTable(ctx.ws, p.folder),
   'pipeline.buildMasterAll': async (ctx) => toolBuildMasterAll(ctx.ws),
   'pipeline.recomputeAll': async (ctx) => ctx.getEngine().recomputeAll(),
-  'pipeline.recomputeByDependency': async (ctx, p) =>
-    ctx.getEngine().recomputeByDependency(String(p.trigger)),
+  'pipeline.recomputeByDependency': async (ctx, p) => ctx.getEngine().recomputeByDependency(p.trigger),
 
-  'setup.detectSource': async (_ctx, p) => toolGetFileHeaders(String(p.filePath)).detected,
+  'setup.detectSource': async (_ctx, p) => toolGetFileHeaders(p.filePath).detected,
   'setup.sheets': async (_ctx, p) => {
-    const filePath = String(p.filePath);
-    const sheets = filePath.toLowerCase().endsWith('.csv') ? parseCsvFile(filePath) : parseExcelFile(filePath);
+    const sheets = p.filePath.toLowerCase().endsWith('.csv')
+      ? parseCsvFile(p.filePath)
+      : parseExcelFile(p.filePath);
     return sheets.map((s) => s.sheetName);
   },
   'setup.preview': async (_ctx, p) => {
-    const filePath = String(p.filePath);
-    const offset = Number(p.offset ?? 0);
-    const limit = Number(p.limit ?? 100);
-    const sheets = filePath.toLowerCase().endsWith('.csv') ? parseCsvFile(filePath) : parseExcelFile(filePath);
+    const offset = p.offset ?? 0;
+    const limit = p.limit ?? 100;
+    const sheets = p.filePath.toLowerCase().endsWith('.csv')
+      ? parseCsvFile(p.filePath)
+      : parseExcelFile(p.filePath);
     const sheet = (p.sheetName ? sheets.find((s) => s.sheetName === p.sheetName) : undefined) ?? sheets[0];
-    const headerRow = Number(p.headerRow ?? 1);
+    const headerRow = p.headerRow ?? 1;
     const full = [sheet.headers, ...sheet.rows];
     const headers = (full[headerRow - 1] ?? []).map((c) => String(c));
     const rows = full.slice(headerRow).slice(offset, offset + limit);
@@ -133,16 +120,15 @@ const handlers: Record<string, Handler> = {
 
   'template.list': async (ctx) => listTemplates(ctx.ws),
   'template.save': async (ctx, p) => {
-    saveTemplate(ctx.ws, p.template as never);
-    return { saved: (p.template as { name: string }).name };
+    saveTemplate(ctx.ws, p.template);
+    return { saved: p.template.name };
   },
-  'template.apply': async (ctx, p) =>
-    applyTemplateToSheet(p.sheet as never, loadTemplate(ctx.ws, String(p.name))),
+  'template.apply': async (ctx, p) => applyTemplateToSheet(p.sheet, loadTemplate(ctx.ws, p.name)),
 
   'schema.tables': async (ctx) => ctx.getEngine().schemaTables(),
 
   'query.run': async (ctx, p) => {
-    const sql = String(p.sql).trim();
+    const sql = p.sql.trim();
     if (!/^(SELECT|WITH)\b/i.test(sql)) {
       throw new AppError({
         module: 'query',
@@ -151,7 +137,7 @@ const handlers: Record<string, Handler> = {
         data: { sql },
       });
     }
-    return toolQuery(ctx.ws, sql); // 前端查询 → 工具函数
+    return toolQuery(ctx.ws, sql);
   },
 
   'state.summary': async (ctx) => toolGetProjectState(ctx.ws),
@@ -162,14 +148,21 @@ const handlers: Record<string, Handler> = {
   },
 };
 
-/** 分发命令;统一捕获错误为 { ok:false }。 */
+/** 分发命令;统一捕获错误为 { ok:false }。返回 ApiResult<unknown>:结果形状由 CommandResults 定义,CLI/MCP/渲染层以 JSON 消费。 */
 export async function dispatch(command: ApiCommand, ctx: ApiContext): Promise<ApiResult<unknown>> {
-  const handler = handlers[command.cmd];
+  if (command.cmd === 'workspace.open' || command.cmd === 'workspace.pick') {
+    // workspace.open / workspace.pick 由传输层(Electron main / CLI)建 ctx,不进 handler 表。
+    return {
+      ok: false,
+      error: { code: 'OPEN_AT_TRANSPORT', message: 'workspace.open must be handled by the transport layer' },
+    };
+  }
+  const handler = handlers[command.cmd as SessionCommands];
   if (!handler) {
     return { ok: false, error: { code: 'UNKNOWN_CMD', message: `unknown command: ${command.cmd}` } };
   }
   try {
-    const data = await handler(ctx, command as Payload);
+    const data = await (handler as HandlerFor<SessionCommands>)(ctx, command as never);
     return { ok: true, data };
   } catch (err) {
     const appErr = captureError(err, {
