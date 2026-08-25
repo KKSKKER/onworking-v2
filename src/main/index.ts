@@ -10,12 +10,14 @@ import type { IpcRequest } from '../ipc/contracts';
 useConsoleLogging('info');
 
 // ---- CLI 桥:前端 → onw CLI 子进程(NDJSON),main 只转发 + 回推 ----
-// 用 ELECTRON_RUN_AS_NODE=1 + process.execPath(应用自带 node):不依赖系统 node,dev 与打包一致。
-const bridge = createCliBridge({
-  command: process.execPath,
-  args: [join(app.getAppPath(), 'dist', 'main', 'cli', 'index.js'), 'open'],
-  env: { ELECTRON_RUN_AS_NODE: '1' },
-});
+// 关键:better-sqlite3 只有一个 ABI,桥的子进程 node 必须与当前模块 ABI 一致。
+//  - dev:系统 node(rebuild:node 编的就是它) → spawn 'node'
+//  - 打包:应用自带 node(Electron ABI,electron-builder 已按 Electron 重建) → ELECTRON_RUN_AS_NODE
+// 不能统一用 ELECTRON_RUN_AS_NODE,否则 dev 的 node-ABI 模块跑在 Electron node 下必然 NODE_MODULE_VERSION 不匹配。
+const CLI_ENTRY = join(app.getAppPath(), 'dist', 'main', 'cli', 'index.js');
+const bridge = app.isPackaged
+  ? createCliBridge({ command: process.execPath, args: [CLI_ENTRY, 'open'], env: { ELECTRON_RUN_AS_NODE: '1' } })
+  : createCliBridge({ command: 'node', args: [CLI_ENTRY, 'open'] });
 let watchTimer: NodeJS.Timeout | null = null;
 
 function watchWorkspace(wsPath: string): void {
