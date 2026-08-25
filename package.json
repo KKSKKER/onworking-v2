@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "demo:import": "tsx scripts/demo-import.ts",
     "demo:agent": "tsx scripts/agent-flow-demo.ts",
+    "test:mcp": "tsx scripts/mcp-client-test.ts",
     "build:main": "tsc -p tsconfig.main.json",
     "build:renderer": "vite build",
     "build": "npm run build:main && npm run build:renderer",
