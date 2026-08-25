@@ -21,7 +21,8 @@
     "dev:renderer": "vite --port 5173 --strict-port",
     "start": "npm run build && electron .",
     "onw": "tsx src/cli/index.ts",
-    "dist": "npm run build && electron-builder"
+    "postinstall": "node scripts/postinstall-dual-abi.js",
+    "dist": "npm run build:dual-abi && npm run build && electron-builder"
   },
   "bin": {
     "onw": "dist/main/cli/index.js"
@@ -29,7 +30,7 @@
   "build": {
     "appId": "com.onworking.app",
     "productName": "Onworking",
-    "files": ["dist/**"],
+    "files": ["dist/**", "node_modules/better-sqlite3-electron/**"],
     "asarUnpack": ["dist/main/cli/**"],
     "directories": { "output": "release" },
     "win": { "target": ["nsis", "portable"] },
