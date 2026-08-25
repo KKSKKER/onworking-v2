@@ -153,7 +153,7 @@ export async function runCleanPipeline(
         : sheets.slice(0, 1);
       for (const sheet of target) {
         const mapped = applyMapping(sheet, mappings);
-        attachLineage(mapped, { sourceFile: file.path, sourceRow: source.headerRow + 1 }, extractedAt);
+        attachLineage(mapped, { sourceFile: file.path, sourceSheet: sheet.sheetName, sourceRow: source.headerRow + 1 }, extractedAt);
         allRows.push(...mapped);
       }
     }

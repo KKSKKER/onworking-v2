@@ -159,7 +159,7 @@ $lines | npm run --silent onw -- open D:/ws
 - **`overwrite` 缺省 `false`**：`bigtable.addFiles` 遇到同名文件默认跳过（`skipped`）；要覆盖必须显式 `overwrite:true`。
 - **规则 YAML 是 clean 映射的唯一事实来源**：不要指望管线 config 里带映射；改映射只能 `mapping.save`。
 - **`sourceDir` 决定源文件，规则 `sources[].pattern` 决定匹配**：想加别处文件，拷进 sourceDir 或改规则。
-- **血缘列自动附加**：`__source_file` / `__source_row` / `__extracted_at` 每行都有，可用于追溯；`bigtable.exportCsv` 默认不含它们（`includeLineage:true` 才带）。
+- **血缘列自动附加**：`__source_file` / `__source_sheet` / `__source_row` / `__extracted_at` 每行都有，可反查「哪个文件哪个 sheet 哪一行」；`bigtable.exportCsv` 默认不含它们（`includeLineage:true` 才带）。
 - **多 sheet 文件**：`mapping.save` 传 `sheetName` 指定导入哪张表；不传则每文件只导**第一张**（`sheets.slice(0,1)`）。
 - **导出用命令**：`bigtable.exportCsv` 落盘 CSV，缺省 `<工作区根>/exports/<tableName>.csv`；禁止自己拼 CSV 写文件。
 - **`previewRows` 语义**：`rowCount`=当页行数、`total`=总数（分页时两者不同）。

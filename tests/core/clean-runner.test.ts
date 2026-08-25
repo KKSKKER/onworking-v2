@@ -81,6 +81,7 @@ describe('clean pipeline runner', () => {
     expect(rows[0].debit).toBe(12345); // 元→分,整数
     expect(rows[0].note).toBe('工资');
     expect(String(rows[0].__source_file)).toContain('a.xlsx');
+    expect(rows[0].__source_sheet).toBe('Sheet1');
     expect(rows[0].__source_row).toBe(2); // 数据从第 2 行起
     expect(typeof rows[0].debit).toBe('number');
   });
