@@ -72,11 +72,15 @@ export function SqlView() {
   return (
     <div style={{ padding: 12, height: '100%', boxSizing: 'border-box' }}>
       <div style={{ display: 'flex', gap: 12, height: '100%' }}>
-        <div style={{ minWidth: 180, overflow: 'auto' }}>
-          <b>🗂 表</b>
-          <ul style={{ listStyle: 'none', padding: 0, margin: '4px 0' }}>
+        <div style={{ minWidth: 200, overflow: 'auto' }}>
+          <div style={{ marginBottom: 8 }}>
+            <b>🗂 表</b>{' '}
+            <button onClick={handleCopyStructure}>复制字段</button>{' '}
+            <button onClick={reload}>刷新</button>
+          </div>
+          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
             {(tables ?? []).map((t) => (
-              <li key={t.name} style={{ marginBottom: 6 }}>
+              <li key={t.name} style={{ marginBottom: 8 }}>
                 <span
                   onClick={() => handleTableClick(t.name)}
                   style={{ cursor: 'pointer', fontWeight: 600 }}
@@ -84,14 +88,31 @@ export function SqlView() {
                 >
                   {t.name}
                 </span>
-                <div style={{ fontSize: 10, color: '#8b949e', wordBreak: 'break-all' }}>
-                  {t.columns.length > 0 ? t.columns.map((c) => `${c.name}:${c.type}`).join(' · ') : '(空)'}
+                {/* 字段竖排,放在限高小框内,超长可往下拉 */}
+                <div
+                  style={{
+                    marginTop: 2,
+                    maxHeight: 120,
+                    overflowY: 'auto',
+                    border: '1px solid #e5e5e5',
+                    borderRadius: 4,
+                    padding: '2px 6px',
+                    background: '#fafafa',
+                    fontSize: 11,
+                    color: '#555',
+                  }}
+                >
+                  {t.columns.length > 0
+                    ? t.columns.map((c, i) => (
+                        <div key={i} style={{ whiteSpace: 'nowrap' }}>
+                          {c.name}:{c.type}
+                        </div>
+                      ))
+                    : <div style={{ color: '#8b949e' }}>(空)</div>}
                 </div>
               </li>
             ))}
           </ul>
-          <button onClick={handleCopyStructure}>复制表结构</button>{' '}
-          <button onClick={reload}>刷新</button>
         </div>
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <textarea
