@@ -36,6 +36,7 @@ export function PreviewView() {
   const [preview, setPreview] = useState<PreviewData | null>(null);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const [exportMsg, setExportMsg] = useState('');
 
   // 选中源文件/大表 → 自动加载预览(文件优先:选了文件显示文件,否则显示大表)
   useEffect(() => {
@@ -126,6 +127,26 @@ export function PreviewView() {
       ? `大表: ${selectedFolder}`
       : '(未选择)';
 
+  // 导出 CSV:大表→bigtable.exportCsv;源文件→setup.exportCsv(同预览视角的 sheet+表头行)
+  async function handleExport() {
+    setExportMsg('');
+    if (selectedFile) {
+      const res = await sendCli({ cmd: 'setup.exportCsv', filePath: selectedFile, sheetName: sheet || undefined, headerRow });
+      if (res.ok) {
+        const d = res.data as { file: string; rows: number };
+        setExportMsg(`已导出: ${d.file} (${d.rows} 行)`);
+      } else setExportMsg(`导出失败: ${res.error.message}`);
+    } else if (selectedFolder) {
+      const res = await sendCli({ cmd: 'bigtable.exportCsv', folder: selectedFolder });
+      if (res.ok) {
+        const d = res.data as { file: string; rows: number };
+        setExportMsg(`已导出: ${d.file} (${d.rows} 行)`);
+      } else setExportMsg(`导出失败: ${res.error.message}`);
+    } else {
+      setExportMsg('请先选择大表或源文件');
+    }
+  }
+
   return (
     <div style={{ padding: 12, height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
       <div style={{ marginBottom: 8, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -160,7 +181,11 @@ export function PreviewView() {
             />
           </span>
         )}
+        <button onClick={handleExport} disabled={!selectedFolder && !selectedFile}>
+          导出 CSV
+        </button>
         <span style={{ color: 'red' }}>{err}</span>
+        {exportMsg && <span style={{ color: '#8b949e', fontSize: 11 }}>{exportMsg}</span>}
       </div>
       {preview ? (
         <>
