@@ -123,6 +123,31 @@ describe('clean pipeline runner', () => {
     await expect(runCleanPipeline(workspace, db, empty, bigTable)).rejects.toThrow();
   });
 
+  it('warns when a mapped source header is duplicated in the source', async () => {
+    const dupDir = join(dir, 'dup-src');
+    mkdirSync(dupDir, { recursive: true });
+    const wsx = XLSX.utils.aoa_to_sheet([
+      ['日期', '其他', '借方金额', '其他'],
+      ['2024-01', 'x', 100, 'y'],
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, wsx, 'Sheet1');
+    XLSX.writeFile(wb, join(dupDir, 'dup.xlsx'));
+    saveRule(workspace, 'seq', {
+      name: 'seq_dup_rule',
+      display: '重复表头',
+      version: 1,
+      sources: [{ pattern: '**/*', headerRow: 1 }],
+      fields: [
+        { sourceHeader: '日期', outputName: 'date', included: true, order: 1, transforms: [{ kind: 'coerce_date' }] },
+        { sourceHeader: '其他', outputName: 'other', included: true, order: 2, transforms: [{ kind: 'none' }] },
+      ],
+    });
+    const dupCfg: CleanPipelineConfig = { kind: 'clean', id: 'c2', label: '', bigTableFolder: 'seq', sourceDir: dupDir, createdAt: '' };
+    const res = await runCleanPipeline(workspace, db, dupCfg, bigTable);
+    expect(res.warnings.some((w) => w.includes('其他'))).toBe(true);
+  });
+
   it('logs clean start and complete (logging wired)', async () => {
     const out: LogEntry[] = [];
     logger.addSink(arraySink(out));

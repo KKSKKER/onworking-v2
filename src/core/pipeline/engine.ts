@@ -31,6 +31,8 @@ export interface RunSummary {
   ok: boolean;
   rows?: number;
   error?: string;
+  /** 运行告警(如清洗入库时重复表头导致丢列)。 */
+  warnings?: string[];
 }
 
 export interface QueryOutcome {
@@ -98,8 +100,8 @@ export class PipelineEngine {
         st.registerMapping(cfg.bigTableFolder, loadRules(this.ws, cfg.bigTableFolder).length);
         st.save();
         commitWorkspaceChanges(this.ws, `pipeline ${id} (clean) ran`);
-        logger.info(MODULE, 'run ok', { pipelineId: id, kind: 'clean', rows: result.rowsInserted });
-        return { pipelineId: id, kind: 'clean', ok: true, rows: result.rowsInserted };
+        logger.info(MODULE, 'run ok', { pipelineId: id, kind: 'clean', rows: result.rowsInserted, warnings: result.warnings });
+        return { pipelineId: id, kind: 'clean', ok: true, rows: result.rowsInserted, warnings: result.warnings };
       }
       // query / sql-clean:用总表 DB
       const db = openDatabase(this.masterDb(), { wal: false });

@@ -24,6 +24,8 @@ export interface CleanResult {
   tableName: string;
   rowsInserted: number;
   files: number;
+  /** 入库告警(如重复表头导致映射只取一列、其余列数据不入)。 */
+  warnings: string[];
 }
 
 export interface CleanProgress {
@@ -135,6 +137,7 @@ export async function runCleanPipeline(
 
   const extractedAt = new Date().toISOString();
   const allRows: Record<string, unknown>[] = [];
+  const warnings = new Set<string>();
 
   // 按规则 sources 处理
   let processedFiles = 0;
@@ -152,6 +155,13 @@ export async function runCleanPipeline(
         ? sheets.filter((s) => s.sheetName === source.sheetName)
         : sheets.slice(0, 1);
       for (const sheet of target) {
+        // 重复表头检测:同名 sourceHeader 多次出现 → 映射只取其一,其余列数据不入(静默丢列)
+        for (const m of mappings) {
+          const n = sheet.headers.filter((h) => h === m.sourceHeader).length;
+          if (n > 1) {
+            warnings.add(`表头「${m.sourceHeader}」出现 ${n} 次,映射只取其一,其余列数据不入`);
+          }
+        }
         const mapped = applyMapping(sheet, mappings);
         attachLineage(mapped, { sourceFile: file.path, sourceSheet: sheet.sheetName, sourceRow: source.headerRow + 1 }, extractedAt);
         allRows.push(...mapped);
@@ -175,6 +185,7 @@ export async function runCleanPipeline(
     pipelineId: cfg.id,
     rows: result.rowsInserted,
     files: files.length,
+    warnings: [...warnings],
   });
 
   return {
@@ -183,5 +194,6 @@ export async function runCleanPipeline(
     tableName: bigTable.tableName,
     rowsInserted: result.rowsInserted,
     files: files.length,
+    warnings: [...warnings],
   };
 }
