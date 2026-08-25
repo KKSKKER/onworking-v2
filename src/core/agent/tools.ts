@@ -235,11 +235,3 @@ export function toolVerifyData(ws: Workspace, bigTableFolder: string): { rows: n
   }
   return { rows, masterRows };
 }
-
-/** 辅助:列出已有大表与管线(Agent 上下文)。 */
-export function toolListContext(ws: Workspace): { bigTables: string[]; pipelines: string[] } {
-  return {
-    bigTables: listBigTables(ws),
-    pipelines: listPipelines(ws),
-  };
-}

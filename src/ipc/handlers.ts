@@ -47,8 +47,8 @@ type HandlerFor<K extends keyof CommandPayloads> = (
   payload: CommandPayloads[K],
 ) => Promise<CommandResults[K]> | CommandResults[K];
 
-/** 会话命令(排除传输层引导命令 workspace.open / workspace.pick)。 */
-type SessionCommands = Exclude<keyof CommandPayloads, 'workspace.open' | 'workspace.pick'>;
+/** 会话命令(排除传输层引导命令 workspace.open)。 */
+type SessionCommands = Exclude<keyof CommandPayloads, 'workspace.open'>;
 
 const handlers: { [K in SessionCommands]: HandlerFor<K> } = {
   'bigtable.list': async (ctx) => listBigTables(ctx.ws),
@@ -147,8 +147,8 @@ const handlers: { [K in SessionCommands]: HandlerFor<K> } = {
 
 /** 分发命令;统一捕获错误为 { ok:false }。返回 ApiResult<unknown>:结果形状由 CommandResults 定义,CLI/MCP/渲染层以 JSON 消费。 */
 export async function dispatch(command: ApiCommand, ctx: ApiContext): Promise<ApiResult<unknown>> {
-  if (command.cmd === 'workspace.open' || command.cmd === 'workspace.pick') {
-    // workspace.open / workspace.pick 由传输层(Electron main / CLI)建 ctx,不进 handler 表。
+  if (command.cmd === 'workspace.open') {
+    // workspace.open 由传输层(Electron main / CLI)建 ctx,不进 handler 表。
     return {
       ok: false,
       error: { code: 'OPEN_AT_TRANSPORT', message: 'workspace.open must be handled by the transport layer' },

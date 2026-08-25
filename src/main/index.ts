@@ -42,13 +42,6 @@ ipcMain.handle('onw:invoke', async (_event, command: { cmd: string; [k: string]:
     return { ok: true, data: ctx.ws };
   };
   if (command?.cmd === 'workspace.open') return open(String(command.path));
-  if (command?.cmd === 'workspace.pick') {
-    const res = await dialog.showOpenDialog({ properties: ['openDirectory'] });
-    if (res.canceled || !res.filePaths[0]) {
-      return { ok: false, error: { code: 'CANCELLED', message: 'cancelled' } };
-    }
-    return open(res.filePaths[0]);
-  }
   if (!ctx) {
     return { ok: false, error: { code: 'NO_WORKSPACE', message: 'no workspace opened' } };
   }
@@ -58,6 +51,12 @@ ipcMain.handle('onw:invoke', async (_event, command: { cmd: string; [k: string]:
   }
   const result = await dispatch(command as never, ctx);
   return reqId === undefined ? result : { reqId, result };
+});
+
+// 目录选择桥(UI 专属):渲染层先 pickWorkspace() 拿路径,再走 workspace.open。
+ipcMain.handle('onw:pick-workspace', async () => {
+  const res = await dialog.showOpenDialog({ properties: ['openDirectory'] });
+  return res.canceled ? null : (res.filePaths[0] ?? null);
 });
 
 app.whenReady().then(() => {

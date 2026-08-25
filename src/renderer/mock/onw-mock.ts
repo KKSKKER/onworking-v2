@@ -10,6 +10,7 @@ export function installMockOnw(): void {
   if (w.onw) return;
   w.onw = {
     invoke: (command: ApiCommand): Promise<ApiResult<unknown>> => mockDispatch(command),
+    pickWorkspace: async (): Promise<string | null> => 'D:/演示工作区',
     onProgress: () => () => {},
     onLog: () => () => {},
   };
@@ -19,7 +20,6 @@ async function mockDispatch(command: ApiCommand): Promise<ApiResult<unknown>> {
   await new Promise((r) => setTimeout(r, 150));
   switch (command.cmd) {
     case 'workspace.open':
-    case 'workspace.pick':
       return ok({ root: 'D:/演示工作区', onworkingDir: 'D:/演示工作区/.onworking' });
     case 'bigtable.list':
       return ok(['序时账', '科目余额']);

@@ -5,6 +5,7 @@ import type { ApiCommand, ApiResult } from '../ipc/contracts';
 contextBridge.exposeInMainWorld('onw', {
   invoke: (command: ApiCommand): Promise<ApiResult<unknown>> =>
     ipcRenderer.invoke('onw:invoke', command) as Promise<ApiResult<unknown>>,
+  pickWorkspace: (): Promise<string | null> => ipcRenderer.invoke('onw:pick-workspace') as Promise<string | null>,
   onProgress: (cb: (payload: unknown) => void): (() => void) => {
     const listener = (_e: unknown, payload: unknown): void => cb(payload);
     ipcRenderer.on('onw:progress', listener);

@@ -17,7 +17,6 @@ export type ApiResult<T> =
 /** 命令名 → 载荷。这是契约的唯一事实来源。 */
 export interface CommandPayloads {
   'workspace.open': { path: string };
-  'workspace.pick': {};
   'bigtable.list': {};
   'bigtable.get': { folder: string };
   'bigtable.save': { folder: string; config: BigTableConfig };
@@ -48,7 +47,6 @@ export interface CommandPayloads {
 /** 命令名 → 成功结果类型。 */
 export interface CommandResults {
   'workspace.open': Workspace;
-  'workspace.pick': Workspace;
   'bigtable.list': string[];
   'bigtable.get': BigTableConfig;
   'bigtable.save': { saved: string };

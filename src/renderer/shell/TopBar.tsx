@@ -31,7 +31,9 @@ export function TopBar({
   const { selectedFolder } = useSelection();
 
   async function handlePick() {
-    const res = await window.onw.invoke({ cmd: 'workspace.pick' });
+    const path = await window.onw.pickWorkspace();
+    if (!path) return;
+    const res = await window.onw.invoke({ cmd: 'workspace.open', path });
     if (res.ok) {
       const ws = res.data as { root: string };
       setWsName(ws.root);
