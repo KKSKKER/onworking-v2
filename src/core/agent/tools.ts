@@ -1,7 +1,7 @@
 // src/core/agent/tools.ts
 // AI 工具函数层:SVG 泳道图里 AI(Agent)调用的每个 tool 封装成一个函数。
 // 入参 AI 友好,返回结构化结果(含下一步可用的项目状态)。底层复用 core。
-import { openWorkspace, masterDbPath, type Workspace } from '../workspace/workspace';
+import { openWorkspace, type Workspace } from '../workspace/workspace';
 import {
   saveBigTableConfig,
   listBigTables,
@@ -216,22 +216,24 @@ export function toolQuery(
   }
 }
 
-/** tool: 验证数据(大表 DB 行数 + 总表 DB 行数)。 */
-export function toolVerifyData(ws: Workspace, bigTableFolder: string): { rows: number; masterRows: number } {
+/** tool: 清洗结果预览 —— 只读查大表 DB(替换 toolVerifyData)。 */
+export function toolPreviewCleanResult(
+  ws: Workspace,
+  bigTableFolder: string,
+  opts?: { limit?: number; offset?: number },
+): { columns: string[]; rows: Record<string, unknown>[]; rowCount: number; total: number } {
   const cfg = loadBigTableConfig(ws, bigTableFolder);
-  const btdb = openDatabase(bigTableDbPath(ws, bigTableFolder));
-  let rows = 0;
+  const db = openDatabase(bigTableDbPath(ws, bigTableFolder));
   try {
-    rows = (btdb.prepare(`SELECT COUNT(*) AS n FROM "${cfg.tableName}"`).get() as { n: number }).n;
+    const limit = opts?.limit ?? 100;
+    const offset = opts?.offset ?? 0;
+    const total = (db.prepare(`SELECT COUNT(*) AS n FROM "${cfg.tableName}"`).get() as { n: number }).n;
+    const rows = db
+      .prepare(`SELECT * FROM "${cfg.tableName}" LIMIT ${limit} OFFSET ${offset}`)
+      .all() as Record<string, unknown>[];
+    const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+    return { columns, rows, rowCount: rows.length, total };
   } finally {
-    btdb.close();
+    db.close();
   }
-  const mdb = openDatabase(masterDbPath(ws));
-  let masterRows = 0;
-  try {
-    masterRows = (mdb.prepare(`SELECT COUNT(*) AS n FROM "${cfg.tableName}"`).get() as { n: number }).n;
-  } finally {
-    mdb.close();
-  }
-  return { rows, masterRows };
 }

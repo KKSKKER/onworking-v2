@@ -29,6 +29,7 @@ import {
   toolCreateQueryPipeline,
   toolRunPipeline,
   toolRunPipelines,
+  toolPreviewCleanResult,
   toolQuery,
   toolGetProjectState,
 } from '../core/agent/tools';
@@ -61,6 +62,8 @@ const handlers: { [K in SessionCommands]: HandlerFor<K> } = {
     const dir = join(ctx.ws.onworkingDir, 'bigtables', p.folder, 'source');
     return existsSync(dir) ? scanSourceDir(dir).map((f) => f.path) : [];
   },
+  'bigtable.previewRows': async (ctx, p) =>
+    toolPreviewCleanResult(ctx.ws, p.folder, { limit: p.limit, offset: p.offset }),
 
   'pipeline.list': async (ctx) => listPipelines(ctx.ws),
   'pipeline.save': async (ctx, p) => {

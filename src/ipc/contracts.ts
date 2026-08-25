@@ -21,6 +21,7 @@ export interface CommandPayloads {
   'bigtable.get': { folder: string };
   'bigtable.save': { folder: string; config: BigTableConfig };
   'bigtable.sourceFiles': { folder: string };
+  'bigtable.previewRows': { folder: string; limit?: number; offset?: number };
   'mapping.save': { folder: string; headerRow?: number; mappings: FieldMapping[] };
   'pipeline.list': {};
   'pipeline.save': { config: PipelineConfig };
@@ -51,6 +52,7 @@ export interface CommandResults {
   'bigtable.get': BigTableConfig;
   'bigtable.save': { saved: string };
   'bigtable.sourceFiles': string[];
+  'bigtable.previewRows': { columns: string[]; rows: Record<string, unknown>[]; rowCount: number; total: number };
   'mapping.save': { ruleFile: string };
   'pipeline.list': string[];
   'pipeline.save': { pipelineId: string };

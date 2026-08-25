@@ -7,7 +7,7 @@ import { initWorkspace, type Workspace } from '../../src/core/workspace/workspac
 import { saveBigTableConfig } from '../../src/core/bigtable/store';
 import { savePipeline } from '../../src/core/pipeline/store';
 import { saveRule } from '../../src/core/rule/store';
-import { toolRunPipeline, toolRunPipelines } from '../../src/core/agent/tools';
+import { toolRunPipeline, toolRunPipelines, toolPreviewCleanResult } from '../../src/core/agent/tools';
 
 describe('tools', () => {
   let dir: string;
@@ -83,5 +83,15 @@ describe('tools', () => {
 
     const none = await toolRunPipelines(ws, { kind: 'clean', bigTableFolder: 'other' });
     expect(none).toEqual([]);
+  });
+
+  it('toolPreviewCleanResult reads the big table DB read-only', async () => {
+    await toolRunPipeline(ws, 'c1');
+    const res = toolPreviewCleanResult(ws, 'seq');
+    expect(res.columns).toContain('date');
+    expect(res.total).toBe(2);
+    expect(res.rows).toHaveLength(2);
+    const paged = toolPreviewCleanResult(ws, 'seq', { limit: 1, offset: 1 });
+    expect(paged.rows).toHaveLength(1);
   });
 });

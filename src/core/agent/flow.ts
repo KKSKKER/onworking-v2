@@ -16,7 +16,8 @@ import {
   toolSetMapping,
   toolCreateCleaningPipeline,
   toolRunPipeline,
-  toolVerifyData,
+  toolPreviewCleanResult,
+  toolQuery,
 } from './tools';
 
 export interface SetupStep {
@@ -127,10 +128,13 @@ export async function runInitialSetupFlow(opts: {
     void cleanRes;
     void masterRes;
 
-    const verify = (await push('verifyData', () => toolVerifyData(ws, bigTableFolder))) as {
-      rows: number;
-      masterRows: number;
-    };
+    const preview = (await push('previewCleanResult', () =>
+      toolPreviewCleanResult(ws, bigTableFolder),
+    )) as { rows: Record<string, unknown>[]; total: number };
+    const masterCount = (await push('masterCount', () =>
+      toolQuery(ws, `SELECT COUNT(*) AS n FROM "${tableName ?? 'seq'}"`),
+    )) as { rows: Record<string, unknown>[] };
+    const verify = { rows: preview.total, masterRows: Number(masterCount.rows[0]?.n ?? 0) };
 
     return {
       success: true,
