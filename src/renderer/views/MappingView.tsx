@@ -171,7 +171,7 @@ export function MappingView() {
   const target = selectedFolder ?? '(未选择大表)';
 
   return (
-    <div style={{ padding: 12 }}>
+    <div style={{ padding: 12, height: '100%', boxSizing: 'border-box', overflow: 'auto' }}>
       <div style={{ marginBottom: 8, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
         源文件{' '}
         <input style={{ width: 260 }} value={filePath} onChange={(e) => setFilePath(e.target.value)} />{' '}

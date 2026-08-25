@@ -31,7 +31,7 @@ export function QueryView() {
   }
 
   return (
-    <div style={{ padding: 12 }}>
+    <div style={{ padding: 12, height: '100%', boxSizing: 'border-box', overflow: 'auto' }}>
       <div style={{ marginBottom: 8 }}>
         <b>查询管理</b>(只管理已保存的管线){' '}
         <button onClick={runAll} disabled={busy}>

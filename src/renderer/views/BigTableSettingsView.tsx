@@ -46,7 +46,7 @@ export function BigTableSettingsView() {
   }
 
   return (
-    <div style={{ padding: 12 }}>
+    <div style={{ padding: 12, height: '100%', boxSizing: 'border-box', overflow: 'auto' }}>
       <div style={{ marginBottom: 8 }}>
         大表: <b>{folder}</b>
         <button onClick={reload}>刷新</button>

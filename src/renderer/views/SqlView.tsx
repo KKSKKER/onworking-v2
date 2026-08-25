@@ -52,7 +52,7 @@ export function SqlView() {
   return (
     <div style={{ padding: 12, height: '100%', boxSizing: 'border-box' }}>
       <div style={{ display: 'flex', gap: 12, height: '100%' }}>
-        <div style={{ minWidth: 160 }}>
+        <div style={{ minWidth: 160, overflow: 'auto' }}>
           <b>🗂 表</b>
           <ul style={{ listStyle: 'none', padding: 0, margin: '4px 0' }}>
             {(tables ?? []).map((t) => (

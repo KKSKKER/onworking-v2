@@ -43,7 +43,7 @@ export function PreviewView() {
     setPage(0);
     setPreview(null);
     if (selectedFile) {
-      void loadSheets(selectedFile);
+      void loadFilePreview(selectedFile);
     } else if (selectedFolder) {
       setHeaderRow(1);
       setSheets([]);
@@ -62,13 +62,28 @@ export function PreviewView() {
     setPreview({ title: `大表: ${folder}`, columns: d.columns, rows: d.rows, total: d.total });
   }
 
-  async function loadSheets(filePath: string) {
+  // 预览源文件:若该大表已有规则,按规则的 sheetName + 表头行加载(与入库视角一致)
+  async function loadFilePreview(filePath: string) {
+    let ruleSheet = '';
+    let ruleHeader = 1;
+    if (selectedFolder) {
+      const cfg = await sendCli({ cmd: 'bigtable.config', folder: selectedFolder });
+      if (cfg.ok) {
+        const ctx = cfg.data as { rules: { sources: { sheetName?: string; headerRow: number }[] }[] };
+        const src = ctx.rules?.[0]?.sources?.[0];
+        if (src) {
+          ruleSheet = src.sheetName ?? '';
+          ruleHeader = src.headerRow ?? 1;
+        }
+      }
+    }
+    setHeaderRow(ruleHeader);
     const res = await sendCli({ cmd: 'setup.sheets', filePath });
     const names = res.ok ? (res.data as string[]) : [];
     setSheets(names);
-    const first = names[0] ?? '';
-    setSheet(first);
-    void loadSource(0, filePath, first);
+    const pick = ruleSheet && names.includes(ruleSheet) ? ruleSheet : (names[0] ?? '');
+    setSheet(pick);
+    void loadSource(0, filePath, pick);
   }
 
   async function loadSource(p: number, filePath: string, sheetName: string) {
