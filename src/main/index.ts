@@ -3,7 +3,7 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import { join } from 'node:path';
 import { dispatch, type ApiContext } from '../ipc/handlers';
-import { createContext } from './context';
+import { createContext } from '../app/context';
 import { useConsoleLogging, logger } from '../core/logging';
 
 useConsoleLogging('info');
