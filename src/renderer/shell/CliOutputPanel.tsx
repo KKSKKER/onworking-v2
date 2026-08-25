@@ -1,7 +1,27 @@
 // 底部面板:实时渲染 CLI 输出流(命令结果 + 进度/日志),AI 操作也会实时出现。
 // 自动滚到底部(新行追加时),方便一直看最新输出。
+// 大结果行只做摘要展示(不渲染每行原始数据),避免面板被几 MB JSON 塞满卡顿。
 import { useEffect, useRef, useState } from 'react';
 import { subscribeOutput } from '../cli';
+
+const MAX_LINE = 400;
+
+/** 结果行摘要:大 JSON(rows/数组)只统计,不渲染原始数据;超长行截断。 */
+function summarizeLine(line: string): string {
+  if (line.length <= MAX_LINE) return line;
+  try {
+    const msg = JSON.parse(line) as { result?: { ok?: boolean; data?: unknown } };
+    const data = msg.result?.data;
+    if (data && typeof data === 'object' && !Array.isArray(data) && Array.isArray((data as { rows?: unknown[] }).rows)) {
+      const d = data as { rows: unknown[]; total?: number; columns?: string[] };
+      return `{${msg.result?.ok ? 'ok' : 'error'}} 结果 ${d.rows.length}/${d.total ?? d.rows.length} 行 · ${(d.columns ?? []).length} 列`;
+    }
+    if (Array.isArray(data)) return `{${msg.result?.ok ? 'ok' : 'error'}} ${data.length} 项`;
+  } catch {
+    // 非 JSON 行,走截断
+  }
+  return `${line.slice(0, MAX_LINE)}…(${line.length}字符)`;
+}
 
 export function CliOutputPanel() {
   const [lines, setLines] = useState<string[]>([]);
@@ -33,7 +53,7 @@ export function CliOutputPanel() {
         )}
         {lines.map((l, i) => (
           <div key={i} className={l.includes('"ok":false') || l.includes('ERROR') ? 'log-error' : ''}>
-            {l}
+            {summarizeLine(l)}
           </div>
         ))}
       </div>
