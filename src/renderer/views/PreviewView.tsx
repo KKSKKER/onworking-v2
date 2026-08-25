@@ -37,18 +37,18 @@ export function PreviewView() {
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
-  // 选中大表/源文件 → 自动加载预览
+  // 选中源文件/大表 → 自动加载预览(文件优先:选了文件显示文件,否则显示大表)
   useEffect(() => {
     setErr('');
     setPage(0);
     setPreview(null);
-    if (selectedFolder) {
+    if (selectedFile) {
+      void loadSheets(selectedFile);
+    } else if (selectedFolder) {
       setHeaderRow(1);
       setSheets([]);
       setSheet('');
       void loadBigTable(0, selectedFolder);
-    } else if (selectedFile) {
-      void loadSheets(selectedFile);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFolder, selectedFile]);
@@ -95,8 +95,8 @@ export function PreviewView() {
 
   function handlePageChange(p: number) {
     setPage(p);
-    if (selectedFolder) void loadBigTable(p, selectedFolder);
-    else if (selectedFile) void loadSource(p, selectedFile, sheet);
+    if (selectedFile) void loadSource(p, selectedFile, sheet);
+    else if (selectedFolder) void loadBigTable(p, selectedFolder);
   }
 
   function handleHeaderRow(n: number) {
@@ -105,10 +105,10 @@ export function PreviewView() {
   }
 
   const fileNameOf = (p: string): string => p.split(/[\\/]/).pop() ?? p;
-  const label = selectedFolder
-    ? `大表: ${selectedFolder}`
-    : selectedFile
-      ? `文件: ${fileNameOf(selectedFile)}`
+  const label = selectedFile
+    ? `文件: ${fileNameOf(selectedFile)}`
+    : selectedFolder
+      ? `大表: ${selectedFolder}`
       : '(未选择)';
 
   return (

@@ -23,10 +23,9 @@ export function SelectionProvider({ children }: { children: ReactNode }) {
           setSelectedFolder(f);
           if (f) setSelectedFile(null); // 切大表时清掉文件选择
         },
-        selectFile: (f) => {
-          setSelectedFile(f);
-          if (f) setSelectedFolder(null); // 切文件时清掉大表选择(否则预览/详情会优先显示大表)
-        },
+        // 选文件不清大表:文件本来就属于某个大表,保留 folder 让映射/预览按大表上下文工作。
+        // 预览视图按「文件优先」处理(选了文件显示文件,否则显示大表)。
+        selectFile: (f) => setSelectedFile(f),
       }}
     >
       {children}

@@ -95,6 +95,12 @@ export function MappingView() {
         transform: kindToTransform(f.transforms?.[0]?.kind ?? 'none'),
       })),
     );
+    // 必须置 detected 非空,字段表才渲染(否则一直走「请先获取表头」空态)
+    setDetected({
+      sheetName: src?.sheetName ?? '',
+      headerRow: src?.headerRow ?? 1,
+      headers: rule.fields.map((f) => f.sourceHeader),
+    });
     setMsg(`已载入规则: ${rule.name}`);
   }
 
