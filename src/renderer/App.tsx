@@ -8,6 +8,7 @@ import { SidebarRight } from './shell/SidebarRight';
 import { CliOutputPanel } from './shell/CliOutputPanel';
 import { ResizablePanel } from './shell/ResizableSidebar';
 import { SelectionProvider } from './state/SelectionContext';
+import { setOpenQueryResult } from './state/panel';
 import { dockviewComponents, VIEWS } from './views/registry';
 import './styles.css';
 
@@ -18,12 +19,20 @@ export function App() {
 
   function onReady(event: DockviewReadyEvent) {
     apiRef.current = event.api;
-    const opened: string[] = [];
     for (const v of VIEWS) {
       event.api.addPanel({ id: v.id, component: v.id, title: v.title });
-      opened.push(v.id);
     }
-    void opened;
+    // 查询结果弹窗:管线管理执行查询管线时打开一个 Tab(名称 = 结果表名)
+    setOpenQueryResult(({ tableName, sql }) => {
+      const api = apiRef.current;
+      if (!api) return;
+      const id = `query-result-${tableName}`;
+      if (api.getPanel(id)) {
+        api.getPanel(id)?.api.setActive();
+      } else {
+        api.addPanel({ id, component: 'query-result', title: tableName, params: { tableName, sql } });
+      }
+    });
   }
 
   function addView(viewId: string) {

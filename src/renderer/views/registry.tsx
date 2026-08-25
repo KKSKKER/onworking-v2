@@ -5,7 +5,8 @@ import { BigTableSettingsView } from './BigTableSettingsView';
 import { MappingView } from './MappingView';
 import { PreviewView } from './PreviewView';
 import { SqlView } from './SqlView';
-import { QueryView } from './QueryView';
+import { PipelineManagementView } from './PipelineManagementView';
+import { QueryResultView } from './QueryResultView';
 
 export interface ViewDef {
   id: string;
@@ -18,11 +19,12 @@ export const VIEWS: ViewDef[] = [
   { id: 'mapping', title: '文件字段映射', component: MappingView },
   { id: 'preview', title: '预览', component: PreviewView },
   { id: 'sql', title: 'SQL 工作台', component: SqlView },
-  { id: 'query', title: '查询', component: QueryView },
+  { id: 'query', title: '管线管理', component: PipelineManagementView },
 ];
 
 export function dockviewComponents(): Record<string, FunctionComponent<IDockviewPanelProps>> {
   const comps: Record<string, FunctionComponent<IDockviewPanelProps>> = {};
   for (const v of VIEWS) comps[v.id] = v.component;
+  comps['query-result'] = QueryResultView; // 查询结果弹窗(不随启动打开)
   return comps;
 }
