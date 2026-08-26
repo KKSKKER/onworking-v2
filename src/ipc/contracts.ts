@@ -30,6 +30,7 @@ export interface CommandPayloads {
   'bigtable.delete': { folder: string };
   'bigtable.deleteSourceFile': { folder: string; file: string };
   'mapping.save': { folder: string; headerRow?: number; mappings: FieldMapping[]; ruleName?: string; sheetName?: string; pattern?: string };
+  'mapping.delete': { folder: string; ruleName: string };
   'pipeline.list': {};
   'pipeline.configs': {};
   'pipeline.save': { config: PipelineConfig };
@@ -71,6 +72,7 @@ export interface CommandResults {
   'bigtable.delete': { deleted: string };
   'bigtable.deleteSourceFile': { deleted: string };
   'mapping.save': { ruleFile: string };
+  'mapping.delete': { deleted: string };
   'pipeline.list': string[];
   'pipeline.configs': PipelineConfig[];
   'pipeline.save': { pipelineId: string };

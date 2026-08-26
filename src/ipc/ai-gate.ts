@@ -41,7 +41,7 @@ export function parseRequestLine(line: string): { req: IpcRequest; trusted: bool
 //   - schema/配置(不碰业务行数据):bigtable.save/get/sourceFiles、setup.sheets/detectSource、mapping.save、template.save、pipeline.delete
 //   - 管线管理:bigtable.addFiles(拷贝文件不解析)、pipeline.save/run
 //   - 真实数据仍封:query.run/exportCsv(工作台可写,AI 更不能用)、bigtable.previewRows/exportCsv/config、setup.preview/exportCsv 等
-//   - 破坏性操作仍封:bigtable.delete、bigtable.deleteSourceFile(删大表/源文件,仅人类 UI)
+//   - 破坏性操作仍封:bigtable.delete、bigtable.deleteSourceFile、mapping.delete(删大表/源文件/规则,仅人类 UI)
 export const METADATA_ALLOWED = new Set([
   'state.summary', 'bigtable.list', 'pipeline.list', 'template.list', 'vcs.status', 'schema.tables', 'settings.get',
   // schema/配置命令:只写/读大表字段定义、sheet 名、映射规则、模板,不碰业务行数据。

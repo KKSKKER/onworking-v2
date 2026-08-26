@@ -73,6 +73,7 @@ export const TOOL_SCHEMAS: Record<string, ToolSchema> = {
   'bigtable.delete': schema({ folder: str }, ['folder']),
   'bigtable.deleteSourceFile': schema({ folder: str, file: str }, ['folder', 'file']),
   'mapping.save': schema({ folder: str, headerRow: int, mappings: objArr, ruleName: str, sheetName: str, pattern: str }, ['folder', 'mappings']),
+  'mapping.delete': schema({ folder: str, ruleName: str }, ['folder', 'ruleName']),
   'pipeline.list': schema({}),
   'pipeline.configs': schema({}),
   'pipeline.save': schema({ config: obj }, ['config']),

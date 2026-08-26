@@ -218,15 +218,36 @@ export function MappingView() {
     setMsg(res.ok ? `模板已保存: ${tpl.name}` : `保存失败: ${res.error.message}`);
   }
 
+  /** 删除当前 (文件, sheet) 的映射规则。 */
+  async function handleDeleteRule() {
+    if (!selectedFolder || !currentRule) return;
+    if (!window.confirm(`确定删除 sheet「${sheet}」的映射规则「${currentRule.name}」?`)) return;
+    const res = await sendCli({ cmd: 'mapping.delete', folder: selectedFolder, ruleName: currentRule.name });
+    if (!res.ok) {
+      setMsg(`删除失败: ${res.error.message}`);
+      return;
+    }
+    setMsg(`已删除规则「${currentRule.name}」`);
+    // 刷新:重载规则状态;若还有其它规则命中该文件则回填,否则清空待检测
+    setDetected(null);
+    setFields([]);
+    await loadBigTableCtx(selectedFolder);
+    if (selectedFile) {
+      const loaded = await loadRuleForFile(selectedFile);
+      if (!loaded) await loadSheets(selectedFile);
+    }
+  }
+
   const target = selectedFolder ?? '(未选择大表)';
-  // 当前 (文件, sheet) 是否已有映射规则(pattern + sheetName 命中)
-  const currentSheetMapped = !!selectedFile && rules.some((r) =>
+  // 当前 (文件, sheet) 命中的规则(pattern + sheetName),用于标绿与删除
+  const currentRule = selectedFile ? rules.find((r) =>
     r.sources.some((s) => {
       const re = patternToRegex(s.pattern);
       const base = selectedFile.split(/[\\/]/).pop() ?? selectedFile;
       return (re.test(base) || re.test(selectedFile)) && (!s.sheetName || s.sheetName === sheet);
     }),
-  );
+  ) : undefined;
+  const currentSheetMapped = !!currentRule;
 
   return (
     <div style={{ padding: 12, height: '100%', boxSizing: 'border-box', overflow: 'auto' }}>
@@ -259,6 +280,15 @@ export function MappingView() {
               ))}
             </select>
           </span>
+          {currentSheetMapped && (
+            <button
+              onClick={() => void handleDeleteRule()}
+              title={`删除 sheet「${sheet}」的映射规则`}
+              style={{ color: '#d00', border: '1px solid #d00', background: 'none', borderRadius: 3, padding: '2px 8px', fontSize: 12, cursor: 'pointer' }}
+            >
+              删除该映射
+            </button>
+          )}
           <span>
             表头行{' '}
             <input type="number" value={headerRow} onChange={(e) => setHeaderRow(Number(e.target.value))} style={{ width: 50 }} />

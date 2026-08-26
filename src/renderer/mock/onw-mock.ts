@@ -85,6 +85,8 @@ async function mockDispatch(command: ApiCommand): Promise<ApiResult<unknown>> {
       return ok({ deleted: command.folder });
     case 'bigtable.deleteSourceFile':
       return ok({ deleted: command.file });
+    case 'mapping.delete':
+      return ok({ deleted: command.ruleName });
     case 'pipeline.list':
       return ok(['c1', 'q1']);
     case 'pipeline.configs':

@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { initWorkspace, type Workspace } from '../../src/core/workspace/workspace';
-import { saveRule, loadRules, listRules } from '../../src/core/rule/store';
+import { saveRule, loadRules, listRules, deleteRule } from '../../src/core/rule/store';
 import { compileRule } from '../../src/core/rule/compile';
 import type { RuleYaml } from '../../src/core/rule/rule';
 
@@ -42,5 +42,13 @@ describe('rule yaml', () => {
     expect(compiled.mappings.map((m) => m.outputName)).toEqual(['date', 'debit']);
     expect(compiled.mappings[0].transform).toBe('normalize-date');
     expect(compiled.mappings[1].transform).toBe('to-cents');
+  });
+
+  it('deleteRule removes the rule by name (tolerating filename sanitization)', () => {
+    saveRule(ws, 'seq', sampleRule());
+    saveRule(ws, 'seq', { ...sampleRule(), name: 'other' });
+    expect(listRules(ws, 'seq').length).toBe(2);
+    deleteRule(ws, 'seq', 'seq_rule');
+    expect(loadRules(ws, 'seq').map((r) => r.name)).toEqual(['other']);
   });
 });

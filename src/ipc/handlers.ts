@@ -6,6 +6,7 @@ import type { Workspace } from '../core/workspace/workspace';
 import { existsSync } from 'node:fs';
 import { listBigTables, loadBigTableConfig, bigTableSourceDir } from '../core/bigtable/store';
 import { listPipelines, deletePipeline } from '../core/pipeline/store';
+import { deleteRule } from '../core/rule/store';
 import { scanSourceDir } from '../core/ingest/scanner';
 import { parseCsvFile, parseExcelFile } from '../core/ingest/parser';
 import { PipelineEngine } from '../core/pipeline/engine';
@@ -104,6 +105,10 @@ export const handlers: { [K in SessionCommands]: HandlerFor<K> } = {
   },
   'mapping.save': async (ctx, p) =>
     toolSetMapping(ctx.ws, p.folder, p.headerRow ?? 1, p.mappings, { ruleName: p.ruleName, sheetName: p.sheetName, pattern: p.pattern }),
+  'mapping.delete': async (ctx, p) => {
+    deleteRule(ctx.ws, p.folder, p.ruleName);
+    return { deleted: p.ruleName };
+  },
   'pipeline.delete': async (ctx, p) => {
     deletePipeline(ctx.ws, p.id);
     return { deleted: p.id };
