@@ -13,7 +13,7 @@ import { attachLineage, lineageColumnNames } from '../lineage';
 import { AppError } from '../errors';
 import { logger } from '../logging';
 import { loadRules } from '../rule/store';
-import { compileRule, type CompiledSource } from '../rule/compile';
+import { compileRule } from '../rule/compile';
 import type { CleanPipelineConfig } from './config';
 import type { BigTableConfig } from '../bigtable/schema';
 
@@ -109,22 +109,18 @@ export async function runCleanPipeline(
       data: { bigTableFolder: cfg.bigTableFolder },
     });
   }
-  const sources: CompiledSource[] = [];
-  const mappings: FieldMapping[] = [];
-  const seenSource = new Set<string>();
-  for (const rule of rules) {
-    const compiled = compileRule(rule);
-    for (const s of compiled.sources) {
-      const key = `${s.pattern}|${s.sheetName ?? ''}|${s.headerRow}`;
-      if (seenSource.has(key)) continue;
-      seenSource.add(key);
-      sources.push(s);
-    }
-    for (const m of compiled.mappings) {
-      if (!mappings.some((e) => e.outputName === m.outputName)) mappings.push(m);
+  // 字段列:所有规则的输出列按 outputName 去重(建表结构)。
+  // 行处理不再全局合并映射——不同规则可有不同 sourceHeader 映射到同一列(如各月「N月应付工资暂估→current_month_estimate」)。
+  const colMappings: FieldMapping[] = [];
+  {
+    const seen = new Set<string>();
+    for (const rule of rules) {
+      for (const m of compileRule(rule).mappings) {
+        if (!seen.has(m.outputName)) { seen.add(m.outputName); colMappings.push(m); }
+      }
     }
   }
-  if (mappings.length === 0) {
+  if (colMappings.length === 0) {
     throw new AppError({
       module: 'pipeline/clean',
       code: 'CLEAN_NO_FIELDS',
@@ -134,47 +130,55 @@ export async function runCleanPipeline(
   }
 
   // 表结构按映射输出列建 → 与插入数据一致,不因旧表列名漂移报错
-  const colDefs = buildColDefs(mappings, bigTable);
+  const colDefs = buildColDefs(colMappings, bigTable);
 
   const extractedAt = new Date().toISOString();
   const allRows: Record<string, unknown>[] = [];
   const warnings = new Set<string>();
+  const seenSource = new Set<string>();
 
-  // 按规则 sources 处理
+  // 按规则独立处理:每条规则只把自己的映射应用到它匹配的文件
   let processedFiles = 0;
-  for (const source of sources) {
-    const re = patternToRegex(source.pattern);
-    const matched = files.filter((f) => re.test(f.relPath) || re.test(f.path));
-    for (const file of matched) {
-      processedFiles++;
-      onProgress?.({ stage: 'parse', percent: Math.round((processedFiles / files.length) * 40) });
-      try {
-        // 有 sheetName → 只解析该 sheet(避免全表解析被「格式蔓延」的假大范围拖慢);否则取第一张
-        const isCsv = file.path.toLowerCase().endsWith('.csv');
-        const sheet = source.sheetName
-          ? (isCsv
-              ? parseCsvFile(file.path, { headerRow: source.headerRow }).find((s) => s.sheetName === source.sheetName)
-              : parseExcelSheet(file.path, source.sheetName, { headerRow: source.headerRow }))
-          : (isCsv
-              ? parseCsvFile(file.path, { headerRow: source.headerRow })[0]
-              : parseExcelFile(file.path, { headerRow: source.headerRow })[0]);
-        if (!sheet) continue; // 目标 sheet 不存在 → 该文件跳过
-        // 真实数据超上限被截断 → 告警,不静默丢
-        if (sheet.truncated?.rows) warnings.add(`sheet「${sheet.sheetName}」真实行数超过 ${MAX_PARSE_ROWS} 行上限,已截断,请检查是否需要处理`);
-        if (sheet.truncated?.cols) warnings.add(`sheet「${sheet.sheetName}」真实列数超过 ${MAX_PARSE_COLS} 列上限,已截断`);
-        // 重复表头检测:同名 sourceHeader 多次出现 → 映射只取其一,其余列数据不入(静默丢列)
-        for (const m of mappings) {
-          const n = sheet.headers.filter((h) => h === m.sourceHeader).length;
-          if (n > 1) {
-            warnings.add(`表头「${m.sourceHeader}」出现 ${n} 次,映射只取其一,其余列数据不入`);
+  for (const rule of rules) {
+    const compiled = compileRule(rule);
+    const ruleMappings = compiled.mappings;
+    for (const source of compiled.sources) {
+      const srcKey = `${source.pattern}|${source.sheetName ?? ''}|${source.headerRow}`;
+      if (seenSource.has(srcKey)) continue;
+      seenSource.add(srcKey);
+      const re = patternToRegex(source.pattern);
+      const matched = files.filter((f) => re.test(f.relPath) || re.test(f.path));
+      for (const file of matched) {
+        processedFiles++;
+        onProgress?.({ stage: 'parse', percent: Math.round((processedFiles / files.length) * 40) });
+        try {
+          // 有 sheetName → 只解析该 sheet(避免全表解析被「格式蔓延」的假大范围拖慢);否则取第一张
+          const isCsv = file.path.toLowerCase().endsWith('.csv');
+          const sheet = source.sheetName
+            ? (isCsv
+                ? parseCsvFile(file.path, { headerRow: source.headerRow }).find((s) => s.sheetName === source.sheetName)
+                : parseExcelSheet(file.path, source.sheetName, { headerRow: source.headerRow }))
+            : (isCsv
+                ? parseCsvFile(file.path, { headerRow: source.headerRow })[0]
+                : parseExcelFile(file.path, { headerRow: source.headerRow })[0]);
+          if (!sheet) continue; // 目标 sheet 不存在 → 该文件跳过
+          // 真实数据超上限被截断 → 告警,不静默丢
+          if (sheet.truncated?.rows) warnings.add(`sheet「${sheet.sheetName}」真实行数超过 ${MAX_PARSE_ROWS} 行上限,已截断,请检查是否需要处理`);
+          if (sheet.truncated?.cols) warnings.add(`sheet「${sheet.sheetName}」真实列数超过 ${MAX_PARSE_COLS} 列上限,已截断`);
+          // 重复表头检测:同名 sourceHeader 多次出现 → 映射只取其一,其余列数据不入(静默丢列)
+          for (const m of ruleMappings) {
+            const n = sheet.headers.filter((h) => h === m.sourceHeader).length;
+            if (n > 1) {
+              warnings.add(`表头「${m.sourceHeader}」出现 ${n} 次,映射只取其一,其余列数据不入`);
+            }
           }
+          const mapped = applyMapping(sheet, ruleMappings);
+          attachLineage(mapped, { sourceFile: file.path, sourceSheet: sheet.sheetName, sourceRow: source.headerRow + 1 }, extractedAt);
+          allRows.push(...mapped);
+        } catch (e) {
+          // 单个文件读不了(如密码保护/损坏)不拖垮整条管线:跳过并在告警里说明
+          warnings.add(`跳过无法读取的文件 ${basename(file.path)}: ${(e as Error).message}`);
         }
-        const mapped = applyMapping(sheet, mappings);
-        attachLineage(mapped, { sourceFile: file.path, sourceSheet: sheet.sheetName, sourceRow: source.headerRow + 1 }, extractedAt);
-        allRows.push(...mapped);
-      } catch (e) {
-        // 单个文件读不了(如密码保护/损坏)不拖垮整条管线:跳过并在告警里说明
-        warnings.add(`跳过无法读取的文件 ${basename(file.path)}: ${(e as Error).message}`);
       }
     }
   }
