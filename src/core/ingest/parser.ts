@@ -10,18 +10,12 @@ export interface ParsedSheet {
   sheetName: string;
   headers: string[];
   rows: unknown[][];
-  /** 是否因安全上限被截断(rows/cols):仅当数据真实超过上限时为 true,用于告警不静默丢数据。 */
-  truncated?: { rows?: boolean; cols?: boolean };
 }
 
 export interface ParseOptions {
   /** 表头行(1-based),默认 1。 */
   headerRow?: number;
 }
-
-/** 安全上限:真实数据超过它才截断并告警(格式蔓延的假大范围不在此列,按真实数据范围处理)。 */
-export const MAX_PARSE_ROWS = 100_000;
-export const MAX_PARSE_COLS = 100;
 
 /** 统计真实数据范围:最大「有值」行 + 「有 ≥2 个值」的最右列。
  *  单值列(如格式残留的最后一个 0)视为孤值,不计入真实列范围。 */
@@ -41,26 +35,23 @@ function dataBounds(ws: XLSX.WorkSheet): { maxRow: number; maxCol: number } {
   return { maxRow, maxCol };
 }
 
+/** 行/列按真实数据范围与声明的 !ref 取小:格式蔓延的假大 !ref(如撑到百万行)不会物化,
+ *  真实大数据则完整保留(不再有任何行/列上限)。 */
 function buildRange(
   ref: string | undefined,
   headerRowIdx: number,
   bounds: { maxRow: number; maxCol: number },
-): { range: string | undefined; truncated: { rows?: boolean; cols?: boolean } } {
-  const truncated: { rows?: boolean; cols?: boolean } = {};
-  if (!ref) return { range: undefined, truncated };
+): string | undefined {
+  if (!ref) return undefined;
   const r = XLSX.utils.decode_range(ref);
-  // 行:真实有值行(含表头)与声明的 range 取小,再封顶
+  // 行:真实有值行(含表头)与声明的 range 取小
   const realRow = Math.max(bounds.maxRow, headerRowIdx);
-  const rowCap = headerRowIdx + MAX_PARSE_ROWS - 1;
-  const rowEnd = Math.min(r.e.r, realRow, rowCap);
-  if (realRow > rowCap) truncated.rows = true; // 真实数据超过上限 → 截断并告警
-  // 列:真实列(≥2 值)与声明的 range 取小,再封顶
+  // 列:真实列(≥2 值)与声明的 range 取小
   const realCol = bounds.maxCol >= 0 ? bounds.maxCol : r.e.c;
-  const colCap = MAX_PARSE_COLS - 1;
-  const colEnd = Math.min(r.e.c, realCol, colCap);
-  if (realCol > colCap) truncated.cols = true;
-  if (rowEnd < r.s.r || colEnd < r.s.c) return { range: undefined, truncated };
-  return { range: XLSX.utils.encode_range({ s: r.s, e: { r: rowEnd, c: colEnd } }), truncated };
+  const rowEnd = Math.min(r.e.r, realRow);
+  const colEnd = Math.min(r.e.c, realCol);
+  if (rowEnd < r.s.r || colEnd < r.s.c) return undefined;
+  return XLSX.utils.encode_range({ s: r.s, e: { r: rowEnd, c: colEnd } });
 }
 
 /** 裁剪尾部空单元格(range 截断后出现的 '' 尾巴),只留真实数据列。 */
@@ -71,11 +62,11 @@ function trimTrailingEmpty(arr: unknown[]): unknown[] {
 }
 
 function parseWorkSheet(ws: XLSX.WorkSheet, sheetName: string, headerRowIdx: number): ParsedSheet {
-  const { range, truncated } = buildRange(ws['!ref'], headerRowIdx, dataBounds(ws));
+  const range = buildRange(ws['!ref'], headerRowIdx, dataBounds(ws));
   const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true, range }) as unknown[][];
   const headers = trimTrailingEmpty(aoa[headerRowIdx] ?? []).map((h) => String(h ?? '').trim());
   const rows = aoa.slice(headerRowIdx + 1).map((r) => trimTrailingEmpty(r));
-  return { sheetName, headers, rows, truncated };
+  return { sheetName, headers, rows };
 }
 
 /** 解析内存 workbook(便于测试;文件版 parseExcelFile 读盘后走这里)。 */

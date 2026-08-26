@@ -14,7 +14,7 @@ describe('excel parser bounded range', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it('不会物化「格式蔓延」的假大范围(!ref 故意撑到百万行/万列也快速返回并截断)', () => {
+  it('不会物化「格式蔓延」的假大范围(!ref 故意撑到百万行/万列也快速返回)', () => {
     const wb = XLSX.utils.book_new();
     // 真实数据:表头行 + 2 行
     const ws = XLSX.utils.aoa_to_sheet([['姓名', '金额'], ['张三', 100], ['李四', 200]]);
@@ -28,19 +28,8 @@ describe('excel parser bounded range', () => {
     expect(elapsed).toBeLessThan(5000); // 快速返回,不能卡死
     expect(sheets).toHaveLength(1);
     expect(sheets[0].headers).toEqual(['姓名', '金额']);
-    // 行数被截断到上限内,而不是 100 万行
-    expect(sheets[0].rows.length).toBeLessThanOrEqual(100_000);
-    expect(sheets[0].rows.length).toBeGreaterThanOrEqual(2);
-  });
-
-  it('真实数据超过上限时标记 truncated 告警,而非静默丢弃', () => {
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet([['a', 'b'], [1, 2]]);
-    // 注入一个远在 10 万行之外的「真实」值,模拟超大真实数据
-    ws['A100001'] = { t: 'n', v: 1 };
-    XLSX.utils.book_append_sheet(wb, ws, 's');
-    const sheets = parseWorkbook(wb, { headerRow: 1 });
-    expect(sheets[0].truncated?.rows).toBe(true);
+    // 行数按真实数据范围返回(2 行),而不是 100 万行 —— 无上限也不物化假范围
+    expect(sheets[0].rows.length).toBe(2);
   });
 
   it('parseExcelSheet 只解析指定 sheet', () => {

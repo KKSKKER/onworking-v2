@@ -92,15 +92,22 @@ describe('clean pipeline runner', () => {
     expect(stages.join(',')).toMatch(/write:100/);
   });
 
-  it('returns a truncation warning when real data exceeds the row limit (AI 可据此汇报)', async () => {
+  it('imports a single file with more than 100k rows without stack overflow (allRows.push(...mapped) spread 超过 V8 参数上限)', async () => {
+    const bigDir = join(dir, 'big-src');
+    mkdirSync(bigDir, { recursive: true });
+    const N = 150_000; // 无行数上限后大文件常见;超过 V8 对函数实参 spread 的 ~125k 上限
+    const rows: unknown[][] = [['日期', '金额']];
+    for (let i = 0; i < N; i++) rows.push(['2024-01-15', i]);
+    const ws = XLSX.utils.aoa_to_sheet(rows);
     const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet([['日期'], ['2024-01']]);
-    ws['A100001'] = { t: 'n', v: 1 }; // 真实值在 10 万行之外 → 触发截断
-    ws['!ref'] = 'A1:A100001'; // 撑 range 让 writeFile 保留远行单元格
     XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
-    XLSX.writeFile(wb, join(sourceDir, 'big.xlsx'));
-    const res = await runCleanPipeline(workspace, db, cfg, bigTable);
-    expect(res.warnings.some((w) => /已截断/.test(w))).toBe(true);
+    XLSX.writeFile(wb, join(bigDir, 'big.xlsx'));
+
+    const bigCfg: CleanPipelineConfig = { kind: 'clean', id: 'c3', label: '', bigTableFolder: 'seq', sourceDir: bigDir, createdAt: '' };
+    const res = await runCleanPipeline(workspace, db, bigCfg, bigTable);
+    expect(res.rowsInserted).toBe(N);
+    const n = (db.prepare('SELECT COUNT(*) AS n FROM seq').get() as { n: number }).n;
+    expect(n).toBe(N);
   });
 
   it('re-runs with a different rule rebuilds the table (no schema drift)', async () => {

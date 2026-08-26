@@ -6,7 +6,7 @@ import type Database from 'better-sqlite3';
 import { basename } from 'node:path';
 import type { Workspace } from '../workspace/workspace';
 import { scanSourceDir } from '../ingest/scanner';
-import { parseCsvFile, parseExcelFile, parseExcelSheet, MAX_PARSE_ROWS, MAX_PARSE_COLS } from '../ingest/parser';
+import { parseCsvFile, parseExcelFile, parseExcelSheet } from '../ingest/parser';
 import { applyMapping, type FieldMapping } from '../etl/transform';
 import { writeBigTable, type ColumnDef } from '../etl/writer';
 import { attachLineage, lineageColumnNames } from '../lineage';
@@ -135,9 +135,6 @@ export async function runCleanPipeline(
                 ? parseCsvFile(file.path, { headerRow: source.headerRow })[0]
                 : parseExcelFile(file.path, { headerRow: source.headerRow })[0]);
           if (!sheet) continue; // 目标 sheet 不存在 → 该文件跳过
-          // 真实数据超上限被截断 → 告警,不静默丢
-          if (sheet.truncated?.rows) warnings.add(`sheet「${sheet.sheetName}」真实行数超过 ${MAX_PARSE_ROWS} 行上限,已截断,请检查是否需要处理`);
-          if (sheet.truncated?.cols) warnings.add(`sheet「${sheet.sheetName}」真实列数超过 ${MAX_PARSE_COLS} 列上限,已截断`);
           // 重复表头检测:同名 sourceHeader 多次出现 → 映射只取其一,其余列数据不入(静默丢列)
           for (const m of ruleMappings) {
             const n = sheet.headers.filter((h) => h === m.sourceHeader).length;
@@ -147,7 +144,9 @@ export async function runCleanPipeline(
           }
           const mapped = applyMapping(sheet, ruleMappings);
           attachLineage(mapped, { sourceFile: file.path, sourceSheet: sheet.sheetName, sourceRow: source.headerRow + 1 }, extractedAt);
-          allRows.push(...mapped);
+          // 不能 push(...mapped):单文件行数超过 V8 函数实参上限(~125k)会栈溢出。
+          // 旧上限 100k 恰好不触发;改大上限后大文件会崩在 try/catch 里被当「无法读取」跳过 → 0 行。
+          for (const row of mapped) allRows.push(row);
         } catch (e) {
           // 单个文件读不了(如密码保护/损坏)不拖垮整条管线:跳过并在告警里说明
           warnings.add(`跳过无法读取的文件 ${basename(file.path)}: ${(e as Error).message}`);
