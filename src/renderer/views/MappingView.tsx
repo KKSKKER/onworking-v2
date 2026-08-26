@@ -5,6 +5,7 @@ import { useSelection } from '../state/SelectionContext';
 import type { MappingTemplate } from '../../core/template/store';
 import type { FieldMapping } from '../../core/etl/transform';
 import { sendCli } from '../cli';
+import { patternToRegex } from '../../core/glob';
 
 interface DetectResult {
   sheetName: string;
@@ -37,6 +38,17 @@ interface FieldRow {
   transform: ValueTransform;
 }
 
+interface RuleInfo {
+  name: string;
+  sources: { pattern: string; sheetName?: string; headerRow: number }[];
+  fields: { sourceHeader: string; outputName: string; order: number; transforms?: { kind: string }[] }[];
+}
+
+interface BigTableCtx {
+  config: { fields: { name: string }[] };
+  rules: RuleInfo[];
+}
+
 export function MappingView() {
   const { selectedFile, selectedFolder } = useSelection();
   const [filePath, setFilePath] = useState(selectedFile ?? '');
@@ -50,46 +62,11 @@ export function MappingView() {
   // 大表配置里定义的字段名(映射到的目标列,下拉选项)
   const [bigTableFields, setBigTableFields] = useState<string[]>([]);
 
-  // 跟随左侧栏选中的文件(只更新文件路径/加载 sheet;不清空已载入的大表规则字段)
-  useEffect(() => {
-    if (selectedFile) {
-      setFilePath(selectedFile);
-      loadSheets(selectedFile);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedFile]);
-
-  // 选中大表 → 读取已有规则 YAML 并回填字段表(打开视图即有已配置内容)
-  useEffect(() => {
-    if (selectedFolder) {
-      void loadExistingRules(selectedFolder);
-    } else {
-      setFields([]);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedFolder]);
-
-  async function loadExistingRules(folder: string) {
-    const res = await sendCli({ cmd: 'bigtable.config', folder });
-    if (!res.ok) return;
-    const ctx = res.data as {
-      config: { fields: { name: string }[] };
-      rules: {
-        name: string;
-        sources: { pattern: string; sheetName?: string; headerRow: number }[];
-        fields: { sourceHeader: string; outputName: string; order: number; transforms?: { kind: string }[] }[];
-      }[];
-    };
-    // 目标列下拉选项 = 大表配置里定义的字段
-    setBigTableFields((ctx.config?.fields ?? []).map((f) => f.name));
-    const rule = ctx.rules[0];
-    if (!rule) return;
+  /** 把一条规则回填到视图(表头/字段/映射列)。 */
+  function applyRuleToState(rule: RuleInfo) {
     const src = rule.sources[0];
     if (src?.headerRow) setHeaderRow(src.headerRow);
-    if (src?.sheetName) {
-      setSheet(src.sheetName);
-      if (sheets.length === 0 && filePath) void loadSheets(filePath);
-    }
+    if (src?.sheetName) setSheet(src.sheetName);
     setFields(
       rule.fields.map((f) => ({
         included: true,
@@ -107,20 +84,84 @@ export function MappingView() {
     setMsg(`已载入规则: ${rule.name}`);
   }
 
-  async function loadSheets(path: string) {
+  /** 读取大表配置:目标列下拉选项(字段)+ 返回规则。 */
+  async function loadBigTableCtx(folder: string): Promise<BigTableCtx | null> {
+    const res = await sendCli({ cmd: 'bigtable.config', folder });
+    if (!res.ok) return null;
+    const ctx = res.data as BigTableCtx;
+    setBigTableFields((ctx.config?.fields ?? []).map((f) => f.name));
+    return ctx;
+  }
+
+  /** 加载匹配指定文件的规则(按 pattern 匹配),命中则回填。 */
+  async function loadRuleForFile(filePath: string): Promise<boolean> {
+    if (!selectedFolder) return false;
+    const ctx = await loadBigTableCtx(selectedFolder);
+    if (!ctx) return false;
+    const base = filePath.split(/[\\/]/).pop() ?? filePath;
+    const rule = ctx.rules.find((r) => r.sources.some((s) => {
+      const re = patternToRegex(s.pattern);
+      return re.test(base) || re.test(filePath);
+    }));
+    if (!rule) return false;
+    applyRuleToState(rule);
+    return true;
+  }
+
+  // 跟随左侧栏选中的文件:清空旧状态 → 优先加载该文件的规则,无则载入 sheet 列表(字段留空,等用户检测)
+  useEffect(() => {
+    if (!selectedFile) return;
+    setFilePath(selectedFile);
+    setMsg('');
+    setDetected(null);
+    setFields([]);
+    setSheets([]);
+    setSheet('');
+    setHeaderRow(1);
+    setEndRow('');
+    void (async () => {
+      const loaded = await loadRuleForFile(selectedFile);
+      if (!loaded) await loadSheets(selectedFile);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFile]);
+
+  // 选中大表 → 读取已有规则 YAML 并回填字段表(打开视图即有已配置内容)
+  useEffect(() => {
+    if (selectedFolder) {
+      void (async () => {
+        const ctx = await loadBigTableCtx(selectedFolder);
+        const rule = ctx?.rules?.[0];
+        if (!rule) return;
+        applyRuleToState(rule);
+        const src = rule.sources[0];
+        if (src?.sheetName && sheets.length === 0 && filePath) void loadSheets(filePath);
+      })();
+    } else {
+      setFields([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFolder]);
+
+  /** 加载 sheet 列表并返回默认选中的 sheet(供检测用)。 */
+  async function loadSheets(path: string): Promise<string> {
     const res = await sendCli({ cmd: 'setup.sheets', filePath: path });
     if (res.ok) {
       const names = res.data as string[];
       setSheets(names);
-      if (names.length > 0) setSheet(names[0]);
+      const pick = names[0] ?? '';
+      setSheet(pick);
+      return pick;
     }
+    return '';
   }
 
-  async function handleDetect() {
+  async function handleDetect(sheetName?: string) {
     if (!filePath.trim()) return;
     setMsg('');
+    const target = sheetName ?? sheet;
     if (sheets.length === 0) await loadSheets(filePath);
-    const res = await sendCli({ cmd: 'setup.detectSource', filePath, sheetName: sheet || undefined });
+    const res = await sendCli({ cmd: 'setup.detectSource', filePath, sheetName: target || undefined });
     if (!res.ok) {
       setMsg(`检测失败: ${res.error.message}`);
       return;
@@ -128,6 +169,7 @@ export function MappingView() {
     const d = res.data as DetectResult;
     setDetected(d);
     setHeaderRow(d.headerRow);
+    setSheet(target);
     setFields(
       d.headers.map((h) => ({
         included: true,
@@ -180,13 +222,21 @@ export function MappingView() {
       <div style={{ marginBottom: 8, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
         源文件{' '}
         <input style={{ width: 260 }} value={filePath} onChange={(e) => setFilePath(e.target.value)} />{' '}
-        <button onClick={handleDetect}>一键获取表头</button>
+        <button onClick={() => void handleDetect()}>一键获取表头</button>
       </div>
       {sheets.length > 0 && (
         <div style={{ marginBottom: 8, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
           <span>
             Sheet({sheets.length}):{' '}
-            <select value={sheet} onChange={(e) => setSheet(e.target.value)} style={{ width: 180 }}>
+            <select
+              value={sheet}
+              onChange={(e) => {
+                const v = e.target.value;
+                setSheet(v);
+                void handleDetect(v); // 切换 sheet → 重新检测该 sheet 的表头,字段表即时更新
+              }}
+              style={{ width: 180 }}
+            >
               {sheets.map((s) => (
                 <option key={s} value={s}>
                   {s}

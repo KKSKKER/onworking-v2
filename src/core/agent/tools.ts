@@ -14,10 +14,11 @@ import {
 } from '../bigtable/store';
 import type { BigTableConfig, BigTableField } from '../bigtable/schema';
 import { scanSourceDir, type ScannedFile } from '../ingest/scanner';
-import { parseCsvFile, parseExcelFile, type ParsedSheet } from '../ingest/parser';
+import { parseCsvFile, parseExcelFile, parseExcelSheet, type ParsedSheet } from '../ingest/parser';
 import { detectSourceConfig } from '../pipeline/setup';
 import { savePipeline, listPipelines, loadPipeline, listPipelinesForBigTable } from '../pipeline/store';
 import { PipelineEngine, type RunSummary, type TableInfo, type QueryOutcome } from '../pipeline/engine';
+import { patternToRegex } from '../glob';
 import { ProjectState } from '../state/project';
 import { loadTemplate, applyTemplateToSheet, saveTemplate, type MappingTemplate } from '../template/store';
 import type { FieldMapping, ValueTransform } from '../etl/transform';
@@ -281,6 +282,37 @@ export function toolImportFiles(ws: Workspace, bigTableFolder: string, sourceDir
 
 const VALID_TRANSFORMS: ReadonlySet<ValueTransform> = new Set<ValueTransform>(['none', 'to-cents', 'normalize-date', 'trim']);
 
+/** 校验规则的 sourceHeader 是否存在于规则匹配的实际文件的表头。
+ *  返回缺失的 sourceHeader 与目标表头合集;无法解析(无匹配文件/密码保护/读不了)时返回空(跳过校验)。 */
+function findMissingSourceHeaders(
+  ws: Workspace,
+  bigTableFolder: string,
+  pattern: string,
+  sheetName: string | undefined,
+  headerRow: number,
+  mappings: FieldMapping[],
+): { missing: string[]; actual: string[] } {
+  const dir = bigTableSourceDir(ws, bigTableFolder);
+  if (!existsSync(dir)) return { missing: [], actual: [] };
+  const re = patternToRegex(pattern);
+  const files = scanSourceDir(dir).filter((f) => re.test(f.relPath) || re.test(f.path));
+  if (files.length === 0) return { missing: [], actual: [] };
+  const parsedSheets: ParsedSheet[] = [];
+  for (const file of files) {
+    try {
+      const isCsv = file.path.toLowerCase().endsWith('.csv');
+      const sheet = sheetName
+        ? (isCsv ? parseCsvFile(file.path, { headerRow }).find((s) => s.sheetName === sheetName) : parseExcelSheet(file.path, sheetName, { headerRow }))
+        : (isCsv ? parseCsvFile(file.path, { headerRow })[0] : parseExcelFile(file.path, { headerRow })[0]);
+      if (sheet) parsedSheets.push(sheet);
+    } catch { /* 单文件读不了跳过 */ }
+  }
+  if (parsedSheets.length === 0) return { missing: [], actual: [] }; // 无法解析 → 跳过校验
+  const actual = [...new Set(parsedSheets.flatMap((s) => s.headers))].filter((h) => h !== '');
+  const missing = mappings.filter((m) => !parsedSheets.some((s) => s.headers.includes(m.sourceHeader))).map((m) => m.sourceHeader);
+  return { missing, actual };
+}
+
 /** tool: 设置字段映射 —— 只写 YAML 规则,不生成管线。ruleName 缺省 `<folder>_rule`,可传不同名追加第 N 份;pattern 指定文件匹配(缺省匹配全部文件),sheetName 指定某个 sheet —— 一个规则 = 一个「文件 × sheet」映射。 */
 export function toolSetMapping(
   ws: Workspace,
@@ -324,6 +356,16 @@ export function toolSetMapping(
       });
     }
   });
+  // 表头校验:sourceHeader 必须存在于规则匹配的实际文件表头,否则规则写入即错(如「01月」vs「1月」前导 0 差异)。
+  const { missing, actual } = findMissingSourceHeaders(ws, bigTableFolder, opts?.pattern ?? '**/*', opts?.sheetName, headerRow, mappings);
+  if (missing.length > 0) {
+    throw new AppError({
+      module: 'agent',
+      code: 'MAPPING_HEADER_MISMATCH',
+      message: `映射的源字段在目标文件表头中不存在: ${missing.join(', ')}\n目标表头有: ${actual.slice(0, 40).join('、')}。请核对源字段(注意前导 0 / 空格 / 换行差异)`,
+      data: { missing },
+    });
+  }
   const name = opts?.ruleName ?? `${bigTableFolder}_rule`;
   const rule: RuleYaml = {
     name,

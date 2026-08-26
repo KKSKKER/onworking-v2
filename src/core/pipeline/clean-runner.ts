@@ -14,6 +14,7 @@ import { AppError } from '../errors';
 import { logger } from '../logging';
 import { loadRules } from '../rule/store';
 import { compileRule } from '../rule/compile';
+import { patternToRegex } from '../glob';
 import type { CleanPipelineConfig } from './config';
 import type { BigTableConfig } from '../bigtable/schema';
 
@@ -32,34 +33,6 @@ export interface CleanResult {
 export interface CleanProgress {
   stage: 'scan' | 'parse' | 'map' | 'write';
   percent: number;
-}
-
-/** 简单 glob → 正则(pattern 相对于源目录)。双星斜杠匹配任意(含零)层目录。 */
-function patternToRegex(pattern: string): RegExp {
-  let re = '';
-  let i = 0;
-  while (i < pattern.length) {
-    const c = pattern[i];
-    if (c === '*' && pattern[i + 1] === '*') {
-      if (pattern[i + 2] === '/') {
-        re += '(?:.*/)?';
-        i += 3;
-      } else {
-        re += '.*';
-        i += 2;
-      }
-    } else if (c === '*') {
-      re += '[^/\\\\]*';
-      i += 1;
-    } else if ('+?^${}()|[].\\'.includes(c)) {
-      re += '\\' + c;
-      i += 1;
-    } else {
-      re += c;
-      i += 1;
-    }
-  }
-  return new RegExp(`^${re}$`);
 }
 
 /** 列定义按映射输出列建(类型取大表字段,默认 TEXT)+ 血缘列。 */

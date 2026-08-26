@@ -251,6 +251,23 @@ describe('tools', () => {
     expect(listRules(ws, 'seq').length).toBe(1);
   });
 
+  it('toolSetMapping rejects sourceHeaders absent from the matched file headers (MAPPING_HEADER_MISMATCH)', () => {
+    // 把文件放进大表自己的 source 目录(与真实 addFiles 流程一致),表头 = 日期/借方金额
+    const src = bigTableSourceDir(ws, 'seq');
+    mkdirSync(src, { recursive: true });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['日期', '借方金额'], ['2024-01', 100]]), 'Sheet1');
+    XLSX.writeFile(wb, join(src, 'a.xlsx'));
+    // 写不存在的表头(如「01月…」前导 0 错误)→ 报错
+    expect(() => toolSetMapping(ws, 'seq', 1, [
+      { sourceHeader: '01月应付工资暂估', outputName: 'current_month_estimate', transform: 'none' },
+    ], { pattern: 'a.xlsx', sheetName: 'Sheet1' })).toThrowError(/源字段在目标文件表头中不存在/);
+    // 匹配实际表头的正常通过
+    expect(() => toolSetMapping(ws, 'seq', 1, [
+      { sourceHeader: '日期', outputName: 'date', transform: 'none' },
+    ], { pattern: 'a.xlsx', sheetName: 'Sheet1' })).not.toThrow();
+  });
+
   it('clean imports per (file, sheet) via pattern rules', async () => {
     // b.xlsx: sheet B(姓名/金额);c.xlsx: 无任何规则匹配,不应被导入
     const wb = XLSX.utils.book_new();
