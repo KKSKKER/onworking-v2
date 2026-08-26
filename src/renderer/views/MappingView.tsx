@@ -111,7 +111,7 @@ export function MappingView() {
     return true;
   }
 
-  // 跟随左侧栏选中的文件:清空旧状态 → 优先加载该文件的规则,无则载入 sheet 列表(字段留空,等用户检测)
+  // 跟随左侧栏选中的文件:清空旧状态 → 先载入 sheet 列表(保证下拉框在),再加载匹配规则回填
   useEffect(() => {
     if (!selectedFile) return;
     setFilePath(selectedFile);
@@ -123,8 +123,8 @@ export function MappingView() {
     setHeaderRow(1);
     setEndRow('');
     void (async () => {
-      const loaded = await loadRuleForFile(selectedFile);
-      if (!loaded) await loadSheets(selectedFile);
+      await loadSheets(selectedFile); // 一定先载入 sheet,否则下拉框不显示
+      await loadRuleForFile(selectedFile); // 有匹配规则则回填(选中 sheet + 字段);无则留空待检测
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFile]);
