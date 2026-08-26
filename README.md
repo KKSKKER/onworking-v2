@@ -1,155 +1,163 @@
-[English](README.md) | [简体中文](README.zh-CN.md)
+<div align="center">
 
 # OnWorking
 
-> A transparent, rule-driven ETL desktop app that turns scattered Excel/CSV files into clean, queryable tables.
+**一个透明、规则驱动的 AI 原生数据工作框架。**
 
-OnWorking is a desktop application for turning scattered, similarly-formatted Excel/CSV files into clean, queryable SQLite tables. Instead of hand-editing spreadsheets, you describe how each file should be processed in a plain-YAML rule, and OnWorking merges everything into one table — with every row traceable back to the file, sheet, and row it came from.
+把散落的 Excel / CSV 文件整理成干净、可查询的数据表——并且让 AI Agent 通过一套受管控、完全可追溯的命令面替你完成这一切。
+
+[![License](https://img.shields.io/badge/License-Apache%202.0-4F46E5?style=flat-square)](LICENSE)
+![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?style=flat-square&logo=nodedotjs&logoColor=white)
+![Electron](https://img.shields.io/badge/Electron-31-47848F?style=flat-square&logo=electron&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-better--sqlite3-4479A1?style=flat-square&logo=sqlite&logoColor=white)
+![Platforms](https://img.shields.io/badge/Windows%20%E2%80%A2%20macOS%20%E2%80%A2%20Linux-0F172A?style=flat-square)
+
+[English](README.en.md) · [简体中文](README.md)
+
+</div>
 
 ---
 
-## Why OnWorking?
+## 系统架构
 
-Financial and business data often arrives as dozens of similarly-structured Excel files scattered across folders. Manually cleaning, merging, and reconciling them is slow and error-prone — and once the numbers are combined, nobody can trace a figure back to the file it came from.
+OnWorking 是一款分层桌面应用。**CLI 中枢**位于面向用户的**应用层**（界面 UI 与 AI Agent）与**动作层**（大表、数据库、管线、规则、工作区、导入等引擎）之间；**支撑层**为每个动作提供错误处理、日志与行级血缘。
 
-OnWorking addresses both problems:
+![系统架构](docs/ARC/ZH/architecture.svg)
 
-- **Rules, not scripts.** Each file/sheet is processed by a declarative YAML rule: which sheet to read, which row is the header, where the data ends, and how each column maps to a table field. Rules are plain text — reviewable by humans and readable/auditable by AI tools.
-- **Lineage on every row.** Every merged row keeps its origin: `__source_file`, `__source_sheet`, `__source_row`, `__extracted_at`. No more "where did this number come from?"
+## 为什么选择 OnWorking？
 
-## Features
+财务和业务数据常常以几十个结构相似的 Excel 文件散落在各个文件夹里。手工清理、合并、对账既慢又容易出错——而且一旦数字被合并，没人能再把某个数字追溯回它来源的文件。
 
-- **Rule-driven extraction** — map source columns to table fields in plain YAML; clean and transform the data later with SQL.
-- **Row-level lineage** — `__source_file`, `__source_sheet`, `__source_row`, `__extracted_at` on every merged row.
-- **Folders as tables** — drop same-format files into a folder, one click merges them into a single table.
-- **Master tables** — aggregate every BigTable folder into one master table for the whole workspace.
-- **SQL workbench** — built-in table browser, SQL editor, and one-click CSV export (with UTF-8 BOM so Excel opens Chinese correctly).
-- **Auto-generated rules** — detect column types from a sample and generate a starter rule.
-- **Excel & CSV** — reads `.xlsx`, `.xls` and `.csv`.
+OnWorking 从根本上同时解决这两个问题：
 
-## How it works
+- **用规则，而不是脚本。** 每个文件/工作表由一个声明式的 YAML 规则和显式的 SQL 管线处理。所有东西都是纯文本——人类可审阅，AI 工具也可读、可审计。
+- **每一行都有溯源。** 每个合并后的行都保留来源：`__source_file`、`__source_sheet`、`__source_row`、`__extracted_at`。再也不用问「这个数字是从哪来的？」
+- **AI 原生操作。** OnWorking 内置 MCP 服务器和 CLI，AI Agent 可以自己跑完整条工作流——通过一套严格、有文档的命令面。你掌控全局，机器干重活。
 
-### Core concepts
+## 功能特性
 
-| Concept | Meaning |
+| | |
 |---|---|
-| **Workspace** | A root directory for your data: `source/` for raw files, `.onworking/` for rules, settings, and the SQLite database. |
-| **BigTable** | A folder that defines one output table (`settings.json` = table name, columns, primary key) with its own `source/` folder and rule state. |
-| **Source file** | An Excel or CSV file placed in a BigTable's `source/` directory. |
-| **Rule** | A YAML file describing how one file/sheet maps into the table: sheet, header row, cutoff row, field mapping, and merge strategy. |
+| 🧾 **用规则，而不是脚本** | 声明式 YAML 规则把源列映射成表字段；清洗与转换放在显式 SQL 管线里完成。 |
+| 🧬 **行级溯源** | 每个合并行都带 `__source_file` · `__source_sheet` · `__source_row` · `__extracted_at`——永远可追溯。 |
+| 🔀 **两段式管线** | 文件先落进每个文件夹独立的**大表**，再聚合成工作区唯一的**总表**——最终可查询的数据库。 |
+| 🤖 **AI Agent + MCP** | JSON-RPC MCP 服务器把整套命令面暴露成工具；Agent 端到端地操作工作区。 |
+| ⌨️ **CLI / NDJSON** | 用按行分隔的命令在终端驱动一切——可脚本化、可管道化、可审计。 |
+| 🗂️ **文件夹即数据表** | 把同格式的文件放进一个文件夹，一条管线把它们合并成一张表。 |
+| 📋 **SQL 工作台** | 浏览表、对总表执行查询、一键导出干净 CSV（带 UTF-8 BOM，Excel 打开中文不乱码）。 |
+| 📚 **模板** | 一份字段映射保存一次，一键应用到该大表内的所有文件。 |
 
-### Data flow
+## 工作原理
+
+### 两段式数据流
 
 ```
-    Excel/CSV files (source/)          Rules (YAML)
-    ┌────────────────────────┐        ┌──────────────────────────────┐
-    │ *.xlsx  *.xls  *.csv   │        │ rule_*.yaml                   │
-    └───────────┬────────────┘        │ · sheet / header row          │
-                │                     │ · end row (cutoff)            │
-                └──────────┬──────────┤ · field mapping               │
-                           │          │ · merge strategy              │
-                           ▼          └──────────────────────────────┘
-               ┌────────────────────┐
-               │     ETL pipeline   │
-               │ scan → parse →     │
-               │ insert             │
-               └─────────┬──────────┘
-                         ▼
-              SQLite big table (per folder)
-              + lineage: __source_file,
-                __source_sheet, __source_row,
-                __extracted_at
-                         │
-        ┌────────────────┴────────────────┐
-        ▼                                 ▼
- buildMasterTable                SQL workbench
- (aggregate all folders)         · query · export CSV
-        │
-        ▼
-   Master table
+      ① clean · 规则 YAML              ② sql-clean · SQL               ③ query · SQL
+┌─────────────────────┐   ┌──────────────────────────┐   ┌──────────────────────┐
+│  源文件              │──▶│  大表 DB（每个文件夹独立） │──▶│  总表                 │──▶ 查询结果 / CSV
+│  Excel / CSV        │   │  .onworking/bigtables/…   │   │  master.db           │
+└─────────────────────┘   └──────────────────────────┘   └──────────────────────┘
 ```
 
-### The four views
+1. **清洗** —— 源文件经过各自规则 YAML 流入每个文件夹独立的大表，每一行都附带血缘列。
+2. **归集** —— `sql-clean` 管线对各大大表执行 SQL（剔掉合计/签名行、从 sheet 名推导月份列等），聚合进工作区的总表 `master.db`。
+3. **查询** —— 对总表执行 SQL、预览结果、导出 CSV。
 
-The app is a single window with four views:
+### Agent 工作流
 
-- **Config** — the main workbench: a folder tree of BigTables on the left, a rule editor / table settings panel on the right.
-- **Preview** — a paginated preview of a source file before merging, with the header row and cutoff row highlighted.
-- **Results** — merge a folder, generate the master table, browse the result, and export CSV.
-- **SQL** — a table browser and SQL editor: run queries, export CSV, or copy the table structure as an AI-friendly text prompt.
+AI Agent 可以自己跑完整条工作流——打开工作区、创建大表、导入文件、识别表头、编写字段映射、构建清洗管线、归集到总表、运行查询——全部经由受严格命令合约约束的 MCP 工具。每一次工具调用都经过应用本身，而不是绕过它。
 
-## Screenshots
+![Agent 工作流](docs/ARC/ZH/agent-workflow.svg)
 
-<!-- TODO: add your own screenshots to docs/screenshots/ and update the paths -->
+### 用户流程
 
-![Config workbench](docs/screenshots/config.png)
+![用户流程](docs/ARC/ZH/user-flows.svg)
 
-![Preview](docs/screenshots/preview.png)
+## 核心概念
 
-![Results & export](docs/screenshots/results.png)
+| 概念 | 含义 |
+|---|---|
+| **工作区** | 承载数据的根目录：`source/` 放原始文件，`.onworking/` 放规则、管线、设置和 SQLite 数据库。 |
+| **大表** | 一个定义输出数据表的文件夹（`settings.json` = 表名、列、主键），带自己的 `source/` 文件夹和规则状态。 |
+| **源文件** | 放入大表 `source/` 目录的 Excel 或 CSV 文件。 |
+| **规则** | 描述一个「文件 × sheet」如何映射进数据表的 YAML 文件：工作表、表头行、截止行、字段映射。 |
+| **管线** | 一个命名的、可版本化的工作单元——`clean`、`sql-clean` 或 `query`——带 `kind`、SQL 主体和依赖。 |
+| **总表** | 通过 `sql-clean` 管线聚合所有大表后产出的最终可查询数据库（`master.db`）。 |
+| **血缘** | `__source_file` / `__source_sheet` / `__source_row` / `__extracted_at`——每一行、每一处都携带。 |
 
-![SQL workbench](docs/screenshots/sql.png)
+## 快速开始
 
-## Getting started
+### 环境要求
 
-### Requirements
+- Node.js 18 或更新版本
 
-- Node.js 18 or newer
-
-### Run in development
+### 开发模式运行
 
 ```bash
 npm install
 npm start
 ```
 
-This builds the main process, starts the Vite dev server, and launches Electron.
+这会构建主进程、启动 Vite 开发服务器并启动 Electron。
 
-### Package installers
+### 打包安装包
 
 ```bash
 npm run dist
 ```
 
-Output goes to `release/` (NSIS installer on Windows, DMG on macOS, AppImage on Linux).
+输出到 `release/`（Windows 用 NSIS 安装包，macOS 用 DMG，Linux 用 AppImage）。原生 SQLite 会为双 ABI 构建，因此打包应用与 CLI 无论以何种方式启动都能正常工作。
 
-### Tests & typecheck
+### CLI 与 MCP
+
+```bash
+# NDJSON 命令流 —— stdin 每行一个请求，stdout 每行一个响应
+printf '%s\n' \
+  '{"reqId":1,"cmd":"workspace.open","path":"D:/path/to/workspace"}' \
+  '{"reqId":2,"cmd":"state.summary"}' | npm run onw -- open D:/path/to/workspace
+
+# MCP 服务器（stdin/stdout，JSON-RPC 2.0）—— 无需带路径启动，Agent 调用 workspace.open
+npm run onw -- mcp
+```
+
+CLI 支持 `workspace.*`、`bigtable.*`、`mapping.*`、`pipeline.*`、`setup.*`、`query.*`、`template.*`、`schema.*`、`state.*` 与 `vcs.*` 命令。
+
+### 测试与类型检查
 
 ```bash
 npm test
 npm run typecheck
 ```
 
-## Usage
+## 一个典型的工作流
 
-A typical workflow:
+1. **打开工作区** —— 选一个存放所有数据的文件夹。
+2. **创建大表** —— 配置它的名称、列（文本 / 金额分 / 数字 / 日期）和可选主键。
+3. **添加源文件** —— 把 `.xlsx` / `.xls` / `.csv` 文件放进大表的 `source/` 文件夹。
+4. **编写规则** —— 为每个「文件 × sheet」识别表头行，把每一列映射到表字段；保存成模板以便复用。
+5. **运行清洗管线** —— 所有源文件经过各自规则流入一张大表，保留行级溯源。
+6. **运行归集管线** —— 把所有大表聚合进工作区总表。
+7. **查询与交付** —— 在 SQL 工作台里探索数据，或直接从总表导出干净 CSV。
 
-1. **Open a workspace** — pick a folder that will hold all your data.
-2. **Create a BigTable** — configure its name, columns (text / amount-cents / number / date), and optional primary key.
-3. **Add source files** — drop `.xlsx` / `.xls` / `.csv` files into the BigTable's `source/` folder.
-4. **Write a rule** — for each file, pick the sheet, the header row and the cutoff row, and map each column to a table field. Or click **auto-detect** to generate a starter rule from a sample.
-5. **Merge the folder** — all source files flow through their rules into one table, keeping row-level lineage.
-6. **Generate the master table & query** — aggregate all BigTable folders, then explore the data in the SQL workbench or export CSV.
+## 规则格式
 
-## Rule format
-
-Rules are stored as YAML in each BigTable's `.onworking/rules/` folder. A minimal example:
+规则以 YAML 形式存储在各大表的 `.onworking/rules/` 文件夹里：
 
 ```yaml
 name: rule_voucher_1
 display: "Voucher book"
 version: 1
 sources:
-  - pattern: "**/voucher.xls"   # glob matched against the folder's source/
+  - pattern: "**/voucher.xls"   # 与该文件夹 source/ 匹配的 glob
     sheetIndex: 0
-    headerRow: 1                # 1-based row that holds the header
-    endRow: 10374               # 1-based cutoff row (omit = read to the end)
+    headerRow: 1                # 表头所在行（从 1 开始）
+    endRow: 10374               # 截止行（从 1 开始，省略则读到末尾）
 fields:
-  - sourceHeader: DATE          # column in the source file
+  - sourceHeader: DATE          # 源文件中的列
     outputName: date
     included: true
     order: 1
-  - sourceHeader: AMOUNT        # column in the source file
+  - sourceHeader: AMOUNT        # 源文件中的列
     outputName: amount
     included: true
     order: 2
@@ -157,40 +165,47 @@ mergeStrategy:
   mode: append
 ```
 
-## Project structure
+## 项目结构
 
 ```
 onworking/
 ├── src/
-│   ├── common/                  # types & utils shared by main + renderer
-│   │   └── types/               # rule / transform / parse-config types
-│   ├── main/                    # Electron main process
-│   │   ├── api/                 # single unified IPC router
-│   │   ├── db/                  # SQLite (better-sqlite3 in a worker thread, WAL)
-│   │   ├── etl/                 # ETL pipeline: scanner, parser, transform, validator, inserter
-│   │   ├── rules/               # YAML rule store & compiler
-│   │   ├── workspace/           # workspace lifecycle & manager
-│   │   └── plugins/onw-excel/   # Excel/CSV parser plugin
-│   └── renderer/                # React UI
-│       ├── components/          # the four views, rule editor, tables, SQL workbench
-│       └── state/               # client-side state stores
-└── tests/                       # integration tests (vitest)
+│   ├── cli/                    # NDJSON 命令面（CLI / MCP 传输层）
+│   ├── core/
+│   │   ├── agent/              # AI Agent 流程与工具注册表
+│   │   ├── bigtable/           # 大表 schema 与存储
+│   │   ├── db/                 # SQLite（better-sqlite3，worker + WAL）
+│   │   ├── etl/                # ETL 转换与写入
+│   │   ├── ingest/             # 文件扫描、解析、表头识别
+│   │   ├── lineage/            # 行级血缘图
+│   │   ├── pipeline/           # clean / sql-clean / query 管线引擎
+│   │   ├── rule/               # YAML 规则存储与编译器
+│   │   ├── state/              # 项目状态
+│   │   ├── template/           # 映射模板
+│   │   ├── versioning/         # 工作区版本管理（git）
+│   │   └── workspace/          # 工作区生命周期与设置
+│   ├── ipc/                    # main ↔ renderer 契约与处理器
+│   ├── main/                   # Electron 主进程 + CLI 桥
+│   ├── mcp/                    # MCP 服务器（JSON-RPC 2.0）+ 操作手册
+│   └── renderer/               # React 界面（大表 / 映射 / 管线 / 预览 / SQL 视图）
+├── scripts/                    # 构建与图形工具
+└── tests/                      # 集成测试（vitest）
 ```
 
-## Tech stack
+## 技术栈
 
-| Layer | Technology |
+| 层 | 技术 |
 |---|---|
-| Desktop shell | Electron 31 |
-| UI | React 18 · TypeScript 5.6 |
-| Bundler / dev server | Vite 6 |
-| Spreadsheet engine | Univer (`@univerjs`) |
-| Database | SQLite via better-sqlite3 (worker thread + WAL) |
-| Excel/CSV parsing | SheetJS (`xlsx`) |
-| Rule storage | YAML (`js-yaml`) |
-| Packaging | electron-builder (NSIS / DMG / AppImage) |
-| Testing | Vitest |
+| 桌面外壳 | Electron 31 |
+| 界面 | React 18 · TypeScript 5.6 |
+| 打包 / 开发服务器 | Vite 6 |
+| 数据库 | 通过 better-sqlite3 使用 SQLite（双 ABI、worker 线程 + WAL） |
+| Excel / CSV 解析 | SheetJS（`xlsx`） |
+| 规则存储 | YAML（`js-yaml`） |
+| AI 集成 | MCP 服务器（JSON-RPC 2.0）· NDJSON CLI |
+| 打包 | electron-builder（NSIS / DMG / AppImage） |
+| 测试 | Vitest |
 
-## License
+## 许可证
 
-Licensed under the [Apache License 2.0](LICENSE).
+[Apache License 2.0](LICENSE) 授权。
