@@ -17,20 +17,54 @@ export interface ParseOptions {
   headerRow?: number;
 }
 
-function parseExcelWorkbook(filePath: string, opts?: ParseOptions): ParsedSheet[] {
-  const wb = XLSX.readFile(filePath);
+/** 防止「格式蔓延」的假大范围:某些 sheet 因格式延伸 !ref 动辄 100 万行/16383 列,
+ *  sheet_to_json 会物化整个范围 → 亿级格子导致卡死/内存暴涨。真实业务表远小于此上限,超出视为格式残留丢弃。 */
+const MAX_PARSE_ROWS = 100_000;
+const MAX_PARSE_COLS = 100;
+
+function boundedRange(ws: XLSX.WorkSheet, headerRowIdx: number): string | undefined {
+  const ref = ws['!ref'];
+  if (!ref) return undefined;
+  const r = XLSX.utils.decode_range(ref);
+  const e = {
+    r: Math.min(r.e.r, headerRowIdx + MAX_PARSE_ROWS),
+    c: Math.min(r.e.c, MAX_PARSE_COLS),
+  };
+  if (e.r < r.s.r || e.c < r.s.c) return undefined;
+  return XLSX.utils.encode_range({ s: r.s, e });
+}
+
+/** 裁剪尾部空单元格(range 截断后出现的 '' 尾巴),只留真实数据列。 */
+function trimTrailingEmpty(arr: unknown[]): unknown[] {
+  let end = arr.length;
+  while (end > 0 && (arr[end - 1] === '' || arr[end - 1] === null || arr[end - 1] === undefined)) end--;
+  return arr.slice(0, end);
+}
+
+function parseWorkSheet(ws: XLSX.WorkSheet, sheetName: string, headerRowIdx: number): ParsedSheet {
+  const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true, range: boundedRange(ws, headerRowIdx) }) as unknown[][];
+  const headers = trimTrailingEmpty(aoa[headerRowIdx] ?? []).map((h) => String(h ?? '').trim());
+  const rows = aoa.slice(headerRowIdx + 1).map((r) => trimTrailingEmpty(r));
+  return { sheetName, headers, rows };
+}
+
+/** 解析内存 workbook(便于测试;文件版 parseExcelFile 读盘后走这里)。 */
+export function parseWorkbook(wb: XLSX.WorkBook, opts?: ParseOptions): ParsedSheet[] {
   const headerRowIdx = (opts?.headerRow ?? 1) - 1;
-  return wb.SheetNames.map((sheetName) => {
-    const ws = wb.Sheets[sheetName];
-    const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true }) as unknown[][];
-    const headers = (aoa[headerRowIdx] ?? []).map((h) => String(h ?? '').trim());
-    const rows = aoa.slice(headerRowIdx + 1);
-    return { sheetName, headers, rows };
-  });
+  return wb.SheetNames.map((sheetName) => parseWorkSheet(wb.Sheets[sheetName], sheetName, headerRowIdx));
 }
 
 export function parseExcelFile(filePath: string, opts?: ParseOptions): ParsedSheet[] {
-  return parseExcelWorkbook(filePath, opts);
+  return parseWorkbook(XLSX.readFile(filePath), opts);
+}
+
+/** 只解析指定 sheet(清洗管线按规则的 sheetName 定向解析,避免全表解析拖慢)。sheet 不存在返回 undefined。 */
+export function parseExcelSheet(filePath: string, sheetName: string, opts?: ParseOptions): ParsedSheet | undefined {
+  const wb = XLSX.readFile(filePath);
+  const headerRowIdx = (opts?.headerRow ?? 1) - 1;
+  const ws = wb.Sheets[sheetName];
+  if (!ws) return undefined;
+  return parseWorkSheet(ws, sheetName, headerRowIdx);
 }
 
 /** 手写 CSV 解析:支持引号包裹字段(含内嵌逗号/换行/双引号转义)。 */

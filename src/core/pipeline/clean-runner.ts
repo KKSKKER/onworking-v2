@@ -3,9 +3,10 @@
 // 表结构按「映射输出列」建(类型取大表字段,默认 TEXT),保证与插入数据一致,不因旧表漂移报错。
 // 合并 = 重建大表(先 DROP 再写),重复运行不追加。
 import type Database from 'better-sqlite3';
+import { basename } from 'node:path';
 import type { Workspace } from '../workspace/workspace';
 import { scanSourceDir } from '../ingest/scanner';
-import { parseCsvFile, parseExcelFile } from '../ingest/parser';
+import { parseCsvFile, parseExcelFile, parseExcelSheet } from '../ingest/parser';
 import { applyMapping, type FieldMapping } from '../etl/transform';
 import { writeBigTable, type ColumnDef } from '../etl/writer';
 import { attachLineage, lineageColumnNames } from '../lineage';
@@ -147,14 +148,17 @@ export async function runCleanPipeline(
     for (const file of matched) {
       processedFiles++;
       onProgress?.({ stage: 'parse', percent: Math.round((processedFiles / files.length) * 40) });
-      const sheets =
-        file.path.toLowerCase().endsWith('.csv')
-          ? parseCsvFile(file.path, { headerRow: source.headerRow })
-          : parseExcelFile(file.path, { headerRow: source.headerRow });
-      const target = source.sheetName
-        ? sheets.filter((s) => s.sheetName === source.sheetName)
-        : sheets.slice(0, 1);
-      for (const sheet of target) {
+      try {
+        // 有 sheetName → 只解析该 sheet(避免全表解析被「格式蔓延」的假大范围拖慢);否则取第一张
+        const isCsv = file.path.toLowerCase().endsWith('.csv');
+        const sheet = source.sheetName
+          ? (isCsv
+              ? parseCsvFile(file.path, { headerRow: source.headerRow }).find((s) => s.sheetName === source.sheetName)
+              : parseExcelSheet(file.path, source.sheetName, { headerRow: source.headerRow }))
+          : (isCsv
+              ? parseCsvFile(file.path, { headerRow: source.headerRow })[0]
+              : parseExcelFile(file.path, { headerRow: source.headerRow })[0]);
+        if (!sheet) continue; // 目标 sheet 不存在 → 该文件跳过
         // 重复表头检测:同名 sourceHeader 多次出现 → 映射只取其一,其余列数据不入(静默丢列)
         for (const m of mappings) {
           const n = sheet.headers.filter((h) => h === m.sourceHeader).length;
@@ -165,6 +169,9 @@ export async function runCleanPipeline(
         const mapped = applyMapping(sheet, mappings);
         attachLineage(mapped, { sourceFile: file.path, sourceSheet: sheet.sheetName, sourceRow: source.headerRow + 1 }, extractedAt);
         allRows.push(...mapped);
+      } catch (e) {
+        // 单个文件读不了(如密码保护/损坏)不拖垮整条管线:跳过并在告警里说明
+        warnings.add(`跳过无法读取的文件 ${basename(file.path)}: ${(e as Error).message}`);
       }
     }
   }
