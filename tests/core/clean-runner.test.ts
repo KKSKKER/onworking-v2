@@ -92,6 +92,17 @@ describe('clean pipeline runner', () => {
     expect(stages.join(',')).toMatch(/write:100/);
   });
 
+  it('returns a truncation warning when real data exceeds the row limit (AI 可据此汇报)', async () => {
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([['日期'], ['2024-01']]);
+    ws['A100001'] = { t: 'n', v: 1 }; // 真实值在 10 万行之外 → 触发截断
+    ws['!ref'] = 'A1:A100001'; // 撑 range 让 writeFile 保留远行单元格
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+    XLSX.writeFile(wb, join(sourceDir, 'big.xlsx'));
+    const res = await runCleanPipeline(workspace, db, cfg, bigTable);
+    expect(res.warnings.some((w) => /已截断/.test(w))).toBe(true);
+  });
+
   it('re-runs with a different rule rebuilds the table (no schema drift)', async () => {
     await runCleanPipeline(workspace, db, cfg, bigTable); // 首次:date/debit/note
     // 覆盖同名规则 seq_rule 为「只有 date」→ 重跑重建表,去掉 debit/note

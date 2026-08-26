@@ -28,6 +28,7 @@ export const MANUAL_TEXT = `# Onworking Agent 操作须知(浓缩版)
 - 血缘列自动附加:__source_file/__source_sheet/__source_row/__extracted_at。
 - pipeline id 由调用方显式传入,禁止用 Date.now() 等不可复现 id。
 - query.run 读为主(SELECT/WITH 返回行);写(INSERT/UPDATE/DELETE/DDL)会直接改总表 master.db,除非操作者明确要求不要用写。
+- 跑完管线必读返回的 warnings 并向操作者汇报:跳过文件(密码保护/损坏=数据没进)、行/列超上限截断(数据被切)、重复表头只取其一。不能只说「跑完了」。
 - 每文件多 sheet:用 mapping.save 的 sheetName 指定;不指定只导第一张。
 
 ## 工作流
