@@ -6,7 +6,7 @@ import type Database from 'better-sqlite3';
 import { basename } from 'node:path';
 import type { Workspace } from '../workspace/workspace';
 import { scanSourceDir } from '../ingest/scanner';
-import { parseCsvFile, parseExcelFile, parseExcelSheet } from '../ingest/parser';
+import { parseCsvFile, parseExcelFile, parseExcelSheet, MAX_PARSE_ROWS, MAX_PARSE_COLS } from '../ingest/parser';
 import { applyMapping, type FieldMapping } from '../etl/transform';
 import { writeBigTable, type ColumnDef } from '../etl/writer';
 import { attachLineage, lineageColumnNames } from '../lineage';
@@ -159,6 +159,9 @@ export async function runCleanPipeline(
               ? parseCsvFile(file.path, { headerRow: source.headerRow })[0]
               : parseExcelFile(file.path, { headerRow: source.headerRow })[0]);
         if (!sheet) continue; // 目标 sheet 不存在 → 该文件跳过
+        // 真实数据超上限被截断 → 告警,不静默丢
+        if (sheet.truncated?.rows) warnings.add(`sheet「${sheet.sheetName}」真实行数超过 ${MAX_PARSE_ROWS} 行上限,已截断,请检查是否需要处理`);
+        if (sheet.truncated?.cols) warnings.add(`sheet「${sheet.sheetName}」真实列数超过 ${MAX_PARSE_COLS} 列上限,已截断`);
         // 重复表头检测:同名 sourceHeader 多次出现 → 映射只取其一,其余列数据不入(静默丢列)
         for (const m of mappings) {
           const n = sheet.headers.filter((h) => h === m.sourceHeader).length;

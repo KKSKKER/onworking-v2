@@ -33,6 +33,16 @@ describe('excel parser bounded range', () => {
     expect(sheets[0].rows.length).toBeGreaterThanOrEqual(2);
   });
 
+  it('真实数据超过上限时标记 truncated 告警,而非静默丢弃', () => {
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([['a', 'b'], [1, 2]]);
+    // 注入一个远在 10 万行之外的「真实」值,模拟超大真实数据
+    ws['A100001'] = { t: 'n', v: 1 };
+    XLSX.utils.book_append_sheet(wb, ws, 's');
+    const sheets = parseWorkbook(wb, { headerRow: 1 });
+    expect(sheets[0].truncated?.rows).toBe(true);
+  });
+
   it('parseExcelSheet 只解析指定 sheet', () => {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['a', 'b'], [1, 2]]), '目标');
