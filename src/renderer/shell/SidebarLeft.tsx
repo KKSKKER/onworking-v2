@@ -1,10 +1,11 @@
 // 左侧栏:大表树(单击=选中+展开;每行可导入文件;右键删除大表/源文件)。查询管理模式已移除。
-import { useEffect, useState, type MouseEvent } from 'react';
+import { useEffect, useMemo, useState, type MouseEvent } from 'react';
 import { useApi } from '../views/useApi';
 import { useSelection } from '../state/SelectionContext';
 import { sendCli } from '../cli';
 import { ContextMenu, menuAt, type ContextMenuState } from '../components/ContextMenu';
 import type { BigTableConfig } from '../../core/bigtable/schema';
+import { patternToRegex } from '../../core/glob';
 
 interface AddFilesResult {
   added: string[];
@@ -164,6 +165,23 @@ function TreeFolder(props: {
 }) {
   const { folder, expanded, selected, selectedFile, onSelect, onSelectFile, onImport, onFolderCtx, onFileCtx } = props;
   const { data: files } = useApi<string[]>({ cmd: 'bigtable.sourceFiles', folder }, expanded);
+  // 规则:判断哪些源文件已有映射(pattern 命中即视为已映射)
+  const { data: rulesCtx } = useApi<{ rules: { sources: { pattern: string }[] }[] } | null>(
+    expanded ? { cmd: 'bigtable.config', folder } : { cmd: 'bigtable.list' },
+    expanded,
+  );
+  const mappedFiles = useMemo(() => {
+    const set = new Set<string>();
+    for (const rule of rulesCtx?.rules ?? []) {
+      for (const s of rule.sources) {
+        const re = patternToRegex(s.pattern);
+        for (const f of files ?? []) {
+          if (re.test(f) || re.test(f.split(/[\\/]/).pop() ?? f)) set.add(f);
+        }
+      }
+    }
+    return set;
+  }, [rulesCtx, files]);
 
   return (
     <li>
@@ -191,8 +209,9 @@ function TreeFolder(props: {
                 className={`tree-file ${selectedFile === file ? 'selected' : ''}`}
                 onClick={() => onSelectFile(file)}
                 onContextMenu={(e) => onFileCtx(e, folder, file)}
+                title={mappedFiles.has(file) ? '已有映射规则' : '无映射规则'}
               >
-                📄 {name}
+                {mappedFiles.has(file) ? <span className="tree-mapped">✓ </span> : null}📄 {name}
               </li>
             );
           })}

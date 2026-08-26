@@ -61,6 +61,8 @@ export function MappingView() {
   const [msg, setMsg] = useState('');
   // 大表配置里定义的字段名(映射到的目标列,下拉选项)
   const [bigTableFields, setBigTableFields] = useState<string[]>([]);
+  // 已加载的规则(判断当前文件/sheet 是否已有映射 → 下拉标绿)
+  const [rules, setRules] = useState<RuleInfo[]>([]);
 
   /** 把一条规则回填到视图(表头/字段/映射列)。 */
   function applyRuleToState(rule: RuleInfo) {
@@ -90,6 +92,7 @@ export function MappingView() {
     if (!res.ok) return null;
     const ctx = res.data as BigTableCtx;
     setBigTableFields((ctx.config?.fields ?? []).map((f) => f.name));
+    setRules(ctx.rules ?? []);
     return ctx;
   }
 
@@ -216,6 +219,14 @@ export function MappingView() {
   }
 
   const target = selectedFolder ?? '(未选择大表)';
+  // 当前 (文件, sheet) 是否已有映射规则(pattern + sheetName 命中)
+  const currentSheetMapped = !!selectedFile && rules.some((r) =>
+    r.sources.some((s) => {
+      const re = patternToRegex(s.pattern);
+      const base = selectedFile.split(/[\\/]/).pop() ?? selectedFile;
+      return (re.test(base) || re.test(selectedFile)) && (!s.sheetName || s.sheetName === sheet);
+    }),
+  );
 
   return (
     <div style={{ padding: 12, height: '100%', boxSizing: 'border-box', overflow: 'auto' }}>
@@ -235,11 +246,15 @@ export function MappingView() {
                 setSheet(v);
                 void handleDetect(v); // 切换 sheet → 重新检测该 sheet 的表头,字段表即时更新
               }}
-              style={{ width: 180 }}
+              style={{
+                width: 180,
+                ...(currentSheetMapped ? { border: '1px solid #1a7f37', color: '#1a7f37', fontWeight: 600 } : {}),
+              }}
+              title={currentSheetMapped ? '该 sheet 已有映射规则' : '该 sheet 无映射规则'}
             >
               {sheets.map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {currentSheetMapped && s === sheet ? '✓ ' : ''}{s}
                 </option>
               ))}
             </select>
