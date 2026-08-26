@@ -23,9 +23,11 @@ export const MANUAL_TEXT = `# Onworking Agent 操作须知(浓缩版)
 - 加文件 ≠ 导入:bigtable.addFiles 只拷贝到 source/,必须重跑 pipeline.run。
 - overwrite 缺省 false:同名文件跳过;要覆盖显式 true。
 - 规则 YAML 是 clean 映射唯一事实来源:改映射只能 mapping.save。
+- mapping.save 的 mappings[] 每项 = {sourceHeader, outputName, transform?}:outputName 是目标列名(必填,字段名是 outputName 不是 targetField);transform 缺省 none。
+- clean 管线 config 用 {kind:'clean', id, bigTableFolder, sourceDir}:大表字段名是 bigTableFolder(不是 folder)。
 - 血缘列自动附加:__source_file/__source_sheet/__source_row/__extracted_at。
 - pipeline id 由调用方显式传入,禁止用 Date.now() 等不可复现 id。
-- query.run 只读,仅 SELECT/WITH。
+- query.run 读为主(SELECT/WITH 返回行);写(INSERT/UPDATE/DELETE/DDL)会直接改总表 master.db,除非操作者明确要求不要用写。
 - 每文件多 sheet:用 mapping.save 的 sheetName 指定;不指定只导第一张。
 
 ## 工作流

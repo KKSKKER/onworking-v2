@@ -37,12 +37,18 @@ describe('workspace', () => {
     expect(ws.root).toBe(dir);
   });
 
-  it('settings round-trip with default aiOpenMode=off', () => {
+  it('settings round-trip with default aiOpenMode=external(取消关闭状态)', () => {
     const ws = initWorkspace(dir);
     const s = loadSettings(ws);
-    expect(s.aiOpenMode).toBe('off');
+    expect(s.aiOpenMode).toBe('external');
     s.name = 'demo';
     saveSettings(ws, s);
     expect(loadSettings(ws).name).toBe('demo');
+  });
+
+  it('loadSettings 把残留的 off 归一化回 external', () => {
+    const ws = initWorkspace(dir);
+    saveSettings(ws, { name: 'demo', aiOpenMode: 'off' } as never);
+    expect(loadSettings(ws).aiOpenMode).toBe('external');
   });
 });

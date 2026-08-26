@@ -1,8 +1,8 @@
 // src/core/agent/tools.ts
 // AI 工具函数层:SVG 泳道图里 AI(Agent)调用的每个 tool 封装成一个函数。
 // 入参 AI 友好,返回结构化结果(含下一步可用的项目状态)。底层复用 core。
-import { copyFileSync, mkdirSync, existsSync, writeFileSync } from 'node:fs';
-import { basename, dirname, join } from 'node:path';
+import { copyFileSync, mkdirSync, existsSync, writeFileSync, rmSync, unlinkSync } from 'node:fs';
+import { basename, dirname, join, resolve, relative, sep } from 'node:path';
 import { openWorkspace, masterDbPath, type Workspace } from '../workspace/workspace';
 import { loadSettings, saveSettings, type WorkspaceSettings, type AiOpenMode } from '../workspace/settings';
 import {
@@ -16,11 +16,11 @@ import type { BigTableConfig, BigTableField } from '../bigtable/schema';
 import { scanSourceDir, type ScannedFile } from '../ingest/scanner';
 import { parseCsvFile, parseExcelFile, type ParsedSheet } from '../ingest/parser';
 import { detectSourceConfig } from '../pipeline/setup';
-import { savePipeline, listPipelines, loadPipeline } from '../pipeline/store';
-import { PipelineEngine, type RunSummary } from '../pipeline/engine';
+import { savePipeline, listPipelines, loadPipeline, listPipelinesForBigTable } from '../pipeline/store';
+import { PipelineEngine, type RunSummary, type TableInfo, type QueryOutcome } from '../pipeline/engine';
 import { ProjectState } from '../state/project';
 import { loadTemplate, applyTemplateToSheet, saveTemplate, type MappingTemplate } from '../template/store';
-import type { FieldMapping } from '../etl/transform';
+import type { FieldMapping, ValueTransform } from '../etl/transform';
 import { openDatabase } from '../db/database';
 import { AppError } from '../errors';
 import { saveRule, loadRules } from '../rule/store';
@@ -82,11 +82,11 @@ export function toolExportBigTableCsv(
   return { file, rows: rows.length };
 }
 
-/** tool: 从总表导出查询结果到 CSV(交付清洗后的总表)。仅 SELECT/WITH。 */
+/** tool: 从总表导出查询结果到 CSV(交付清洗后的总表)。仅 SELECT/WITH。folder 给定时导出大表 DB。 */
 export function toolExportQueryCsv(
   ws: Workspace,
   sql: string,
-  opts?: { path?: string },
+  opts?: { path?: string; folder?: string },
 ): { file: string; rows: number } {
   const trimmed = sql.trim();
   if (!/^(SELECT|WITH)\b/i.test(trimmed)) {
@@ -97,7 +97,7 @@ export function toolExportQueryCsv(
       data: { sql },
     });
   }
-  const db = openDatabase(masterDbPath(ws), { wal: false });
+  const db = openDatabase(opts?.folder ? bigTableDbPath(ws, opts.folder) : masterDbPath(ws), { wal: false });
   try {
     const rows = db.prepare(trimmed).all() as Record<string, unknown>[];
     const cols = rows.length > 0 ? Object.keys(rows[0]) : [];
@@ -130,20 +130,17 @@ export function toolListPipelineConfigs(ws: Workspace): PipelineConfig[] {
 
 /** tool: 读取选中大表关联的全部配置(大表配置 + 规则 YAML + 关联管线),供前端实时渲染。 */
 export function toolGetBigTableContext(ws: Workspace, folder: string): {
+  folder: string;
+  /** 大表自己的源文件目录(sourceDir 清洗输入,确定性的,不用用户手填)。 */
+  sourceDir: string;
   config: BigTableConfig;
   rules: RuleYaml[];
   pipelines: PipelineConfig[];
 } {
   const config = loadBigTableConfig(ws, folder);
   const rules = loadRules(ws, folder);
-  const pipelines = listPipelines(ws)
-    .map((id) => loadPipeline(ws, id))
-    .filter((p) =>
-      p.kind === 'clean' ? p.bigTableFolder === folder
-      : p.kind === 'sql-clean' ? p.bigTables.includes(folder)
-      : false,
-    );
-  return { config, rules, pipelines };
+  const pipelines = listPipelinesForBigTable(ws, folder);
+  return { folder, sourceDir: bigTableSourceDir(ws, folder), config, rules, pipelines };
 }
 
 /** tool: 导出源文件指定 sheet 为 CSV(与预览同视角,含表头行)。 */
@@ -203,6 +200,50 @@ export function toolAddFilesToBigTable(
   return { added, overwritten, skipped };
 }
 
+function assertSafeFolder(folder: string): void {
+  if (!folder || /[\\/]|\.\./.test(folder)) {
+    throw new AppError({
+      module: 'agent',
+      code: 'BAD_FOLDER',
+      message: `folder 必须是简单名称(不能含路径分隔符或 ..): ${folder}`,
+      data: { folder },
+    });
+  }
+}
+
+/** tool: 删除大表 —— 删掉 .onworking/bigtables/<folder> 整个文件夹 + 状态记录。破坏性操作,UI 侧需确认。 */
+export function toolDeleteBigTable(ws: Workspace, folder: string): { deleted: string } {
+  assertSafeFolder(folder);
+  rmSync(join(ws.onworkingDir, 'bigtables', folder), { recursive: true, force: true });
+  new ProjectState(ws).removeBigTable(folder);
+  return { deleted: folder };
+}
+
+/** tool: 删除大表源文件 —— 只删 source 目录内的一个文件;路径必须落在 source 目录内。 */
+export function toolDeleteSourceFile(ws: Workspace, folder: string, file: string): { deleted: string } {
+  assertSafeFolder(folder);
+  const destDir = resolve(bigTableSourceDir(ws, folder));
+  const target = resolve(destDir, file);
+  if (target !== destDir && !target.startsWith(destDir + sep)) {
+    throw new AppError({
+      module: 'agent',
+      code: 'BAD_FILE_PATH',
+      message: `file 必须在大表 source 目录内: ${file}`,
+      data: { folder, file },
+    });
+  }
+  if (!existsSync(target)) {
+    throw new AppError({
+      module: 'agent',
+      code: 'FILE_NOT_FOUND',
+      message: `source file not found: ${file}`,
+      data: { folder, file },
+    });
+  }
+  unlinkSync(target);
+  return { deleted: relative(destDir, target) || basename(target) };
+}
+
 /** tool: 设置大表字段。 */
 export function toolSetBigTableFields(
   ws: Workspace,
@@ -238,6 +279,8 @@ export function toolImportFiles(ws: Workspace, bigTableFolder: string, sourceDir
   return files;
 }
 
+const VALID_TRANSFORMS: ReadonlySet<ValueTransform> = new Set<ValueTransform>(['none', 'to-cents', 'normalize-date', 'trim']);
+
 /** tool: 设置字段映射 —— 只写 YAML 规则,不生成管线。ruleName 缺省 `<folder>_rule`,可传不同名追加第 N 份;pattern 指定文件匹配(缺省匹配全部文件),sheetName 指定某个 sheet —— 一个规则 = 一个「文件 × sheet」映射。 */
 export function toolSetMapping(
   ws: Workspace,
@@ -246,6 +289,41 @@ export function toolSetMapping(
   mappings: FieldMapping[],
   opts?: { ruleName?: string; sheetName?: string; pattern?: string },
 ): { ruleFile: string } {
+  // 入参校验:结构错误(尤其 outputName 写成 targetField)会静默生成 undefined 列、写废整表数据,必须在写规则前拒绝。
+  if (!Array.isArray(mappings) || mappings.length === 0) {
+    throw new AppError({
+      module: 'agent',
+      code: 'MAPPING_BAD_FIELD',
+      message: 'mapping.save 需要 mappings 数组(至少一条,每项 = {sourceHeader, outputName})',
+    });
+  }
+  mappings.forEach((m, i) => {
+    const idx = `mappings[${i}]`;
+    if (typeof m?.sourceHeader !== 'string' || m.sourceHeader.trim() === '') {
+      throw new AppError({
+        module: 'agent',
+        code: 'MAPPING_BAD_FIELD',
+        message: `${idx}.sourceHeader 必填(源文件列名)`,
+        data: { index: i, field: 'sourceHeader' },
+      });
+    }
+    if (typeof m?.outputName !== 'string' || m.outputName.trim() === '') {
+      throw new AppError({
+        module: 'agent',
+        code: 'MAPPING_BAD_FIELD',
+        message: `${idx}.outputName 必填(目标列名)。注意字段名是 outputName,不是 targetField —— 写错会静默生成 undefined 列`,
+        data: { index: i, field: 'outputName' },
+      });
+    }
+    if (m.transform !== undefined && !VALID_TRANSFORMS.has(m.transform)) {
+      throw new AppError({
+        module: 'agent',
+        code: 'MAPPING_BAD_FIELD',
+        message: `${idx}.transform 取值「${String(m.transform)}」不合法;允许: ${[...VALID_TRANSFORMS].join(' | ')}`,
+        data: { index: i, field: 'transform', value: m.transform },
+      });
+    }
+  });
   const name = opts?.ruleName ?? `${bigTableFolder}_rule`;
   const rule: RuleYaml = {
     name,
@@ -380,14 +458,25 @@ export function toolCreateSqlCleanPipeline(
   return { pipelineId: id };
 }
 
-/** tool: 临时查询(ad-hoc,SQL 工作台等价)。 */
+/** tool: 临时查询(ad-hoc,SQL 工作台等价)。folder 给定时操作大表 DB,否则总表 DB。 */
 export function toolQuery(
   ws: Workspace,
   sql: string,
-): { columns: string[]; rows: Record<string, unknown>[]; rowCount: number } {
+  folder?: string,
+): QueryOutcome {
   const eng = new PipelineEngine(ws);
   try {
-    return eng.query(sql);
+    return folder ? eng.queryBigTable(folder, sql) : eng.query(sql);
+  } finally {
+    eng.close();
+  }
+}
+
+/** tool: 表清单(含列结构)。folder 给定时列大表 DB,否则总表 DB。 */
+export function toolSchemaTables(ws: Workspace, folder?: string): TableInfo[] {
+  const eng = new PipelineEngine(ws);
+  try {
+    return folder ? eng.schemaTablesBigTable(folder) : eng.schemaTables();
   } finally {
     eng.close();
   }

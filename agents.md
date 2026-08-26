@@ -1,7 +1,40 @@
 # Onworking Agent 操作手册
 
 > 适用对象：所有操作 Onworking 工作区的 AI Agent。
-> 接口来源：`src/ipc/contracts.ts`（`CommandPayloads`/`CommandResults`）；通过 MCP tools（工具名 = 命令名）或 CLI（NDJSON）调用同一套命令。
+
+---
+
+## 打包版本 CLI 使用说明（重要）
+
+本目录是 Onworking 的打包版本。CLI 必须通过 `Onworking.exe` 的 `ELECTRON_RUN_AS_NODE` 模式运行，不能用系统 `node`，否则 SQLite 原生模块会 ABI 不匹配。
+
+### 调用方式（Windows PowerShell）
+
+```powershell
+# 1. 设置环境变量（让 Onworking.exe 当 Node 运行）
+$env:ELECTRON_RUN_AS_NODE = 1
+
+# 2. 通过管道发送 NDJSON 命令
+@(
+  '{"reqId":1,"cmd":"workspace.open","path":"D:/path/to/workspace"}',
+  '{"reqId":2,"cmd":"state.summary"}',
+  '{"reqId":3,"cmd":"query.run","sql":"SELECT * FROM salary_clean LIMIT 10"}'
+) | .\Onworking.exe .\resources\app\dist\main\cli\index.js
+```
+
+- CLI 入口：`resources\app\dist\main\cli\index.js`
+- 工作区通过 `workspace.open` 命令打开，也可以在启动时追加 `open <path>` 参数
+- 输出通过 stdout 返回 NDJSON，每行一条响应
+- 注意：PowerShell 管道下进程退出码可能异常，用 `2>&1 | Out-File` 重定向到文件可稳定捕获输出
+
+### MCP 模式
+
+```powershell
+$env:ELECTRON_RUN_AS_NODE = 1
+.\Onworking.exe .\resources\app\dist\main\cli\index.js mcp
+```
+
+MCP 模式通过 stdin/stdout 传输 JSON-RPC 2.0，可在任意 MCP 客户端（Claude Desktop、Cursor 等）中配置使用。
 
 ---
 
@@ -34,7 +67,7 @@
 
 **关键认知（避免停在半路）：**
 
-- **总表 master.db 不会自动生成**。只有建了 sql-clean 管线并跑它，才会把大表数据汇进总表。`query.run` / `schema.tables` 查的都是 master.db —— 没走到 ② 之前总表是空的，`schema.tables` 查不到表。
+- **总表 master.db 不会自动生成**。只有建了 sql-clean 管线并跑它，才会把大表数据汇进总表。`query.run` / `schema.tables` 不填 `folder` 时查的是 master.db（总表）——没走到 ② 之前总表是空的，`schema.tables` 查不到表；填 `folder` 则查该大表自己的 DB。
 - `pipeline.run` 写哪个 DB 由管线 kind 决定：`clean` → 大表 DB；`sql-clean` / `query` → 总表 DB。
 - **生成总表是铁律（见 §2 铁律第 5 条）**：任何数据任务必须走到 ②（总表）；需要结果表/查数再走 ③。做到大表就停 = 任务没完成。
 - `bigtable.previewRows` 预览的是大表 DB（①→② 的中间产物）；`query.run` / `schema.tables` 查的是总表（② 之后的最终库）。
@@ -58,6 +91,8 @@
    - 只把数据做到大表（`bigtable.previewRows` 有数据）**不算完成**。
    - 必须建 sql-clean 管线（`pipeline.save`，`kind:'sql-clean'`）并 `pipeline.run`，把大表汇进总表。
    - **完成判据**：`schema.tables` 在总表能查到结果表、`query.run` 能查到数据。二者任一不满足，任务未完成，继续补建/重跑，不得宣告完成。
+6. **若发现返回不允许给 AI 使用该 API**（硬性要求，不可省略）：立刻停止活动，告诉用户存在限制。
+7. **遇到未文档化的字段/参数/报错 → 先问操作者，或在确认后补进手册；禁止自行翻 `.onworking/` 或直连数据库反查**。`query.run` 报 `no such column`、`pipeline.save` 字段缺失等任何「手册没写」的情况，不得用 Python / sqlite3 / shell 打开 `.onworking/` 下的 db、JSON、YAML 看结构——那等于绕过命令体系。手册没写的，宁可多问一次。
 
 ---
 
@@ -84,11 +119,13 @@
 |---|---|
 | `mapping.save {folder, headerRow?, mappings[], ruleName?, sheetName?, pattern?}` | 写字段映射规则（唯一改映射的途径）；不同 `ruleName` = 追加第 N 份；`pattern` + `sheetName` = 一个规则对应一个「文件 × sheet」映射 |
 
+> **`mappings[]` 每项 = `{sourceHeader, outputName, transform?}`**：`sourceHeader` = 源文件列名、`outputName` = 目标列名（**必填，字段名是 `outputName` 不是 `targetField`**——写错会静默生成 `undefined` 列、写废整表数据）、`transform ∈ 'none' | 'to-cents' | 'normalize-date' | 'trim'`（缺省 `none`）。
+
 ### 管线
 | 命令 | 用途 |
 |---|---|
 | `pipeline.list` | 列管线 id |
-| `pipeline.save {config}` | 建管线（id 由调用方显式传入） |
+| `pipeline.save {config}` | 建管线（id 由调用方显式传入）；`clean` 的 config 需 `{kind:'clean', id, bigTableFolder, sourceDir}`，`bigTableFolder` 是大表文件夹（**不是 `folder`**） |
 | `pipeline.delete {id}` | 删管线 |
 | `pipeline.run {id}` | 运行任意管线 |
 | `pipeline.mergeBigTable {folder}` / `pipeline.mergeAll` | 跑该大表 / 全部 clean 管线 |
@@ -99,10 +136,10 @@
 | 命令 | 用途 |
 |---|---|
 | `setup.sheets {filePath}` / `setup.detectSource {filePath}` / `setup.preview {filePath}` | 读源文件表头/预览 |
-| `query.run {sql}` | 总表 DB 临时查询（仅 SELECT/WITH） |
-| `query.exportCsv {sql, path?}` | 在总表跑 SELECT 落 CSV（交付清洗后的总表） |
+| `query.run {sql, folder?}` | 查询/执行 SQL：**不填 `folder` 默认操作总表 master.db**；填 `folder` 则操作该大表自己的 DB。读（SELECT/WITH）返回行；写（INSERT/UPDATE/DELETE/DDL）直接改所选 DB、返回影响行数。写语句谨慎使用 |
+| `query.exportCsv {sql, path?, folder?}` | 跑 SELECT 落 CSV：不填 `folder` 从总表导出，填了从该大表 DB 导出 |
 | `template.list` / `template.save {template}` / `template.apply {name, sheet}` | 映射模板管理 |
-| `schema.tables` | 总表 DB 表清单 |
+| `schema.tables {folder?}` | DB 表清单：不填 `folder` 列总表，填了列该大表 DB |
 | `state.summary` | 项目状态摘要（决定下一步） |
 | `vcs.status` | 工作区版本状态 |
 
@@ -144,7 +181,7 @@ $lines | npm run --silent onw -- open D:/ws
 4. `bigtable.addFiles {folder, files[]}` —— 把源文件加进大表 source/ 目录
 5. `setup.detectSource {filePath}` —— 检测源文件表头行与表头
 6. `mapping.save {folder, headerRow, mappings[], sheetName?}` —— 写字段映射（源表头→大表列）；多 sheet 文件用 `sheetName` 指定要导入的那张，不指定则只导第一张
-7. `pipeline.save` —— 建 clean 管线（`kind:'clean'`, `sourceDir` 指向源目录）
+7. `pipeline.save` —— 建 clean 管线（`config = {kind:'clean', id, bigTableFolder, sourceDir}`；`bigTableFolder` = 大表文件夹，`sourceDir` 指向源目录）
 8. `pipeline.run {id}` —— 清洗入大表
 9. `bigtable.previewRows {folder}` —— 验证清洗结果
 10. `bigtable.exportCsv {folder}` —— （可选）导出清洗结果为 CSV，交付放 `<工作区根>/exports/`
@@ -164,12 +201,13 @@ $lines | npm run --silent onw -- open D:/ws
 - **`sourceDir` 决定源文件，规则 `sources[].pattern` 决定匹配**：想加别处文件，拷进 sourceDir 或改规则。
 - **血缘列自动附加**：`__source_file` / `__source_sheet` / `__source_row` / `__extracted_at` 每行都有，可反查「哪个文件哪个 sheet 哪一行」；`bigtable.exportCsv` 默认不含它们（`includeLineage:true` 才带）。
 - **多 sheet 文件**：`mapping.save` 传 `sheetName` 指定导入哪张表；不传则每文件只导**第一张**（`sheets.slice(0,1)`）。
+- **映射目标列名写在 `outputName`**：`mapping.save` 的 `mappings[]` 每项是 `{sourceHeader, outputName}`；目标列名只能放 `outputName`，写成 `targetField` 等其它名字会静默生成 `undefined` 列、写废整表。
 - **导出用命令**：`bigtable.exportCsv` 落盘 CSV，缺省 `<工作区根>/exports/<tableName>.csv`；禁止自己拼 CSV 写文件。
 - **`previewRows` 语义**：`rowCount`=当页行数、`total`=总数（分页时两者不同）。
 - **小计/页脚/空行不会自动剔除**：若源表含「小计」行、签名行、空行，需在后续处理中过滤（当前无内置过滤，属已知限制）。
 - **重复表头会歧义**：同一列名出现两次时按 `sourceHeader` 映射无法区分（属已知限制，需先处理源文件）。
 - **pipeline id 由调用方显式传入**：禁止用 `Date.now()` 等不可复现的 id。
-- **`query.run` 只读**：只允许 `SELECT`/`WITH`，不可用 `DELETE`/`UPDATE`/`INSERT` 等。
+- **`query.run` 读为主**：读（SELECT/WITH）返回行；写（INSERT/UPDATE/DELETE/DDL）会直接改所选 DB（默认总表 master.db，带 `folder` 改该大表 DB），**除非操作者明确要求，不要用写**。
 
 ---
 
@@ -185,6 +223,7 @@ $lines | npm run --silent onw -- open D:/ws
 | 看大表数据 | `ls .onworking/bigtables/seq` / 打开 db | `bigtable.previewRows` |
 | 看总表有哪些表 | 读 master.db | `schema.tables` |
 | 查总表数据 | 直接开 sqlite | `query.run` |
+| 遇到未文档化字段/查结构 | python 连 `.onworking/` 的 db / 翻配置 JSON、YAML | 先问操作者，或在确认后补进手册 |
 | 加源文件 | `cp x.xlsx …/source/` | `bigtable.addFiles` |
 | 导出数据到 CSV | 自己拼字符串写文件 | `bigtable.exportCsv` |
 | 指定导入某个 sheet | 只导第一张将就 | `mapping.save` 的 `sheetName` |
@@ -201,7 +240,7 @@ $lines | npm run --silent onw -- open D:/ws
 | `NO_WORKSPACE` | 未打开工作区 | 先 `workspace.open` |
 | `CLEAN_NO_RULE` | clean 管线没有规则 YAML | `mapping.save` 写映射 |
 | `FILE_NOT_FOUND` | `bigtable.addFiles` 源文件不存在 | 检查文件路径 |
-| `QUERY_NOT_SELECT` | `query.run` 非 SELECT/WITH | 改查询语句 |
+| `QUERY_NOT_SELECT` | query 管线(物化结果表)的 SQL 非 SELECT/WITH | 物化须用 SELECT/WITH |
 | `TEMPLATE_NOT_FOUND` | 模板不存在 | `template.list` 查名 |
 | 环境：`better-sqlite3` ABI 不匹配 | 报 `NODE_MODULE_VERSION` 不符（如 `137 vs 125`） | **已双装载免疫**：`sqlite.ts` 按进程 ABI 自动选（系统 node 137 用 `better-sqlite3`，Electron 内置 node 用 `better-sqlite3-electron` 副本——本机 Electron 31.7.7 是 125），客户端怎么 spawn 都通。装完依赖跑一次 `npm run build:dual-abi`（先重建原件到 137、再建副本匹配 Electron；注意原件被 app/MCP 占用时先关掉再跑）。若仍报，先跑 `npm run build:dual-abi` 再试 |
 

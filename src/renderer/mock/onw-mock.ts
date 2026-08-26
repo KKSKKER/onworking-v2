@@ -34,6 +34,8 @@ export function installMockOnw(): void {
     },
     openWorkspace: async (): Promise<{ ok: boolean }> => ({ ok: true }),
     pickWorkspace: async (): Promise<string | null> => 'D:/演示工作区',
+    pickFiles: async (): Promise<string[]> => ['D:/data/工资表2025-01.xlsx', 'D:/data/工资表2025-02.xlsx'],
+    pickDirectory: async (): Promise<string | null> => 'D:/data',
   };
 }
 
@@ -73,10 +75,16 @@ async function mockDispatch(command: ApiCommand): Promise<ApiResult<unknown>> {
       return ok({ file: `D:/演示工作区/exports/${command.folder}.csv`, rows: 12345 });
     case 'bigtable.config':
       return ok({
+        folder: command.folder,
+        sourceDir: `D:/演示工作区/.onworking/bigtables/${command.folder}/source`,
         config: { tableName: 'seq', autoIncrement: true, fields: [{ name: 'date', type: 'TEXT', order: 1 }] },
         rules: [{ name: 'seq_rule', sources: [{ pattern: '**/*', headerRow: 1 }], fields: [] }],
         pipelines: [{ id: 'c1', kind: 'clean', label: '' }],
       });
+    case 'bigtable.delete':
+      return ok({ deleted: command.folder });
+    case 'bigtable.deleteSourceFile':
+      return ok({ deleted: command.file });
     case 'pipeline.list':
       return ok(['c1', 'q1']);
     case 'pipeline.configs':
@@ -116,14 +124,18 @@ async function mockDispatch(command: ApiCommand): Promise<ApiResult<unknown>> {
         total: 11110,
       });
     case 'query.run':
-      return ok({
-        columns: ['date', 'total'],
-        rows: [
-          { date: '2024-01', total: 123456 },
-          { date: '2024-02', total: 8200 },
-        ],
-        rowCount: 2,
-      });
+      // 读语句 → 返回行;写语句 → 返回影响行数(与后端 QueryOutcome 对齐)
+      if (/^(SELECT|WITH)\b/i.test(command.sql.trim())) {
+        return ok({
+          columns: ['date', 'total'],
+          rows: [
+            { date: '2024-01', total: 123456 },
+            { date: '2024-02', total: 8200 },
+          ],
+          rowCount: 2,
+        });
+      }
+      return ok({ columns: [], rows: [], rowCount: 0, changes: 1, lastInsertRowid: 1 });
     case 'query.exportCsv':
       return ok({ file: 'D:/演示工作区/exports/query.csv', rows: 2 });
     case 'template.list':
@@ -139,7 +151,7 @@ async function mockDispatch(command: ApiCommand): Promise<ApiResult<unknown>> {
     case 'vcs.status':
       return ok({ staged: [], unstaged: [], untracked: ['settings.json'] });
     case 'settings.get':
-      return ok({ name: '演示', aiOpenMode: 'off' });
+      return ok({ name: '演示', aiOpenMode: 'external' });
     case 'settings.setAiMode':
       return ok({ mode: command.mode });
     default:

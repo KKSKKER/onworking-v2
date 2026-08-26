@@ -3,6 +3,7 @@
 // 转发 IpcRequest 到 stdin,把 stdout/stderr 逐行回调给上层。
 import { spawn, type ChildProcess } from 'node:child_process';
 import type { IpcRequest } from '../ipc/contracts';
+import { makeEnvelope, AUTH_SECRET_ENV } from '../ipc/ai-gate';
 
 export interface CliBridgeOptions {
   /** 要 spawn 的命令,如 'node';args 前段,如 ['dist/main/cli/index.js','open'];open 时追加工作区路径。 */
@@ -12,6 +13,8 @@ export interface CliBridgeOptions {
   shell?: boolean;
   /** 追加到子进程的环境变量(如 ELECTRON_RUN_AS_NODE=1,让 electron.exe 当 node 跑 CLI)。 */
   env?: Record<string, string>;
+  /** 会话秘密:设置后 send() 用它裹信封转发(标记为「人类」请求,绕过 AI 门禁)。须与 env 里的 AUTH_SECRET_ENV 一致。 */
+  authSecret?: string;
 }
 
 export interface CliBridge {
@@ -67,7 +70,8 @@ export function createCliBridge(opts: CliBridgeOptions): CliBridge {
 
   function send(request: IpcRequest): boolean {
     if (!child || !child.stdin || child.stdin.destroyed) return false;
-    child.stdin.write(JSON.stringify(request) + '\n');
+    const payload = opts.authSecret ? JSON.stringify(makeEnvelope(opts.authSecret, request)) : JSON.stringify(request);
+    child.stdin.write(payload + '\n');
     return true;
   }
 

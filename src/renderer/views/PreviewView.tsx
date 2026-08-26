@@ -2,11 +2,12 @@
 //   选中大表  → bigtable.previewRows(展示大表 DB 数据)
 //   选中源文件 → setup.preview(展示源文件内容;多 sheet 可下拉选 sheet,表头行可调)
 // 统一分页(pageSize=100),选中切换自动加载;DataTable 单一滚动容器,横/纵向滚动条正常。
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSelection } from '../state/SelectionContext';
 import { DataTable } from '../components/DataTable';
 import { PaginationBar } from '../components/PaginationBar';
 import { sendCli } from '../cli';
+import { subscribeRefresh } from '../refresh';
 
 interface PreviewData {
   title: string;
@@ -53,6 +54,15 @@ export function PreviewView() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFolder, selectedFile]);
+
+  // 数据变化(跑管线/导入/删除等)→ 重新加载当前预览(用 ref 持有最新加载函数,避免反复订阅)
+  const reloadRef = useRef<() => void>(() => {});
+  reloadRef.current = () => {
+    setErr('');
+    if (selectedFile) void loadSource(page, selectedFile, sheet);
+    else if (selectedFolder) void loadBigTable(page, selectedFolder);
+  };
+  useEffect(() => subscribeRefresh(() => reloadRef.current()), []);
 
   async function loadBigTable(p: number, folder: string) {
     setBusy(true);

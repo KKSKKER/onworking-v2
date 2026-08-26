@@ -3,7 +3,7 @@
 // 数据架构:源文件→(规则)→大表(每大表独立 DB)→(SQL清洗)→总表 DB→(查询)。
 // clean 管线写各自大表的 DB;query/sql-clean 用总表 DB。引擎不持有常驻 DB,按需开关。
 import { dirname } from 'node:path';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, existsSync } from 'node:fs';
 import type Database from 'better-sqlite3';
 import { openDatabase } from '../db/database';
 import type { Workspace } from '../workspace/workspace';
@@ -11,7 +11,6 @@ import { masterDbPath } from '../workspace/workspace';
 import { LineageGraph } from '../lineage/graph';
 import { listBigTables, loadBigTableConfig, bigTableDbPath } from '../bigtable/store';
 import { listPipelines, loadPipeline } from './store';
-import { loadRules } from '../rule/store';
 import { buildLineageGraph } from './registry';
 import { runCleanPipeline } from './clean-runner';
 import { runQueryPipeline } from './query-runner';
@@ -39,6 +38,15 @@ export interface QueryOutcome {
   columns: string[];
   rows: Record<string, unknown>[];
   rowCount: number;
+  /** 写语句(INSERT/UPDATE/DELETE/DDL)时返回:影响行数。 */
+  changes?: number;
+  /** 写语句时返回:最后插入的自增主键。 */
+  lastInsertRowid?: number | bigint;
+}
+
+export interface TableInfo {
+  name: string;
+  columns: { name: string; type: string }[];
 }
 
 export class PipelineEngine {
@@ -97,7 +105,7 @@ export class PipelineEngine {
         const st = new ProjectState(this.ws);
         st.setPhase(cfg.bigTableFolder, 'cleaned');
         st.registerFiles(cfg.bigTableFolder, result.files);
-        st.registerMapping(cfg.bigTableFolder, loadRules(this.ws, cfg.bigTableFolder).length);
+        st.registerMapping(cfg.bigTableFolder, bigTable.fields.length);
         st.save();
         commitWorkspaceChanges(this.ws, `pipeline ${id} (clean) ran`);
         logger.info(MODULE, 'run ok', { pipelineId: id, kind: 'clean', rows: result.rowsInserted, warnings: result.warnings });
@@ -131,22 +139,48 @@ export class PipelineEngine {
     }
   }
 
-  /** 临时 SQL 查询(工作台),跑在总表 DB。limit 缺省不限(由前端分页/导出控制)。 */
+  /** 临时 SQL(工作台),跑在总表 DB。读语句返回行;写语句(INSERT/UPDATE/DELETE/DDL)执行并返回影响行数。
+   *   limit 只对读语句生效(由前端分页/导出控制)。写语句直接改总表,UI 侧需先确认。 */
   query(sql: string, limit?: number): QueryOutcome {
-    const db = openDatabase(this.masterDb(), { wal: false });
+    return this.queryOn(this.masterDb(), sql, limit);
+  }
+
+  /** 工作台对大表 DB 执行 SQL(与总表同语义:读返回行,写返回影响行数)。 */
+  queryBigTable(folder: string, sql: string, limit?: number): QueryOutcome {
+    return this.queryOn(bigTableDbPath(this.ws, folder), sql, limit);
+  }
+
+  private queryOn(dbPath: string, sql: string, limit?: number): QueryOutcome {
+    const db = openDatabase(dbPath);
     try {
-      const finalSql = limit === undefined ? sql : (/\blimit\b/i.test(sql) ? sql : `${sql} LIMIT ${limit}`);
-      const rows = db.prepare(finalSql).all() as Record<string, unknown>[];
-      const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
-      return { columns, rows, rowCount: rows.length };
+      const stmt = db.prepare(sql);
+      if (stmt.reader) {
+        const finalSql = limit === undefined ? sql : (/\blimit\b/i.test(sql) ? sql : `${sql} LIMIT ${limit}`);
+        const rows = (limit === undefined ? stmt : db.prepare(finalSql)).all() as Record<string, unknown>[];
+        const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+        return { columns, rows, rowCount: rows.length };
+      }
+      const info = stmt.run();
+      return { columns: [], rows: [], rowCount: 0, changes: info.changes, lastInsertRowid: info.lastInsertRowid };
     } finally {
       db.close();
     }
   }
 
   /** 总表表清单(含各表列结构,供前端侧边栏展示)。 */
-  schemaTables(): { name: string; columns: { name: string; type: string }[] }[] {
-    const db = openDatabase(this.masterDb(), { wal: false });
+  schemaTables(): TableInfo[] {
+    return this.schemaTablesOn(this.masterDb());
+  }
+
+  /** 大表 DB 的表清单(工作台选中大表时展示);DB 还没生成则空。 */
+  schemaTablesBigTable(folder: string): TableInfo[] {
+    const p = bigTableDbPath(this.ws, folder);
+    if (!existsSync(p)) return [];
+    return this.schemaTablesOn(p);
+  }
+
+  private schemaTablesOn(dbPath: string): TableInfo[] {
+    const db = openDatabase(dbPath, { wal: false });
     try {
       const tables = db
         .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")

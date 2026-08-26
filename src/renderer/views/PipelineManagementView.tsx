@@ -1,11 +1,12 @@
 // 视图:管线管理(原「查询」)—— 三大列:映射管线(clean)/清洗管线(sql-clean)/查询管线(query)。
 // 每列 4 子列:管线名称 / 前置依赖(血缘) / 生成表 / 执行;列顶「全部执行」。
 // 执行查询管线后弹出结果视图(Tab 名 = 结果表名)。数据来自 pipeline.configs,随工作区变化自动刷新。
-import { useState } from 'react';
+import { useState, type MouseEvent } from 'react';
 import type { PipelineConfig } from '../../core/pipeline/config';
 import { useApi } from './useApi';
 import { sendCli } from '../cli';
 import { openQueryResult } from '../state/panel';
+import { ContextMenu, menuAt, type ContextMenuState } from '../components/ContextMenu';
 
 interface RunSummary {
   pipelineId: string;
@@ -32,13 +33,14 @@ function gen(p: PipelineConfig): string {
   return `表: ${p.resultTable}`;
 }
 
-function Column({ title, list, busy, results, onRun, onRunAll }: {
+function Column({ title, list, busy, results, onRun, onRunAll, onRowCtx }: {
   title: string;
   list: PipelineConfig[];
   busy: boolean;
   results: Record<string, RunSummary>;
   onRun: (p: PipelineConfig) => void;
   onRunAll: () => void;
+  onRowCtx: (e: MouseEvent, p: PipelineConfig) => void;
 }) {
   return (
     <div style={{ flex: 1, minWidth: 0, border: '1px solid #e5e5e5', borderRadius: 6, padding: 8, display: 'flex', flexDirection: 'column' }}>
@@ -64,7 +66,7 @@ function Column({ title, list, busy, results, onRun, onRunAll }: {
             {list.map((p) => {
               const r = results[p.id];
               return (
-                <tr key={p.id} style={{ borderTop: '1px solid #f0f0f0', verticalAlign: 'top' }}>
+                <tr key={p.id} style={{ borderTop: '1px solid #f0f0f0', verticalAlign: 'top' }} onContextMenu={(e) => onRowCtx(e, p)}>
                   <td style={{ padding: '3px 4px', fontWeight: 600 }}>
                     {p.id}
                     {r && (
@@ -103,6 +105,19 @@ export function PipelineManagementView() {
   const [results, setResults] = useState<Record<string, RunSummary>>({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
+  const [menu, setMenu] = useState<ContextMenuState | null>(null);
+
+  async function deletePipeline(p: PipelineConfig) {
+    if (!window.confirm(`确定删除管线「${p.id}」(${p.kind})?`)) return;
+    const res = await sendCli({ cmd: 'pipeline.delete', id: p.id });
+    setMsg(res.ok ? `已删除管线「${p.id}」` : `删除失败: ${res.error.message}`);
+    reload();
+  }
+
+  function onRowCtx(e: MouseEvent, p: PipelineConfig) {
+    e.preventDefault();
+    setMenu(menuAt(e, [{ label: `删除管线「${p.id}」`, danger: true, onClick: () => void deletePipeline(p) }]));
+  }
 
   async function runOne(p: PipelineConfig) {
     setBusy(true);
@@ -153,9 +168,11 @@ export function PipelineManagementView() {
             results={results}
             onRun={runOne}
             onRunAll={() => void runAll(g.key)}
+            onRowCtx={onRowCtx}
           />
         ))}
       </div>
+      {menu && <ContextMenu menu={menu} onClose={() => setMenu(null)} />}
     </div>
   );
 }

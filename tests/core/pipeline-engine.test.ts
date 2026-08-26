@@ -9,6 +9,8 @@ import { openDatabase } from '../../src/core/db/database';
 import { savePipeline } from '../../src/core/pipeline/store';
 import { saveRule } from '../../src/core/rule/store';
 import { PipelineEngine } from '../../src/core/pipeline/engine';
+import { runSqlCleanPipeline } from '../../src/core/pipeline/sql-clean-runner';
+import type { SqlCleanPipelineConfig } from '../../src/core/pipeline/config';
 import { gitCurrentCommit } from '../../src/core/versioning/git';
 
 describe('pipeline engine', () => {
@@ -80,6 +82,26 @@ describe('pipeline engine', () => {
 
   const dbPath = () => join(ws.onworkingDir, 'db', 'onworking.db');
 
+  it('sql-clean with missing resultTable fails with a clean error, not a TypeError', async () => {
+    const mdb = openDatabase(':memory:');
+    const cfg = {
+      kind: 'sql-clean', id: 'bad', label: '', bigTables: ['seq'],
+      sql: 'SELECT 1 AS x', resultTable: undefined, createdAt: '',
+    } as unknown as SqlCleanPipelineConfig;
+    await expect(runSqlCleanPipeline(mdb, ws, cfg)).rejects.toMatchObject({ code: 'SQLCLEAN_NO_RESULT_TABLE' });
+    mdb.close();
+  });
+
+  it('sql-clean rejects non-SELECT/WITH sql (consistent with workbench)', async () => {
+    const mdb = openDatabase(':memory:');
+    const cfg = {
+      kind: 'sql-clean', id: 'bad', label: '', bigTables: ['seq'],
+      sql: 'DELETE FROM "seq"', resultTable: 'r', createdAt: '',
+    } as SqlCleanPipelineConfig;
+    await expect(runSqlCleanPipeline(mdb, ws, cfg)).rejects.toMatchObject({ code: 'SQLCLEAN_NOT_SELECT' });
+    mdb.close();
+  });
+
   it('runs a single clean pipeline', async () => {
     const eng = new PipelineEngine(ws);
     const r = await eng.run('c1');
@@ -101,6 +123,16 @@ describe('pipeline engine', () => {
     expect(out.rows[0].total).toBe(30000); // 100+200 元 → 分
     // 版本追踪已接入:运行后 .onworking 配置变更已 git 提交
     expect(gitCurrentCommit(ws)).toBeTruthy();
+    eng.close();
+  });
+
+  it('workbench query runs write statements against master db', async () => {
+    const eng = new PipelineEngine(ws);
+    await eng.recomputeAll();
+    const w = eng.query('UPDATE total SET total = 1 WHERE total = 30000');
+    expect(w.changes).toBe(1);
+    const out = eng.query('SELECT total FROM "total"');
+    expect(out.rows[0].total).toBe(1);
     eng.close();
   });
 

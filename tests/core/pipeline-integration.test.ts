@@ -9,6 +9,7 @@ import { openDatabase } from '../../src/core/db/database';
 import { savePipeline } from '../../src/core/pipeline/store';
 import { saveRule } from '../../src/core/rule/store';
 import { PipelineEngine } from '../../src/core/pipeline/engine';
+import { ProjectState } from '../../src/core/state/project';
 
 describe('pipeline integration (end-to-end)', () => {
   let dir: string;
@@ -79,6 +80,11 @@ describe('pipeline integration (end-to-end)', () => {
     expect(row.__source_file).toBeTruthy(); // 血缘来源
     expect(typeof row.__source_row).toBe('number'); // 血缘行号是整数
     expect(typeof row.debit).toBe('number'); // 整数分
+
+    // mappedFields 应是大表配置的字段数,而不是规则文件数
+    const st = new ProjectState(ws);
+    expect(st.getBigTable('seq')?.mappedFields).toBe(3);
+
     console.log(`[integration] 20k 行导入耗时 ${elapsed}ms (${Math.round((20000 / elapsed) * 1000)} 行/秒)`);
     eng.close();
   });

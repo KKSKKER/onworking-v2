@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { initWorkspace, type Workspace } from '../../src/core/workspace/workspace';
 import { ProjectState } from '../../src/core/state/project';
+import { savePipeline } from '../../src/core/pipeline/store';
 
 describe('project state', () => {
   let dir: string;
@@ -57,5 +58,17 @@ describe('project state', () => {
     const s = st.getSummary();
     expect(s).toContain('seq');
     expect(s).toContain('mapped');
+  });
+
+  it('getSummary reports pipeline count from the pipeline store, not stale state.json', () => {
+    savePipeline(ws, { kind: 'clean', id: 'c1', label: 'clean', bigTableFolder: 'salary', sourceDir: 'src', createdAt: 't' });
+    savePipeline(ws, { kind: 'sql-clean', id: 'sc1', label: 'sc', bigTables: ['salary'], sql: 'SELECT 1', resultTable: 'salary_clean', createdAt: 't' });
+    savePipeline(ws, { kind: 'query', id: 'q1', label: 'q', sql: 'SELECT 1', dependencies: ['sc1'], resultTable: 'pivot', createdAt: 't' });
+    const st = new ProjectState(ws);
+    st.addBigTable('salary');
+    st.setPhase('salary', 'cleaned');
+    const s = st.getSummary();
+    expect(s).toContain('salary');
+    expect(s).toContain('pipelines=2'); // clean + sql-clean,query 不关联
   });
 });

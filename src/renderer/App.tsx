@@ -1,8 +1,8 @@
 // 应用外壳:多区域框架(VS Code 风格 dockview 视图区)+ 选中状态联动。
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef } from 'react';
 import { DockviewReact, type DockviewReadyEvent, type DockviewApi } from 'dockview-react';
 import 'dockview-react/dist/styles/dockview.css';
-import { TopBar, type ShellMode } from './shell/TopBar';
+import { TopBar } from './shell/TopBar';
 import { SidebarLeft } from './shell/SidebarLeft';
 import { SidebarRight } from './shell/SidebarRight';
 import { CliOutputPanel } from './shell/CliOutputPanel';
@@ -13,7 +13,6 @@ import { dockviewComponents, VIEWS } from './views/registry';
 import './styles.css';
 
 export function App() {
-  const [mode, setMode] = useState<ShellMode>('files');
   const components = useMemo(() => dockviewComponents(), []);
   const apiRef = useRef<DockviewApi | null>(null);
 
@@ -49,10 +48,10 @@ export function App() {
   return (
     <SelectionProvider>
       <div className="app">
-        <TopBar mode={mode} onModeChange={setMode} onAddView={addView} />
+        <TopBar onAddView={addView} />
         <div className="body">
           <ResizablePanel axis="x" initial={240} min={140} max={500} dragEdge="right">
-            <SidebarLeft mode={mode} />
+            <SidebarLeft />
           </ResizablePanel>
           <main className="view-area">
             <DockviewReact

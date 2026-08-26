@@ -9,6 +9,8 @@ declare global {
       onWorkspaceChanged(cb: () => void): () => void;
       openWorkspace(path: string): Promise<{ ok: boolean }>;
       pickWorkspace(): Promise<string | null>;
+      pickFiles(): Promise<string[]>;
+      pickDirectory(): Promise<string | null>;
     };
   }
 }

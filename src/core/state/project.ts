@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import type { Workspace } from '../workspace/workspace';
 import { AppError } from '../errors';
+import { listPipelinesForBigTable } from '../pipeline/store';
 
 export type BigTablePhase =
   | 'created'
@@ -113,6 +114,14 @@ export class ProjectState {
     this.data.bigTables[folder].phase = phase;
   }
 
+  /** 删除大表的状态记录(配合删除大表文件夹)。 */
+  removeBigTable(folder: string): void {
+    if (this.data.bigTables[folder]) {
+      delete this.data.bigTables[folder];
+      this.save();
+    }
+  }
+
   /** 回到 created(源数据大改需要重新走流程)。 */
   resetPhase(folder: string): void {
     this.addBigTable(folder);
@@ -135,10 +144,10 @@ export class ProjectState {
     if (!bt.pipelines.includes(pipelineId)) bt.pipelines.push(pipelineId);
   }
 
-  /** 人类/AI 可读的当前状态摘要。 */
+  /** 人类/AI 可读的当前状态摘要。管线数从管线存储实时计算(关联口径),不依赖 state.json 冗余字段。 */
   getSummary(): string {
     const lines = Object.entries(this.data.bigTables).map(([f, s]) =>
-      `${f}: ${s.phase} (files=${s.files}, mappedFields=${s.mappedFields}, pipelines=${s.pipelines.length})`,
+      `${f}: ${s.phase} (files=${s.files}, mappedFields=${s.mappedFields}, pipelines=${listPipelinesForBigTable(this.ws, f).length})`,
     );
     return `workspace=${this.data.workspaceName}\n${lines.join('\n')}`;
   }

@@ -4,21 +4,13 @@
 import { dispatchIpc, handlers } from '../ipc/handlers';
 import type { ApiResult, IpcRequest } from '../ipc/contracts';
 import type { ApiContext } from '../ipc/handlers';
-import { loadSettings, type AiOpenMode } from '../core/workspace/settings';
+import { loadSettings } from '../core/workspace/settings';
+import { isAiAllowed, buildAiRestrictedError } from '../ipc/ai-gate';
 import { MANUAL_TEXT } from './manual';
 
 // ---- AI 开放模式门禁 ----
 // 非 local 模式下调「真实数据」API 返回 AI_MODE_RESTRICTED;UI 不受影响。
-const METADATA_ALLOWED = new Set([
-  'state.summary', 'bigtable.list', 'pipeline.list', 'template.list', 'vcs.status', 'schema.tables', 'settings.get',
-]);
-const OFF_ALLOWED = new Set(['state.summary']);
-
-function isAiAllowed(mode: AiOpenMode, cmd: string): boolean {
-  if (mode === 'local') return true;
-  if (mode === 'off') return OFF_ALLOWED.has(cmd);
-  return METADATA_ALLOWED.has(cmd); // external:仅元数据
-}
+// 门禁逻辑集中在 src/ipc/ai-gate.ts(CLI 与 MCP 共用)。
 
 const PROTOCOL_VERSION = '2024-11-05';
 
@@ -78,6 +70,8 @@ export const TOOL_SCHEMAS: Record<string, ToolSchema> = {
   'bigtable.addFiles': schema({ folder: str, files: objArr, overwrite: bool }, ['folder', 'files']),
   'bigtable.exportCsv': schema({ folder: str, path: str, includeLineage: bool }, ['folder']),
   'bigtable.config': schema({ folder: str }, ['folder']),
+  'bigtable.delete': schema({ folder: str }, ['folder']),
+  'bigtable.deleteSourceFile': schema({ folder: str, file: str }, ['folder', 'file']),
   'mapping.save': schema({ folder: str, headerRow: int, mappings: objArr, ruleName: str, sheetName: str, pattern: str }, ['folder', 'mappings']),
   'pipeline.list': schema({}),
   'pipeline.configs': schema({}),
@@ -99,7 +93,7 @@ export const TOOL_SCHEMAS: Record<string, ToolSchema> = {
   'template.list': schema({}),
   'template.save': schema({ template: obj }, ['template']),
   'template.apply': schema({ name: str, sheet: obj }, ['name', 'sheet']),
-  'schema.tables': schema({}),
+  'schema.tables': schema({ folder: str }),
   'state.summary': schema({}),
   'vcs.status': schema({}),
   'settings.get': schema({}),
@@ -226,20 +220,11 @@ export async function handleMcpRequest(
 
     // AI 开放模式门禁:非 local 模式下,数据/写 API 对 AI 禁用(UI 不受影响)
     const aiMode = loadSettings(ctx.ws).aiOpenMode;
-    if (name === 'settings.setAiMode') {
-      return {
-        jsonrpc: '2.0', id,
-        result: {
-          content: [{ type: 'text', text: JSON.stringify({ code: 'AI_MODE_RESTRICTED', message: 'AI 无权修改开放模式(仅界面可设置)' }) }],
-          isError: true,
-        },
-      };
-    }
     if (!isAiAllowed(aiMode, name)) {
       return {
         jsonrpc: '2.0', id,
         result: {
-          content: [{ type: 'text', text: JSON.stringify({ code: 'AI_MODE_RESTRICTED', message: `当前模式(${aiMode})不允许给 AI 使用该 API: ${name}` }) }],
+          content: [{ type: 'text', text: JSON.stringify(buildAiRestrictedError(aiMode, name)) }],
           isError: true,
         },
       };

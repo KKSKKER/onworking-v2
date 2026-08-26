@@ -16,7 +16,7 @@ import {
 } from '../core/template/store';
 import { gitStatus } from '../core/versioning/git';
 import { ensureWorkspaceVcs } from '../core/versioning/workspace-vcs';
-import { AppError, captureError } from '../core/errors';
+import { captureError } from '../core/errors';
 import type { ApiCommand, ApiResult, CommandPayloads, CommandResults, IpcRequest, IpcResponse } from './contracts';
 import {
   toolCreateBigTable,
@@ -38,7 +38,10 @@ import {
   toolExportSourceCsv,
   toolGetBigTableContext,
   toolQuery,
+  toolSchemaTables,
   toolGetProjectState,
+  toolDeleteBigTable,
+  toolDeleteSourceFile,
 } from '../core/agent/tools';
 
 export interface ApiContext {
@@ -76,6 +79,8 @@ export const handlers: { [K in SessionCommands]: HandlerFor<K> } = {
   'bigtable.exportCsv': async (ctx, p) =>
     toolExportBigTableCsv(ctx.ws, p.folder, { path: p.path, includeLineage: p.includeLineage }),
   'bigtable.config': async (ctx, p) => toolGetBigTableContext(ctx.ws, p.folder),
+  'bigtable.delete': async (ctx, p) => toolDeleteBigTable(ctx.ws, p.folder),
+  'bigtable.deleteSourceFile': async (ctx, p) => toolDeleteSourceFile(ctx.ws, p.folder, p.file),
 
   'pipeline.list': async (ctx) => listPipelines(ctx.ws),
   'pipeline.configs': async (ctx) => toolListPipelineConfigs(ctx.ws),
@@ -138,22 +143,11 @@ export const handlers: { [K in SessionCommands]: HandlerFor<K> } = {
   'template.save': async (ctx, p) => toolSaveTemplate(ctx.ws, p.template),
   'template.apply': async (ctx, p) => applyTemplateToSheet(p.sheet, loadTemplate(ctx.ws, p.name)),
 
-  'schema.tables': async (ctx) => ctx.getEngine().schemaTables(),
+  'schema.tables': async (ctx, p) => toolSchemaTables(ctx.ws, p.folder),
 
-  'query.run': async (ctx, p) => {
-    const sql = p.sql.trim();
-    if (!/^(SELECT|WITH)\b/i.test(sql)) {
-      throw new AppError({
-        module: 'query',
-        code: 'QUERY_NOT_SELECT',
-        message: 'only SELECT/WITH queries are allowed in the workbench',
-        data: { sql },
-      });
-    }
-    return toolQuery(ctx.ws, sql);
-  },
+  'query.run': async (ctx, p) => toolQuery(ctx.ws, p.sql, p.folder),
 
-  'query.exportCsv': async (ctx, p) => toolExportQueryCsv(ctx.ws, p.sql, { path: p.path }),
+  'query.exportCsv': async (ctx, p) => toolExportQueryCsv(ctx.ws, p.sql, { path: p.path, folder: p.folder }),
 
   'state.summary': async (ctx) => toolGetProjectState(ctx.ws),
 

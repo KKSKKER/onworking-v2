@@ -4,13 +4,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as XLSX from 'xlsx';
 import { initWorkspace, type Workspace } from '../../src/core/workspace/workspace';
-import { saveBigTableConfig } from '../../src/core/bigtable/store';
+import { saveBigTableConfig, bigTableSourceDir } from '../../src/core/bigtable/store';
 import { savePipeline } from '../../src/core/pipeline/store';
 import { saveRule } from '../../src/core/rule/store';
-import { toolRunPipeline, toolRunPipelines, toolPreviewCleanResult, toolSaveTemplate, toolSetMapping, toolAddFilesToBigTable, toolExportBigTableCsv, toolExportQueryCsv, toolExportSourceCsv, toolGetBigTableContext, toolListPipelineConfigs } from '../../src/core/agent/tools';
+import { toolRunPipeline, toolRunPipelines, toolPreviewCleanResult, toolSaveTemplate, toolSetMapping, toolAddFilesToBigTable, toolExportBigTableCsv, toolExportQueryCsv, toolExportSourceCsv, toolGetBigTableContext, toolListPipelineConfigs, toolDeleteBigTable, toolDeleteSourceFile, toolQuery, toolSchemaTables } from '../../src/core/agent/tools';
 import { listTemplates } from '../../src/core/template/store';
 import { listRules, loadRules } from '../../src/core/rule/store';
 import { PipelineEngine } from '../../src/core/pipeline/engine';
+import { ProjectState } from '../../src/core/state/project';
 
 describe('tools', () => {
   let dir: string;
@@ -186,6 +187,31 @@ describe('tools', () => {
     expect(existsSync(custom)).toBe(true);
   });
 
+  it('toolDeleteBigTable removes the folder and its state record', () => {
+    toolDeleteBigTable(ws, 'seq');
+    expect(existsSync(join(ws.onworkingDir, 'bigtables', 'seq'))).toBe(false);
+    expect(new ProjectState(ws).listBigTables()).not.toContain('seq');
+  });
+
+  it('toolDeleteBigTable rejects unsafe folder names (path traversal)', () => {
+    expect(() => toolDeleteBigTable(ws, '../evil')).toThrowError(/folder 必须是简单名称/);
+    expect(() => toolDeleteBigTable(ws, 'a/b')).toThrowError(/folder 必须是简单名称/);
+  });
+
+  it('toolDeleteSourceFile deletes a file inside the big table source dir', () => {
+    const src = bigTableSourceDir(ws, 'seq');
+    mkdirSync(src, { recursive: true });
+    const f = join(src, 'x.xlsx');
+    writeFileSync(f, 'x');
+    toolDeleteSourceFile(ws, 'seq', f);
+    expect(existsSync(f)).toBe(false);
+  });
+
+  it('toolDeleteSourceFile rejects paths outside the source dir and missing files', () => {
+    expect(() => toolDeleteSourceFile(ws, 'seq', join(dir, 'outside.xlsx'))).toThrowError(/source 目录内/);
+    expect(() => toolDeleteSourceFile(ws, 'seq', '不存在.xlsx')).toThrowError(/not found/);
+  });
+
   it('toolSetMapping writes sheetName into the rule sources', () => {
     toolSetMapping(ws, 'seq', 1, [
       { sourceHeader: '日期', outputName: 'date', transform: 'none' },
@@ -200,6 +226,29 @@ describe('tools', () => {
     ], { pattern: 'a.xlsx', sheetName: '202208' });
     const rule = loadRules(ws, 'seq')[0];
     expect(rule.sources[0]).toMatchObject({ pattern: 'a.xlsx', headerRow: 1, sheetName: '202208' });
+  });
+
+  it('toolSetMapping rejects mappings missing outputName (silent undefined-column guard)', () => {
+    // 坑:outputName 写成 targetField → 静默生成 undefined 列、写废整表。应在写规则前拒绝。
+    expect(() => toolSetMapping(ws, 'seq', 1, [
+      { sourceHeader: '日期', targetField: '日期' } as never,
+    ])).toThrowError(/outputName 必填/);
+    expect(listRules(ws, 'seq').length).toBe(1); // 仅 beforeEach 的默认规则,失败未新增
+  });
+
+  it('toolSetMapping rejects empty mappings and missing sourceHeader', () => {
+    expect(() => toolSetMapping(ws, 'seq', 1, [])).toThrowError(/mappings 数组/);
+    expect(() => toolSetMapping(ws, 'seq', 1, [
+      { sourceHeader: '', outputName: 'date' } as never,
+    ])).toThrowError(/sourceHeader 必填/);
+    expect(listRules(ws, 'seq').length).toBe(1);
+  });
+
+  it('toolSetMapping rejects invalid transform values', () => {
+    expect(() => toolSetMapping(ws, 'seq', 1, [
+      { sourceHeader: '日期', outputName: 'date', transform: 'upper' as never },
+    ])).toThrowError(/transform 取值/);
+    expect(listRules(ws, 'seq').length).toBe(1);
   });
 
   it('clean imports per (file, sheet) via pattern rules', async () => {
@@ -285,11 +334,24 @@ describe('tools', () => {
     expect(readFileSync(res.file, 'utf-8').split('\n')[0]).toBe('日期,借方金额');
   });
 
-  it('toolGetBigTableContext returns config, rules and related pipelines', () => {
+  it('toolGetBigTableContext returns folder, sourceDir, config, rules and related pipelines', () => {
     const ctx = toolGetBigTableContext(ws, 'seq');
+    expect(ctx.folder).toBe('seq');
+    expect(ctx.sourceDir).toMatch(/bigtables[\\/]seq[\\/]source/);
     expect(ctx.config.tableName).toBe('seq');
     expect(ctx.rules.length).toBe(1);
     const ids = ctx.pipelines.map((p) => p.id);
     expect(ids).toEqual(expect.arrayContaining(['c1', 'm1'])); // clean(直接引用)+ sql-clean(引用其表)
+  });
+
+  it('toolSchemaTables / toolQuery operate on a big table DB when folder given (workbench dual-source)', async () => {
+    const eng = new PipelineEngine(ws);
+    const r = await eng.run('c1');
+    eng.close();
+    expect(r.ok).toBe(true);
+    const tables = toolSchemaTables(ws, 'seq');
+    expect(tables.map((t) => t.name)).toContain('seq');
+    const out = toolQuery(ws, 'SELECT date, debit FROM seq ORDER BY date', 'seq');
+    expect(out.rows.length).toBeGreaterThan(0);
   });
 });

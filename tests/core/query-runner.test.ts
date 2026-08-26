@@ -51,4 +51,13 @@ describe('query pipeline runner', () => {
   it('rejects non-SELECT sql', async () => {
     await expect(runQueryPipeline(db, cfg('DELETE FROM seq'))).rejects.toThrow();
   });
+
+  it('rejects a missing resultTable instead of creating a table named "undefined"', async () => {
+    const bad = { ...cfg('SELECT 1 AS one'), resultTable: undefined } as unknown as QueryPipelineConfig;
+    await expect(runQueryPipeline(db, bad)).rejects.toThrow();
+    const t = db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='undefined'")
+      .get();
+    expect(t).toBeUndefined();
+  });
 });

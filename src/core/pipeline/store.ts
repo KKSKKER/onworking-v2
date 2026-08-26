@@ -61,6 +61,17 @@ export function loadPipeline(ws: Workspace, id: string): PipelineConfig {
   return JSON.parse(readFileSync(p, 'utf-8')) as PipelineConfig;
 }
 
+/** 与大表 folder 关联的管线(clean→bigTableFolder;sql-clean→bigTables 含该表;query 不关联)。 */
+export function listPipelinesForBigTable(ws: Workspace, folder: string): PipelineConfig[] {
+  return listPipelines(ws)
+    .map((id) => loadPipeline(ws, id))
+    .filter((p) =>
+      p.kind === 'clean' ? p.bigTableFolder === folder
+      : p.kind === 'sql-clean' ? p.bigTables.includes(folder)
+      : false,
+    );
+}
+
 export function deletePipeline(ws: Workspace, id: string): void {
   assertSafeId(id);
   rmSync(join(pipelinesDir(ws), `${id}.json`), { force: true });

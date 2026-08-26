@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ApiCommand } from '../../ipc/contracts';
 import { sendCli } from '../cli';
+import { subscribeRefresh } from '../refresh';
 
 export function useApi<T>(command: ApiCommand, enabled = true): {
   data: T | null;
@@ -40,10 +41,12 @@ export function useApi<T>(command: ApiCommand, enabled = true): {
     };
   }, [tick, enabled, JSON.stringify(command)]);
 
-  // AI/任何命令改了工作区 → 自动刷新(同步 AI 执行)
+  // 刷新源:① 全局刷新总线(UI 写命令完成 / 打开工作区,时机准确) ② workspace:changed(外部/AI 改文件)
   useEffect(() => {
     if (!enabled) return;
-    return window.onw.onWorkspaceChanged(() => setTick((t) => t + 1));
+    const unsubBus = subscribeRefresh(() => setTick((t) => t + 1));
+    const unsubWs = window.onw.onWorkspaceChanged(() => setTick((t) => t + 1));
+    return () => { unsubBus(); unsubWs(); };
   }, [enabled]);
 
   const reload = useCallback(() => setTick((t) => t + 1), []);

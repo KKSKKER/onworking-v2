@@ -21,8 +21,10 @@
     "dev:renderer": "vite --port 5173 --strict-port",
     "start": "npm run build && electron .",
     "onw": "tsx src/cli/index.ts",
+    "onw:electron": "cross-env ELECTRON_RUN_AS_NODE=1 electron dist/main/cli/index.js",
     "postinstall": "node scripts/postinstall-dual-abi.js",
-    "dist": "npm run build:dual-abi && npm run build && electron-builder"
+    "dist": "npm run build:dual-abi && npm run build && electron-builder",
+    "release": "npm run build:dual-abi && npm run build && electron-builder"
   },
   "bin": {
     "onw": "dist/main/cli/index.js"
@@ -31,13 +33,16 @@
     "appId": "com.onworking.app",
     "productName": "Onworking",
     "files": ["dist/**", "node_modules/better-sqlite3-electron/**"],
-    "asarUnpack": ["dist/main/cli/**"],
+    "asar": false,
+    "asarUnpack": ["dist/main/**", "node_modules/better-sqlite3-electron/**"],
     "directories": { "output": "release" },
+    "extraFiles": [{ "from": "agents.md", "to": "." }],
     "win": { "target": ["nsis", "portable"] },
     "npmRebuild": false
   },
   "dependencies": {
     "better-sqlite3": "^11.10.0",
+    "better-sqlite3-electron": "11.10.0",
     "dockview-react": "^8.2.0",
     "js-yaml": "^5.3.0",
     "react": "^18.3.1",

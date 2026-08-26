@@ -29,6 +29,22 @@ export async function runSqlCleanPipeline(
       data: { pipelineId: cfg.id },
     });
   }
+  if (!cfg.resultTable || !cfg.resultTable.trim()) {
+    throw new AppError({
+      module: 'pipeline/sql-clean',
+      code: 'SQLCLEAN_NO_RESULT_TABLE',
+      message: 'sql-clean pipeline requires a non-empty resultTable',
+      data: { pipelineId: cfg.id },
+    });
+  }
+  if (!/^(SELECT|WITH)\b/i.test(cfg.sql.trim())) {
+    throw new AppError({
+      module: 'pipeline/sql-clean',
+      code: 'SQLCLEAN_NOT_SELECT',
+      message: 'sql-clean pipeline sql must start with SELECT or WITH',
+      data: { pipelineId: cfg.id },
+    });
+  }
 
   // 1. ATTACH 各大表 DB(别名 = bt_<大表>;SQL 用 "bt_序时账".seq 引用)
   for (const folder of cfg.bigTables) {

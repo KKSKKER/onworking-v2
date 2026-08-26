@@ -38,20 +38,32 @@ body { font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", san
 
 .sidebar-panel { padding: 8px; }
 .sidebar-title { font-weight: 600; margin-bottom: 6px; }
-.tree { list-style: none; margin: 0; padding: 0; }
-.tree li { padding: 3px 6px; border-radius: 4px; cursor: pointer; }
-.tree li:hover { background: #eaeef2; }
-.tree li.add { color: #0969da; }
+.tree { list-style: none; margin: 0; padding: 0; font-size: 12px; }
+.tree li { padding: 2px 4px; border-radius: 3px; cursor: pointer; }
+.tree li:hover { background: #f3f5f7; }
+.tree li.add { color: #007acc; }
+.tree li.add-form { display: flex; gap: 4px; align-items: center; }
+.tree li.add-form input { flex: 1; min-width: 0; font-size: 12px; }
+.sidebar-msg { font-size: 11px; color: #57606a; margin: 4px 2px 6px; }
 
-/* 大表树:文件夹 / 文件 / 选中 */
-.tree-folder { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px; border-radius: 4px; cursor: pointer; width: 100%; }
-.tree-folder:hover { background: #eaeef2; }
-.tree-folder.selected { background: #0969da; color: #fff; }
-.tree-caret { width: 12px; display: inline-block; }
-.tree-sub { list-style: none; margin: 0; padding: 0 0 0 16px; }
-.tree-file { padding: 2px 6px; border-radius: 4px; cursor: pointer; }
-.tree-file:hover { background: #eaeef2; }
-.tree-file.selected { background: #ddf4ff; color: #0969da; }
+/* 大表树(对齐 V1):选中浅蓝,紧凑行 */
+.tree-folder { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px; border-radius: 3px; cursor: pointer; width: 100%; }
+.tree-folder:hover { background: #f3f5f7; }
+.tree-folder.selected { background: #e6f0ff; color: inherit; }
+.tree-caret { width: 12px; display: inline-block; font-size: 10px; }
+.tree-import { margin-left: auto; cursor: pointer; padding: 0 4px; opacity: .6; }
+.tree-import:hover { opacity: 1; }
+.tree-sub { list-style: none; margin: 0; padding: 0 0 0 18px; }
+.tree-file { padding: 2px 8px; border-radius: 3px; cursor: pointer; font-size: 11px; }
+.tree-file:hover { background: #f3f5f7; }
+.tree-file.selected { background: #e6f0ff; color: inherit; }
+
+/* 右键菜单 */
+.ctx-menu { display: flex; flex-direction: column; min-width: 160px; background: #fff; border: 1px solid #d0d7de; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.12); padding: 4px; }
+.ctx-item { text-align: left; border: none; background: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 13px; }
+.ctx-item:hover { background: #f3f4f6; }
+.ctx-item.danger { color: #cf222e; }
+.ctx-item.danger:hover { background: #ffebe9; }
 
 /* 顶栏「增加视图」下拉 */
 .view-add { position: relative; }

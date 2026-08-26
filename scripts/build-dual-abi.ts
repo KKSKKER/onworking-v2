@@ -14,8 +14,11 @@ import { join } from 'node:path';
 const root = process.cwd();
 const src = join(root, 'node_modules', 'better-sqlite3');
 const dst = join(root, 'node_modules', 'better-sqlite3-electron');
-// Electron 主版本(devDeps electron ^31 → ABI 115)
-const electronVer = '31.7.7';
+// 从 package.json 动态读取 electron 版本，避免写死
+const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
+  devDependencies?: Record<string, string>;
+};
+const electronVer = (pkg.devDependencies?.electron ?? '31.7.7').replace(/^\^/, '');
 
 console.log('[1/4] npm rebuild better-sqlite3 → 系统 node ABI(137)');
 execSync('npm rebuild better-sqlite3', { stdio: 'inherit' });

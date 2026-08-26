@@ -23,4 +23,6 @@ contextBridge.exposeInMainWorld('onw', {
   openWorkspace: (path: string): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke('cli:open', path) as Promise<{ ok: boolean }>,
   pickWorkspace: (): Promise<string | null> => ipcRenderer.invoke('onw:pick-workspace') as Promise<string | null>,
+  pickFiles: (): Promise<string[]> => ipcRenderer.invoke('onw:pick-files') as Promise<string[]>,
+  pickDirectory: (): Promise<string | null> => ipcRenderer.invoke('onw:pick-directory') as Promise<string | null>,
 });

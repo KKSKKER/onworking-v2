@@ -27,6 +27,8 @@ export interface CommandPayloads {
   'bigtable.addFiles': { folder: string; files: string[]; overwrite?: boolean };
   'bigtable.exportCsv': { folder: string; path?: string; includeLineage?: boolean };
   'bigtable.config': { folder: string };
+  'bigtable.delete': { folder: string };
+  'bigtable.deleteSourceFile': { folder: string; file: string };
   'mapping.save': { folder: string; headerRow?: number; mappings: FieldMapping[]; ruleName?: string; sheetName?: string; pattern?: string };
   'pipeline.list': {};
   'pipeline.configs': {};
@@ -43,12 +45,12 @@ export interface CommandPayloads {
   'setup.sheets': { filePath: string };
   'setup.preview': { filePath: string; sheetName?: string; headerRow?: number; offset?: number; limit?: number };
   'setup.exportCsv': { filePath: string; sheetName?: string; headerRow?: number; path?: string };
-  'query.run': { sql: string; limit?: number };
-  'query.exportCsv': { sql: string; path?: string };
+  'query.run': { sql: string; limit?: number; folder?: string };
+  'query.exportCsv': { sql: string; path?: string; folder?: string };
   'template.list': {};
   'template.save': { template: MappingTemplate };
   'template.apply': { name: string; sheet: ParsedSheet };
-  'schema.tables': {};
+  'schema.tables': { folder?: string };
   'state.summary': {};
   'vcs.status': {};
   'settings.get': {};
@@ -65,7 +67,9 @@ export interface CommandResults {
   'bigtable.previewRows': { columns: string[]; rows: Record<string, unknown>[]; rowCount: number; total: number };
   'bigtable.addFiles': { added: string[]; overwritten: string[]; skipped: string[] };
   'bigtable.exportCsv': { file: string; rows: number };
-  'bigtable.config': { config: BigTableConfig; rules: RuleYaml[]; pipelines: PipelineConfig[] };
+  'bigtable.config': { folder: string; sourceDir: string; config: BigTableConfig; rules: RuleYaml[]; pipelines: PipelineConfig[] };
+  'bigtable.delete': { deleted: string };
+  'bigtable.deleteSourceFile': { deleted: string };
   'mapping.save': { ruleFile: string };
   'pipeline.list': string[];
   'pipeline.configs': PipelineConfig[];

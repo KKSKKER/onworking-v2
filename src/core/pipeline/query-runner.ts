@@ -27,6 +27,14 @@ export async function runQueryPipeline(
       data: { sql },
     });
   }
+  if (!cfg.resultTable || !cfg.resultTable.trim()) {
+    throw new AppError({
+      module: 'pipeline/query',
+      code: 'QUERY_NO_RESULT_TABLE',
+      message: 'query pipeline requires a non-empty resultTable',
+      data: { pipelineId: cfg.id },
+    });
+  }
   db.exec(`DROP TABLE IF EXISTS "${cfg.resultTable}"`);
   db.exec(`CREATE TABLE "${cfg.resultTable}" AS ${sql}`);
   const row = db

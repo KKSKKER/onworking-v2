@@ -9,6 +9,8 @@ import { createContext } from '../app/context';
 import { dispatchIpc, type ApiContext } from '../ipc/handlers';
 import type { IpcRequest } from '../ipc/contracts';
 import { handleMcpRequest, type McpRequest, type McpSession } from '../mcp/server';
+import { loadSettings } from '../core/workspace/settings';
+import { isAiAllowed, buildAiRestrictedError, parseRequestLine } from '../ipc/ai-gate';
 import { useConsoleLogging } from '../core/logging';
 
 export interface CliWriter {
@@ -18,7 +20,7 @@ export interface CliWriter {
 
 export interface CliState {
   open(path: string): ApiContext;
-  handleRequest(req: IpcRequest): Promise<void>;
+  handleRequest(req: IpcRequest, trusted?: boolean): Promise<void>;
   close(): void;
 }
 
@@ -30,7 +32,7 @@ export function createCliState(writer: CliWriter): CliState {
       ctx.emitProgress = (payload) => writer.stderr(JSON.stringify({ event: 'progress', payload }));
       return ctx;
     },
-    async handleRequest(req: IpcRequest): Promise<void> {
+    async handleRequest(req: IpcRequest, trusted = false): Promise<void> {
       if (req.cmd === 'workspace.open') {
         this.open(req.path);
         writer.stdout(JSON.stringify({ reqId: req.reqId, result: { ok: true, data: ctx!.ws } }));
@@ -44,6 +46,16 @@ export function createCliState(writer: CliWriter): CliState {
           }),
         );
         return;
+      }
+      // AI 开放模式门禁:无章(非人类)命令按 aiOpenMode 过滤;带合法章的主进程转发不受限。
+      if (!trusted) {
+        const mode = loadSettings(ctx.ws).aiOpenMode;
+        if (!isAiAllowed(mode, req.cmd)) {
+          writer.stdout(
+            JSON.stringify({ reqId: req.reqId, result: { ok: false, error: buildAiRestrictedError(mode, req.cmd) } }),
+          );
+          return;
+        }
       }
       const res = await dispatchIpc(req, ctx);
       writer.stdout(JSON.stringify(res));
@@ -86,13 +98,14 @@ export async function main(
     const trimmed = line.trim();
     if (!trimmed) continue;
     let req: IpcRequest;
+    let trusted = false;
     try {
-      req = JSON.parse(trimmed) as IpcRequest;
+      ({ req, trusted } = parseRequestLine(trimmed));
     } catch {
       writer.stderr(JSON.stringify({ error: 'invalid JSON', line: trimmed.slice(0, 200) }));
       continue;
     }
-    await state.handleRequest(req);
+    await state.handleRequest(req, trusted);
   }
   state.close();
   return 0;

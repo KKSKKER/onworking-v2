@@ -1,10 +1,9 @@
-// 顶栏:文件/查询管理切换 · 合并(当前/全部) · 增加视图 · AI开放模式 · 语言 · 打开工作区。
+// 顶栏:合并(当前/全部) · 增加视图 · AI开放模式 · 语言 · 打开工作区。
 import { useCallback, useEffect, useState } from 'react';
 import { VIEWS } from '../views/registry';
 import { useSelection } from '../state/SelectionContext';
 import { sendCli } from '../cli';
-
-export type ShellMode = 'files' | 'query';
+import { triggerRefresh } from '../refresh';
 
 interface MergeSummary {
   pipelineId: string;
@@ -14,21 +13,13 @@ interface MergeSummary {
   error?: string;
 }
 
-export function TopBar({
-  mode,
-  onModeChange,
-  onAddView,
-}: {
-  mode: ShellMode;
-  onModeChange: (m: ShellMode) => void;
-  onAddView: (viewId: string) => void;
-}) {
-  const [aiMode, setAiMode] = useState<'off' | 'external' | 'local'>('off');
+export function TopBar({ onAddView }: { onAddView: (viewId: string) => void }) {
+  const [aiMode, setAiMode] = useState<'external' | 'local'>('external');
 
   // 读取工作区 AI 开放模式(存于 .onworking/settings.json)。挂载/打开工作区/工作区变化时读,保持同步。
   const loadAiMode = useCallback(() => {
     void sendCli({ cmd: 'settings.get' }).then((res) => {
-      if (res.ok) setAiMode((res.data as { aiOpenMode: 'off' | 'external' | 'local' }).aiOpenMode);
+      if (res.ok) setAiMode((res.data as { aiOpenMode: 'external' | 'local' }).aiOpenMode);
     });
   }, []);
 
@@ -37,7 +28,6 @@ export function TopBar({
     const unsub = window.onw.onWorkspaceChanged(loadAiMode);
     return unsub;
   }, [loadAiMode]);
-  const [lang, setLang] = useState('zh');
   const [wsName, setWsName] = useState('未打开');
   const [addingView, setAddingView] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -51,6 +41,7 @@ export function TopBar({
     if (res.ok) {
       setWsName(path);
       loadAiMode(); // 打开工作区后重读 AI 模式
+      triggerRefresh(); // 打开工作区 → 所有视图自动刷新
     }
   }
 
@@ -88,10 +79,6 @@ export function TopBar({
     <div className="topbar">
       <span className="brand">OnWorking</span>
       <span className="ws-name" title={wsName}>{wsName}</span>
-      <div className="mode-switch">
-        <button className={mode === 'files' ? 'active' : ''} onClick={() => onModeChange('files')}>文件管理</button>
-        <button className={mode === 'query' ? 'active' : ''} onClick={() => onModeChange('query')}>查询管理</button>
-      </div>
       <button onClick={() => doAction('mergeOne')} disabled={busy} title="按 YAML 规则把源文件合并进当前选中大表">▶ 合并当前</button>
       <button onClick={() => doAction('mergeAll')} disabled={busy} title="把工作区所有大表按规则合并一次">▶ 全部合并</button>
       <span className="topbar-sep" />
@@ -117,21 +104,13 @@ export function TopBar({
         <select
           value={aiMode}
           onChange={async (e) => {
-            const mode = e.target.value as 'off' | 'external' | 'local';
+            const mode = e.target.value as 'external' | 'local';
             setAiMode(mode);
             await sendCli({ cmd: 'settings.setAiMode', mode }); // 写入 .onworking/settings.json
           }}
         >
-          <option value="off">关闭</option>
           <option value="external">外部(仅元数据)</option>
           <option value="local">本地(可查数据)</option>
-        </select>
-      </span>
-      <span className="ctrl">
-        语言
-        <select value={lang} onChange={(e) => setLang(e.target.value)}>
-          <option value="zh">中文</option>
-          <option value="en">English</option>
         </select>
       </span>
     </div>

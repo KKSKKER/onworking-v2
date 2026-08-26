@@ -143,9 +143,21 @@ describe('ipc handlers', () => {
     }
   });
 
-  it('query.run rejects non-SELECT sql', async () => {
-    const res = await dispatch({ cmd: 'query.run', sql: 'DELETE FROM seq' }, ctx);
-    expect(res.ok).toBe(false);
+  it('query.run now allows write statements (returns changes)', async () => {
+    await dispatch({ cmd: 'pipeline.run', id: 'c1' }, ctx);
+    await dispatch({ cmd: 'pipeline.run', id: 'm1' }, ctx);
+    const res = await dispatch({ cmd: 'query.run', sql: "UPDATE seq SET debit = 1 WHERE date = '2024-01'" }, ctx);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      const d = res.data as { changes?: number };
+      expect(d.changes).toBe(1);
+    }
+    // 再读,确认写生效
+    const read = await dispatch({ cmd: 'query.run', sql: "SELECT debit FROM seq WHERE date = '2024-01'" }, ctx);
+    expect(read.ok).toBe(true);
+    if (read.ok) {
+      expect((read.data as { rows: { debit: number }[] }).rows[0].debit).toBe(1);
+    }
   });
 
   it('query.exportCsv exports the master table via ipc', async () => {

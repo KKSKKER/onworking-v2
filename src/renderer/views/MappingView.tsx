@@ -47,6 +47,8 @@ export function MappingView() {
   const [endRow, setEndRow] = useState('');
   const [fields, setFields] = useState<FieldRow[]>([]);
   const [msg, setMsg] = useState('');
+  // 大表配置里定义的字段名(映射到的目标列,下拉选项)
+  const [bigTableFields, setBigTableFields] = useState<string[]>([]);
 
   // 跟随左侧栏选中的文件(只更新文件路径/加载 sheet;不清空已载入的大表规则字段)
   useEffect(() => {
@@ -71,12 +73,15 @@ export function MappingView() {
     const res = await sendCli({ cmd: 'bigtable.config', folder });
     if (!res.ok) return;
     const ctx = res.data as {
+      config: { fields: { name: string }[] };
       rules: {
         name: string;
         sources: { pattern: string; sheetName?: string; headerRow: number }[];
         fields: { sourceHeader: string; outputName: string; order: number; transforms?: { kind: string }[] }[];
       }[];
     };
+    // 目标列下拉选项 = 大表配置里定义的字段
+    setBigTableFields((ctx.config?.fields ?? []).map((f) => f.name));
     const rule = ctx.rules[0];
     if (!rule) return;
     const src = rule.sources[0];
@@ -226,7 +231,12 @@ export function MappingView() {
                   </td>
                   <td>{f.sourceHeader}</td>
                   <td>
-                    <input value={f.outputName} onChange={(e) => setField(i, 'outputName', e.target.value)} />
+                    <select value={f.outputName} onChange={(e) => setField(i, 'outputName', e.target.value)}>
+                      {/* 下拉选项 = 大表配置字段;当前值不在其中时也保留,避免已有映射丢失 */}
+                      {[...new Set([...bigTableFields, f.outputName])].filter(Boolean).map((name) => (
+                        <option key={name} value={name}>{name}</option>
+                      ))}
+                    </select>
                   </td>
                   <td>
                     <select
