@@ -32,7 +32,7 @@ OnWorking 从根本上同时解决这两个问题：
 
 - **用规则，而不是脚本。** 每个文件/工作表由一个声明式的 YAML 规则和显式的 SQL 管线处理。所有东西都是纯文本——人类可审阅，AI 工具也可读、可审计。
 - **每一行都有溯源。** 每个合并后的行都保留来源：`__source_file`、`__source_sheet`、`__source_row`、`__extracted_at`。再也不用问「这个数字是从哪来的？」
-- **AI 原生操作。** OnWorking 内置 MCP 服务器和 CLI，AI Agent 可以自己跑完整条工作流——通过一套严格、有文档的命令面。你掌控全局，机器干重活。
+- **AI 原生操作。** OnWorking 内置一套 NDJSON 命令面（CLI），AI Agent 可以自己跑完整条工作流——通过一套严格、有文档的命令面（见 [agents.md](agents.md)）。你掌控全局，机器干重活。
 
 ## 功能特性
 
@@ -41,7 +41,7 @@ OnWorking 从根本上同时解决这两个问题：
 | 🧾 **用规则，而不是脚本** | 声明式 YAML 规则把源列映射成表字段；清洗与转换放在显式 SQL 管线里完成。 |
 | 🧬 **行级溯源** | 每个合并行都带 `__source_file` · `__source_sheet` · `__source_row` · `__extracted_at`——永远可追溯。 |
 | 🔀 **两段式管线** | 文件先落进每个文件夹独立的**大表**，再聚合成工作区唯一的**总表**——最终可查询的数据库。 |
-| 🤖 **AI Agent + MCP** | JSON-RPC MCP 服务器把整套命令面暴露成工具；Agent 端到端地操作工作区。 |
+| 🤖 **AI Agent + CLI** | NDJSON 命令面让 Agent 直接驱动整条工作流；Agent 端到端地操作工作区（操作手册见 [agents.md](agents.md)）。 |
 | ⌨️ **CLI / NDJSON** | 用按行分隔的命令在终端驱动一切——可脚本化、可管道化、可审计。 |
 | 🗂️ **文件夹即数据表** | 把同格式的文件放进一个文件夹，一条管线把它们合并成一张表。 |
 | 📋 **SQL 工作台** | 浏览表、对总表执行查询、一键导出干净 CSV（带 UTF-8 BOM，Excel 打开中文不乱码）。 |
@@ -65,7 +65,7 @@ OnWorking 从根本上同时解决这两个问题：
 
 ### Agent 工作流
 
-AI Agent 可以自己跑完整条工作流——打开工作区、创建大表、导入文件、识别表头、编写字段映射、构建清洗管线、归集到总表、运行查询——全部经由受严格命令合约约束的 MCP 工具。每一次工具调用都经过应用本身，而不是绕过它。
+AI Agent 可以自己跑完整条工作流——打开工作区、创建大表、导入文件、识别表头、编写字段映射、构建清洗管线、归集到总表、运行查询——全部经由受严格命令合约约束的 CLI 命令（操作手册见 [agents.md](agents.md)）。每一次调用都经过应用本身，而不是绕过它。
 
 ![Agent 工作流](docs/ARC/ZH/agent-workflow.svg)
 
@@ -108,19 +108,24 @@ npm run dist
 
 输出到 `release/`（Windows 用 NSIS 安装包，macOS 用 DMG，Linux 用 AppImage）。原生 SQLite 会为双 ABI 构建，因此打包应用与 CLI 无论以何种方式启动都能正常工作。
 
-### CLI 与 MCP
+### 让 AI Agent 使用 OnWorking
+
+OnWorking 面向 AI Agent 的工作方式是**让它直接调用 CLI 命令**（NDJSON 命令面），而不是通过 MCP 工具。让 Agent 上手只需三步：
+
+1. **把本仓库根目录（即包含 [agents.md](agents.md) 的目录）添加为 Agent 可访问的工作目录。**
+2. **让 Agent 先阅读根目录下的 [agents.md](agents.md)**——这是操作手册，定义了 Agent 唯一允许执行的命令面（`workspace.*`、`bigtable.*`、`mapping.*`、`pipeline.*`、`setup.*`、`query.*`、`template.*`、`schema.*`、`state.*`、`vcs.*`）与铁律（禁止绕过命令直接读写 `.onworking/` 下的文件）。
+3. **然后直接告诉 Agent 你的需求即可**。Agent 会通过 CLI 帮你完成从打开工作区、建大表、加文件、写字段映射、跑清洗管线、归集到总表、查询导出的整条工作流。
+
+CLI 通过 stdin 接收按行分隔的 NDJSON 请求，stdout 每行返回一条响应：
 
 ```bash
 # NDJSON 命令流 —— stdin 每行一个请求，stdout 每行一个响应
 printf '%s\n' \
   '{"reqId":1,"cmd":"workspace.open","path":"D:/path/to/workspace"}' \
   '{"reqId":2,"cmd":"state.summary"}' | npm run onw -- open D:/path/to/workspace
-
-# MCP 服务器（stdin/stdout，JSON-RPC 2.0）—— 无需带路径启动，Agent 调用 workspace.open
-npm run onw -- mcp
 ```
 
-CLI 支持 `workspace.*`、`bigtable.*`、`mapping.*`、`pipeline.*`、`setup.*`、`query.*`、`template.*`、`schema.*`、`state.*` 与 `vcs.*` 命令。
+完整命令清单、Shell 适配与铁律见 [agents.md](agents.md)。
 
 ### 测试与类型检查
 
@@ -170,7 +175,7 @@ mergeStrategy:
 ```
 onworking/
 ├── src/
-│   ├── cli/                    # NDJSON 命令面（CLI / MCP 传输层）
+│   ├── cli/                    # NDJSON 命令面（CLI 传输层）
 │   ├── core/
 │   │   ├── agent/              # AI Agent 流程与工具注册表
 │   │   ├── bigtable/           # 大表 schema 与存储
@@ -202,7 +207,7 @@ onworking/
 | 数据库 | 通过 better-sqlite3 使用 SQLite（双 ABI、worker 线程 + WAL） |
 | Excel / CSV 解析 | SheetJS（`xlsx`） |
 | 规则存储 | YAML（`js-yaml`） |
-| AI 集成 | MCP 服务器（JSON-RPC 2.0）· NDJSON CLI |
+| AI 集成 | NDJSON 命令面（CLI）· 操作手册（agents.md） |
 | 打包 | electron-builder（NSIS / DMG / AppImage） |
 | 测试 | Vitest |
 

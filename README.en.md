@@ -44,9 +44,10 @@ OnWorking approaches both problems from the ground up:
 - **Lineage on every row.** Every merged row keeps its origin:
   `__source_file`, `__source_sheet`, `__source_row`, `__extracted_at`. No more
   "where did this number come from?"
-- **AI-native operation.** OnWorking ships an MCP server and a CLI, so an AI agent
-  can run the whole workflow itself — through a strict, documented command
-  surface. You stay in control; the machine does the heavy lifting.
+- **AI-native operation.** OnWorking ships an NDJSON command surface (CLI), so an
+  AI agent can run the whole workflow itself — through a strict, documented
+  command surface (see [agents.md](agents.md)). You stay in control; the machine
+  does the heavy lifting.
 
 ## Features
 
@@ -55,7 +56,7 @@ OnWorking approaches both problems from the ground up:
 | 🧾 **Rules, not scripts** | Declarative YAML rules map source columns to table fields; cleaning & transformation happen in explicit SQL pipelines. |
 | 🧬 **Row-level lineage** | Every merged row carries `__source_file` · `__source_sheet` · `__source_row` · `__extracted_at` — always traceable. |
 | 🔀 **Two-stage pipeline** | Files land in per-folder **BigTables**, then aggregate into a single workspace **MasterTable** — the final queryable database. |
-| 🤖 **AI agent + MCP** | A JSON-RPC MCP server exposes the whole command surface as tools; agents operate workspaces end-to-end. |
+| 🤖 **AI agent + CLI** | The NDJSON command surface lets agents drive the whole workflow directly; agents operate workspaces end-to-end (manual in [agents.md](agents.md)). |
 | ⌨️ **CLI / NDJSON** | Drive everything from the terminal with line-delimited commands — scriptable, pipeable, auditable. |
 | 🗂️ **Folders as tables** | Drop same-format files into a folder; one pipeline merges them into a single table. |
 | 📋 **SQL workbench** | Browse tables, run queries against the MasterTable, and export clean CSV (UTF-8 BOM so Excel opens Chinese correctly). |
@@ -85,8 +86,8 @@ OnWorking approaches both problems from the ground up:
 An AI agent can run the entire workflow itself — opening a workspace, creating
 BigTables, importing files, detecting headers, writing field mappings, building
 clean pipelines, aggregating to the MasterTable, and running queries — through
-MCP tools backed by a strict command contract. Every tool call goes through the
-app, never around it.
+CLI commands backed by a strict command contract (manual in [agents.md](agents.md)).
+Every call goes through the app, never around it.
 
 ![Agent workflow](docs/ARC/EN/agent-workflow.svg)
 
@@ -131,20 +132,36 @@ Output goes to `release/` (NSIS installer on Windows, DMG on macOS, AppImage on
 Linux). Native SQLite is built for both ABIs so the packaged app and the CLI
 work whichever way they're launched.
 
-### CLI & MCP
+### Let an AI agent use OnWorking
+
+The way OnWorking works with AI agents is to let the agent **drive the CLI
+directly** (the NDJSON command surface), rather than through MCP tools. Getting an
+agent started takes three steps:
+
+1. **Add this repository's root directory — the one containing
+   [agents.md](agents.md) — as a directory the agent can access.**
+2. **Ask the agent to read [agents.md](agents.md) first.** It's the operating
+   manual that defines the only command surface an agent may call
+   (`workspace.*`, `bigtable.*`, `mapping.*`, `pipeline.*`, `setup.*`, `query.*`,
+   `template.*`, `schema.*`, `state.*`, `vcs.*`) and the rules (never read or
+   write files under `.onworking/` directly).
+3. **Then just tell the agent what you need.** It drives the whole workflow
+   through the CLI: open a workspace, create BigTables, add source files, write
+   field mappings, run clean pipelines, aggregate into the MasterTable, query and
+   export CSV.
+
+The CLI reads line-delimited NDJSON requests on stdin and writes one JSON response
+per line on stdout:
 
 ```bash
 # NDJSON command stream — line-delimited requests on stdin, responses on stdout
 printf '%s\n' \
   '{"reqId":1,"cmd":"workspace.open","path":"D:/path/to/workspace"}' \
   '{"reqId":2,"cmd":"state.summary"}' | npm run onw -- open D:/path/to/workspace
-
-# MCP server over stdio (JSON-RPC 2.0) — start without a path; agents call workspace.open
-npm run onw -- mcp
 ```
 
-The CLI understands `workspace.*`, `bigtable.*`, `mapping.*`, `pipeline.*`,
-`setup.*`, `query.*`, `template.*`, `schema.*`, `state.*` and `vcs.*` commands.
+For the full command list, shell adapters, and the operating rules, see
+[agents.md](agents.md).
 
 ### Tests & typecheck
 
@@ -200,7 +217,7 @@ mergeStrategy:
 ```
 onworking/
 ├── src/
-│   ├── cli/                    # NDJSON command surface (CLI / MCP transport)
+│   ├── cli/                    # NDJSON command surface (CLI transport)
 │   ├── core/
 │   │   ├── agent/              # AI agent flow & tool registry
 │   │   ├── bigtable/           # BigTable schema & store
@@ -232,7 +249,7 @@ onworking/
 | Database | SQLite via better-sqlite3 (dual-ABI, worker thread + WAL) |
 | Excel / CSV parsing | SheetJS (`xlsx`) |
 | Rule storage | YAML (`js-yaml`) |
-| AI integration | MCP server (JSON-RPC 2.0) · NDJSON CLI |
+| AI integration | NDJSON command surface (CLI) · operating manual (agents.md) |
 | Packaging | electron-builder (NSIS / DMG / AppImage) |
 | Testing | Vitest |
 
