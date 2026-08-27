@@ -42,6 +42,7 @@ OnWorking 从根本上同时解决这两个问题：
 | 🧬 **行级溯源** | 每个合并行都带 `__source_file` · `__source_sheet` · `__source_row` · `__extracted_at`——永远可追溯。 |
 | 🔀 **两段式管线** | 文件先落进每个文件夹独立的**大表**，再聚合成工作区唯一的**总表**——最终可查询的数据库。 |
 | 🤖 **AI Agent + CLI** | NDJSON 命令面让 Agent 直接驱动整条工作流；Agent 端到端地操作工作区（操作手册见 [agents.md](agents.md)）。 |
+| 🔒 **AI 开放模式** | 默认 `external`：AI 只碰 schema / 配置 / 管线，读不到真实业务数据；模式仅人类可设，CLI 也无法绕过。 |
 | ⌨️ **CLI / NDJSON** | 用按行分隔的命令在终端驱动一切——可脚本化、可管道化、可审计。 |
 | 🗂️ **文件夹即数据表** | 把同格式的文件放进一个文件夹，一条管线把它们合并成一张表。 |
 | 📋 **SQL 工作台** | 浏览表、对总表执行查询、一键导出干净 CSV（带 UTF-8 BOM，Excel 打开中文不乱码）。 |
@@ -126,6 +127,16 @@ printf '%s\n' \
 ```
 
 完整命令清单、Shell 适配与铁律见 [agents.md](agents.md)。
+
+#### 数据保护：AI 开放模式
+
+把仓库根目录交给 AI 是**安全**的——OnWorking 内置 **AI 开放模式**（`external` / `local`，存于工作区 `.onworking/settings.json`，默认 `external`），对 AI 能接触的数据做了硬隔离：
+
+- **`external`（默认，推荐）** —— AI 只能用元数据、schema/配置与管线管理类命令（`schema.tables`、`setup.detectSource`、`pipeline.run`、`bigtable.addFiles` 等），**读不到也改不到任何真实业务行数据**：`query.run` / `query.exportCsv`、`bigtable.previewRows` / `bigtable.exportCsv`、`setup.preview` 等真实数据命令对 AI 一律返回 `AI_MODE_RESTRICTED`；破坏性操作（删大表 / 删源文件 / 删映射规则）也仅限人类界面。
+- **`local`** —— 放开全部命令给 AI（仅限可信的本地环境使用）。
+- **模式只能由界面（人类）设置，AI 无权修改**；即使 AI 自己 spawn 一个 CLI 也绕不过——主进程用会话秘密（`ONW_AUTH_SECRET`）把「人类请求」裹进鉴权信封，外部 CLI 没有秘密，命令一律按 AI 走门禁。
+
+也就是说：**哪怕把仓库根目录交给外部 AI，它也拿不走一行业务数据**——它只能帮你搭结构、写映射、跑管线，查数、导出留给人类在应用内完成。
 
 ### 测试与类型检查
 

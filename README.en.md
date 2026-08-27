@@ -57,6 +57,7 @@ OnWorking approaches both problems from the ground up:
 | 🧬 **Row-level lineage** | Every merged row carries `__source_file` · `__source_sheet` · `__source_row` · `__extracted_at` — always traceable. |
 | 🔀 **Two-stage pipeline** | Files land in per-folder **BigTables**, then aggregate into a single workspace **MasterTable** — the final queryable database. |
 | 🤖 **AI agent + CLI** | The NDJSON command surface lets agents drive the whole workflow directly; agents operate workspaces end-to-end (manual in [agents.md](agents.md)). |
+| 🔒 **AI open mode** | Default `external`: the AI can touch schemas, config, and pipelines but never reads real business data; only a human can change the mode, and the CLI can't bypass it. |
 | ⌨️ **CLI / NDJSON** | Drive everything from the terminal with line-delimited commands — scriptable, pipeable, auditable. |
 | 🗂️ **Folders as tables** | Drop same-format files into a folder; one pipeline merges them into a single table. |
 | 📋 **SQL workbench** | Browse tables, run queries against the MasterTable, and export clean CSV (UTF-8 BOM so Excel opens Chinese correctly). |
@@ -162,6 +163,32 @@ printf '%s\n' \
 
 For the full command list, shell adapters, and the operating rules, see
 [agents.md](agents.md).
+
+#### Data protection: AI open mode
+
+Handing the repo root to an AI is **safe** — OnWorking ships an **AI open mode**
+(`external` / `local`, stored in the workspace's `.onworking/settings.json`,
+default `external`) that hard-isolates what the AI can reach:
+
+- **`external` (default, recommended)** — the AI may only use metadata,
+  schema/config, and pipeline-management commands (`schema.tables`,
+  `setup.detectSource`, `pipeline.run`, `bigtable.addFiles`, …). It **can never
+  read or alter real business rows**: data commands such as `query.run` /
+  `query.exportCsv`, `bigtable.previewRows` / `bigtable.exportCsv`, and
+  `setup.preview` all return `AI_MODE_RESTRICTED`; destructive operations
+  (deleting BigTables / source files / mapping rules) stay human/UI-only.
+- **`local`** — opens every command to the AI (for trusted, local environments
+  only).
+- **The mode can only be set from the UI (by a human); the AI cannot change
+  it.** Even an AI that spawns its own CLI can't bypass the gate — the main
+  process wraps human requests in an envelope keyed by a session secret
+  (`ONW_AUTH_SECRET`), and an externally spawned CLI has no secret, so its
+  commands always go through the gate as AI.
+
+In other words: **even if you hand the repo root to an external AI, it can't
+take away a single row of business data** — it can help you build structure,
+write mappings, and run pipelines, while reading and exporting data stays a
+human-in-the-app action.
 
 ### Tests & typecheck
 
