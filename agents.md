@@ -125,7 +125,7 @@ MCP 模式通过 stdin/stdout 传输 JSON-RPC 2.0，可在任意 MCP 客户端�
 | 命令 | 用途 |
 |---|---|
 | `pipeline.list` | 列管线 id |
-| `pipeline.save {config}` | 建管线（id 由调用方显式传入）；`clean` 的 config 需 `{kind:'clean', id, bigTableFolder, sourceDir}`，`bigTableFolder` 是大表文件夹（**不是 `folder`**） |
+| `pipeline.save {config}` | 建管线（id 由调用方显式传入）；`clean` 的 config = `{kind:'clean', id, bigTableFolder, sourceDir}`，`bigTableFolder` 是大表文件夹（**不是 `folder`**）；`sql-clean` 的 config = `{kind:'sql-clean', id, bigTables:['folder1','folder2'], resultTable:'表名', sql:'SELECT ...'}`——**注意是 `bigTables` 数组不是 `bigTableFolder`，必须有非空 `resultTable`，sql 用 SELECT/WITH（不要写 CREATE TABLE），引擎自动建表写入** |
 | `pipeline.delete {id}` | 删管线 |
 | `pipeline.run {id}` | 运行任意管线 |
 | `pipeline.mergeBigTable {folder}` / `pipeline.mergeAll` | 跑该大表 / 全部 clean 管线 |
@@ -186,6 +186,10 @@ $lines | npm run --silent onw -- open D:/ws
 9. `bigtable.previewRows {folder}` —— 验证清洗结果
 10. `bigtable.exportCsv {folder}` —— （可选）导出清洗结果为 CSV，交付放 `<工作区根>/exports/`
 11. `pipeline.save` —— 建 sql-clean 管线（大表→总表），`pipeline.run`
+    - config = `{kind:'sql-clean', id, bigTables:['大表folder'], resultTable:'结果表名', sql:'SELECT ...'}`（见第 3 节）
+    - **宽表转长表**：若大表是宽表（如每个项目一列），在 sql 里用 `UNION ALL` 拼接，每个非固定列写一个 `SELECT 固定列..., '列名' AS 项目, "列名" AS 值 FROM 表 WHERE ...`，用 PowerShell 循环自动生成（同上方「宽表多列自动映射」技巧），`UNION ALL` 连接后整体作为一条 SELECT
+    - **加月份/年份列**：从血缘列 `__source_file` 用 `CASE WHEN __source_file LIKE '%202401%' THEN '2024-01' ... END` 推导
+    - **行级清洗**：剔合计/签名/空行写在 WHERE 里（`工号 IS NOT NULL AND TRIM(工号)!='' AND 工号 NOT LIKE '%合计%'`），剔零值写 `AND "列名" IS NOT NULL AND "列名" != 0`
 12. `schema.tables` / `query.run` —— 在总表上查数验证
 
 > **强制：必须生成总表（铁律第 5 条）**。第 8~10 步只是完成「大表」，此时总表 master.db 还没生成。**任何数据任务都必须继续第 11 步（sql-clean → 总表）和第 12 步**，否则不算完成。完成判据：`schema.tables` 在总表查到结果表、`query.run` 查到数据。只汇报「大表已生成」= 未完成任务。
@@ -209,6 +213,14 @@ $lines | npm run --silent onw -- open D:/ws
 - **跑完管线必读 `warnings` 并汇报**：`pipeline.run` 的返回里有 `warnings` 数组，可能含「跳过无法读取的文件（密码保护/损坏）」「重复表头只取其一」等。**必须把每条告警转告操作者**——被跳过的文件=数据没进，这类尤其要明确报告，不能只说「跑完了」。
 - **pipeline id 由调用方显式传入**：禁止用 `Date.now()` 等不可复现的 id。
 - **`query.run` 读为主**：读（SELECT/WITH）返回行；写（INSERT/UPDATE/DELETE/DDL）会直接改所选 DB（默认总表 master.db，带 `folder` 改该大表 DB），**除非操作者明确要求，不要用写**。
+- **宽表多列（50+ 列）不要手写映射**：当源表列数很多（如工时表 200+ 项目列），手动逐列写 `mapping.save` 的 `mappings[]` 不现实。标准做法：
+  1. `setup.detectSource {filePath, sheetName}` 获取全部 `headers`，用 `Out-File` 存到临时文件（NDJSON 格式，每行一条响应）
+  2. PowerShell 解析：`Get-Content` 按行读 → 找到 `reqId` 对应行 → `ConvertFrom-Json` → 提取 `headers` 数组
+  3. 过滤空列名、去重；前 N 个固定列按已知类型（TEXT/REAL），其余项目列统一设为 REAL
+  4. 用循环自动生成 `fields[]`（给 `bigtable.save`）和 `mappings[]`（给 `mapping.save`），`ConvertTo-Json -Depth 10 -Compress` 序列化
+  5. 把 `workspace.open` + `bigtable.save` + `mapping.save` 三条命令写入临时文件，`Get-Content | Onworking.exe ...` 一次性管道执行
+  - **列名含换行符**：Excel 表头常含 `\n`（如 `RD005\n艾司奥美拉唑镁肠溶片`），`sourceHeader` 必须保留原始换行符才能匹配；`outputName` 建议把 `\n`/`\r` 替换为空格再 `.Trim()`
+  - **命令长度**：200+ 列的 `mapping.save` JSON 可达 10万+ 字符，必须走临时文件管道，不能内联在 `@(...)` 数组里
 
 ---
 
@@ -243,6 +255,9 @@ $lines | npm run --silent onw -- open D:/ws
 | `FILE_NOT_FOUND` | `bigtable.addFiles` 源文件不存在 | 检查文件路径 |
 | `QUERY_NOT_SELECT` | query 管线(物化结果表)的 SQL 非 SELECT/WITH | 物化须用 SELECT/WITH |
 | `TEMPLATE_NOT_FOUND` | 模板不存在 | `template.list` 查名 |
+| `p.bigTables is not iterable` | sql-clean config 写错字段 | 用 `bigTables` 数组，不要用 `bigTableFolder` |
+| `SQLCLEAN_NO_RESULT_TABLE` | sql-clean 缺少 `resultTable` | config 里加 `"resultTable":"你的表名"` |
+| `AI_MODE_RESTRICTED` | 当前模式(external)不允许 AI 调用该 API | `setup.preview` / `bigtable.previewRows` / `query.run` / `query.exportCsv` / `bigtable.exportCsv` 在 AI 模式下被禁用；替代：看表头用 `setup.detectSource`，查大表结构用 `schema.tables {folder}`，查总表结构用 `schema.tables`（无 folder），数据量看 `pipeline.run` 返回的 `rows`，导出需在 Onworking 应用内手动操作 |
 | 环境：`better-sqlite3` ABI 不匹配 | 报 `NODE_MODULE_VERSION` 不符（如 `137 vs 125`） | **已双装载免疫**：`sqlite.ts` 按进程 ABI 自动选（系统 node 137 用 `better-sqlite3`，Electron 内置 node 用 `better-sqlite3-electron` 副本——本机 Electron 31.7.7 是 125），客户端怎么 spawn 都通。装完依赖跑一次 `npm run build:dual-abi`（先重建原件到 137、再建副本匹配 Electron；注意原件被 app/MCP 占用时先关掉再跑）。若仍报，先跑 `npm run build:dual-abi` 再试 |
 
 ---
