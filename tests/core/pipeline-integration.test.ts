@@ -88,4 +88,60 @@ describe('pipeline integration (end-to-end)', () => {
     console.log(`[integration] 20k 行导入耗时 ${elapsed}ms (${Math.round((20000 / elapsed) * 1000)} 行/秒)`);
     eng.close();
   });
+
+  it('流式端到端:bookSST 5 万行导入无 U+FFFD,行数精确', async () => {
+    const rows: unknown[][] = [['期间', '借方金额', '摘要']];
+    for (let i = 0; i < 50000; i++) {
+      rows.push([`2024-${String((i % 12) + 1).padStart(2, '0')}`, i * 1.5, `备注${i} 中文`]);
+    }
+    const wsx = XLSX.utils.aoa_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, wsx, '序时账');
+    XLSX.writeFile(wb, join(sourceDir, 'seq.xlsx'), { bookSST: true }); // 走共享字符串解码路径
+
+    saveBigTableConfig(ws, 'seq', {
+      tableName: 'seq',
+      autoIncrement: true,
+      fields: [
+        { name: 'period', type: 'TEXT', order: 1 },
+        { name: 'debit', type: 'INTEGER', order: 2 },
+        { name: 'note', type: 'TEXT', order: 3 },
+      ],
+    });
+    saveRule(ws, 'seq', {
+      name: 'seq_rule',
+      display: '规则',
+      version: 1,
+      sources: [{ pattern: '**/*', headerRow: 1 }],
+      fields: [
+        { sourceHeader: '期间', outputName: 'period', included: true, order: 1, transforms: [{ kind: 'coerce_date' }] },
+        { sourceHeader: '借方金额', outputName: 'debit', included: true, order: 2, transforms: [{ kind: 'coerce_cents' }] },
+        { sourceHeader: '摘要', outputName: 'note', included: true, order: 3, transforms: [{ kind: 'coerce_string' }] },
+      ],
+    });
+    savePipeline(ws, {
+      kind: 'clean',
+      id: 'c1',
+      label: '',
+      bigTableFolder: 'seq',
+      sourceDir,
+      createdAt: '',
+    });
+
+    const eng = new PipelineEngine(ws);
+    const r = await eng.run('c1');
+    expect(r.ok).toBe(true);
+    expect(r.rows).toBe(50000);
+
+    // 大表 DB 抽查:中文无 U+FFFD(避开跨界索引,用确定性的备注文本查)
+    const btdb = openDatabase(bigTableDbPath(ws, 'seq'));
+    const probe = btdb.prepare('SELECT note FROM seq WHERE note = ? LIMIT 1').get('备注24998 中文') as { note: string } | undefined;
+    const probe2 = btdb.prepare('SELECT note FROM seq WHERE note = ? LIMIT 1').get('备注49999 中文') as { note: string } | undefined;
+    btdb.close();
+    expect(probe).toBeTruthy();
+    expect(probe!.note).not.toContain('�');
+    expect(probe2).toBeTruthy();
+    expect(probe2!.note).not.toContain('�');
+    eng.close();
+  });
 });
