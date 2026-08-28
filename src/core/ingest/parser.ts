@@ -5,6 +5,7 @@
 //   "2024-01"(期间)误判成日期序列号,损坏金融数据。类型转换交给 ETL 层。
 import * as XLSX from 'xlsx';
 import { readFileSync } from 'node:fs';
+import { openXlsxWorkbook, listWorkbookSheets, planSheetRange, readSheetRows } from './xlsx-reader';
 
 export interface ParsedSheet {
   sheetName: string;
@@ -136,4 +137,53 @@ export function parseCsvFile(filePath: string, opts?: ParseOptions): ParsedSheet
   const headers = (table[headerRowIdx] ?? []).map((h) => h.trim());
   const rows = table.slice(headerRowIdx + 1);
   return [{ sheetName: 'csv', headers, rows }];
+}
+
+/** 逐行流式 sheet 输出:表头先行,rows 为异步生成器(每行一个 unknown[])。 */
+export interface SheetRowStream {
+  sheetName: string;
+  headers: string[];
+  rows: AsyncGenerator<unknown[]>;
+}
+
+/** 已物化 aoa → SheetRowStream(.xls 回退路径:SheetJS 已同步读全,直接喂生成器)。 */
+function sheetStreamFromAoa(sheetName: string, headers: string[], rows: unknown[][]): SheetRowStream {
+  async function* gen(): AsyncGenerator<unknown[]> {
+    for (const r of rows) yield r;
+  }
+  return { sheetName, headers, rows: gen() };
+}
+
+/**
+ * 逐行流式读取单个 sheet(sheetName 缺省取第一个)。
+ * - .xlsx:自研读取器(unzip+saxes)两遍流式,峰值内存与行数解耦;解析语义与 parseExcelFile 逐单元格一致。
+ * - .xls:SheetJS 无流式解压,回退同步读全(行为与 parseExcelFile 一致)。
+ * - sheet 不存在返回 null。
+ */
+export async function readExcelSheetStream(
+  filePath: string,
+  sheetName?: string,
+  opts: { headerRow?: number } = {},
+): Promise<SheetRowStream | null> {
+  const headerRowIdx = (opts.headerRow ?? 1) - 1;
+  const isXls = /\.xls$/i.test(filePath);
+  if (isXls) {
+    // 回退:SheetJS 同步读全(与 parseExcelFile 同口径,含 dataBounds/buildRange 边界)
+    const sheets = parseExcelFile(filePath, { headerRow: headerRowIdx + 1 });
+    const sheet = sheetName ? sheets.find((s) => s.sheetName === sheetName) : sheets[0];
+    if (!sheet) return null;
+    return sheetStreamFromAoa(sheet.sheetName, sheet.headers, sheet.rows);
+  }
+  // .xlsx:自研读取器两遍流式(planSheetRange 定界 → readSheetRows gap-fill 逐行产出)
+  const wb = await openXlsxWorkbook(filePath);
+  const list = await listWorkbookSheets(wb.byPath);
+  const target = sheetName ? list.find((s) => s.name === sheetName) : list[0];
+  if (!target) return null;
+  const entry = wb.byPath.get(target.path);
+  if (!entry) return null;
+  const plan = await planSheetRange(entry, wb.sharedStrings, headerRowIdx);
+  const gen = readSheetRows(entry, wb.sharedStrings, plan);
+  const first = await gen.next();
+  const headers = first.done ? [] : first.value.map((h) => String(h ?? '').trim());
+  return { sheetName: target.name, headers, rows: gen };
 }
