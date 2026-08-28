@@ -84,7 +84,7 @@ MCP 模式通过 stdin/stdout 传输 JSON-RPC 2.0，可在任意 MCP 客户端�
 2. **禁止用 shell / 终端 / 文件工具写、删、改文件**：`touch` / `echo >` / `rm` / `mv` / `cp` / `mkdir` / 编辑器写入 / 直接改文件 等，一律禁止。
 3. **禁止直接访问工作区元数据目录 `.onworking/`**：其下的 `pipelines/*.json`、`bigtables/*/bigtable.json`、`bigtables/*/rules/*.yaml`、`templates/*.json`、`db/*.db` 只能由命令读写，**不得直接打开、查看或修改**。
 4. **所有操作必须经由命令**：
-   - 想看文件内容 → `setup.preview` / `setup.detectSource` / `setup.detectHeaders`（源文件）、`bigtable.previewRows`（大表数据）、`query.run` / `schema.tables`（总表 DB）
+   - 想看文件内容 → `setup.preview` / `setup.detectSource`（源文件）、`setup.detectHeaders`（源文件，**仅本地模式**）、`bigtable.previewRows`（大表数据）、`query.run` / `schema.tables`（总表 DB）
    - 想改配置 → 对应 `save` 命令（`bigtable.save` / `mapping.save` / `pipeline.save` / `template.save`）
    - 想加文件 → `bigtable.addFiles`（只拷贝，不直接写文件）
 5. **任何数据导入/清洗任务必须生成总表 master.db**（硬性要求，不可省略）：
@@ -136,7 +136,7 @@ MCP 模式通过 stdin/stdout 传输 JSON-RPC 2.0，可在任意 MCP 客户端�
 | 命令 | 用途 |
 |---|---|
 | `setup.sheets {filePath}` / `setup.detectSource {filePath}` / `setup.preview {filePath}` | 读源文件表头/预览 |
-| `setup.detectHeaders {filePath, sheetName?, minScore?, limit?}` | **堆叠多表**：读全表列出「稀有高分行」候选表头（基线 = 分数众数，`score > 众数` 且该分数出现 ≤2 次；每项含 `rowNumber`/`score`/`deviation` + `cells` 内容，按偏离降序），挑出你要的那张表的表头行号再 `mapping.save`；扁平表/退化表返回空，回退 `setup.detectSource` |
+| `setup.detectHeaders {filePath, sheetName?, minScore?, limit?}` | **堆叠多表**：读全表列出「稀有高分行」候选表头（基线 = 分数众数，`score > 众数` 且该分数出现 ≤2 次；每项含 `rowNumber`/`score`/`deviation` + `cells` 内容，按偏离降序），挑出你要的那张表的表头行号再 `mapping.save`；扁平表/退化表返回空，回退 `setup.detectSource`；**仅 `local` 模式（本地模型）可用**，external 下返回 `AI_MODE_RESTRICTED` |
 | `query.run {sql, folder?}` | 查询/执行 SQL：**不填 `folder` 默认操作总表 master.db**；填 `folder` 则操作该大表自己的 DB。读（SELECT/WITH）返回行；写（INSERT/UPDATE/DELETE/DDL）直接改所选 DB、返回影响行数。写语句谨慎使用 |
 | `query.exportCsv {sql, path?, folder?}` | 跑 SELECT 落 CSV：不填 `folder` 从总表导出，填了从该大表 DB 导出 |
 | `template.list` / `template.save {template}` / `template.apply {name, sheet}` | 映射模板管理 |
@@ -180,7 +180,7 @@ $lines | npm run --silent onw -- open D:/ws
 2. `state.summary` —— 看当前状态
 3. `bigtable.save {folder, config}` —— 建大表（`config.tableName/fields/autoIncrement`）
 4. `bigtable.addFiles {folder, files[]}` —— 把源文件加进大表 source/ 目录
-5. `setup.detectSource {filePath}` —— 检测源文件表头行与表头；**一个 sheet 纵向堆叠多张表时改用 `setup.detectHeaders`**（列出全部候选表头行，挑出要映射的那张表的行号，再在 `mapping.save` 里传 `headerRow`）
+5. `setup.detectSource {filePath}` —— 检测源文件表头行与表头；**一个 sheet 纵向堆叠多张表时改用 `setup.detectHeaders`**（仅本地模式；列出全部候选表头行，挑出要映射的那张表的行号，再在 `mapping.save` 里传 `headerRow`）
 6. `mapping.save {folder, headerRow, mappings[], sheetName?}` —— 写字段映射（源表头→大表列）；多 sheet 文件用 `sheetName` 指定要导入的那张，不指定则只导第一张
 7. `pipeline.save` —— 建 clean 管线（`config = {kind:'clean', id, bigTableFolder, sourceDir}`；`bigTableFolder` = 大表文件夹，`sourceDir` 指向源目录）
 8. `pipeline.run {id}` —— 清洗入大表
@@ -234,7 +234,7 @@ $lines | npm run --silent onw -- open D:/ws
 | 想做 | 禁止这么做 | 应该用 |
 |---|---|---|
 | 看源文件表头 | `cat a.xlsx` / 读文件 | `setup.detectSource` |
-| 找堆叠多表的表头行 | 猜行号 / 翻文件 | `setup.detectHeaders` |
+| 找堆叠多表的表头行 | 猜行号 / 翻文件 | `setup.detectHeaders`（仅本地模式） |
 | 看大表数据 | `ls .onworking/bigtables/seq` / 打开 db | `bigtable.previewRows` |
 | 看总表有哪些表 | 读 master.db | `schema.tables` |
 | 查总表数据 | 直接开 sqlite | `query.run` |
@@ -259,7 +259,7 @@ $lines | npm run --silent onw -- open D:/ws
 | `TEMPLATE_NOT_FOUND` | 模板不存在 | `template.list` 查名 |
 | `p.bigTables is not iterable` | sql-clean config 写错字段 | 用 `bigTables` 数组，不要用 `bigTableFolder` |
 | `SQLCLEAN_NO_RESULT_TABLE` | sql-clean 缺少 `resultTable` | config 里加 `"resultTable":"你的表名"` |
-| `AI_MODE_RESTRICTED` | 当前模式(external)不允许 AI 调用该 API | `setup.preview` / `bigtable.previewRows` / `query.run` / `query.exportCsv` / `bigtable.exportCsv` 在 AI 模式下被禁用；替代：看表头用 `setup.detectSource`，找堆叠表头用 `setup.detectHeaders`，查大表结构用 `schema.tables {folder}`，查总表结构用 `schema.tables`（无 folder），数据量看 `pipeline.run` 返回的 `rows`，导出需在 Onworking 应用内手动操作 |
+| `AI_MODE_RESTRICTED` | 当前模式(external)不允许 AI 调用该 API | `setup.preview` / `bigtable.previewRows` / `query.run` / `query.exportCsv` / `bigtable.exportCsv` 在 AI 模式下被禁用；替代：看表头用 `setup.detectSource`，找堆叠表头需切到 `local` 模式（本地模型）用 `setup.detectHeaders`（external 下同样受限），查大表结构用 `schema.tables {folder}`，查总表结构用 `schema.tables`（无 folder），数据量看 `pipeline.run` 返回的 `rows`，导出需在 Onworking 应用内手动操作 |
 | 环境：`better-sqlite3` ABI 不匹配 | 报 `NODE_MODULE_VERSION` 不符（如 `137 vs 125`） | **已双装载免疫**：`sqlite.ts` 按进程 ABI 自动选（系统 node 137 用 `better-sqlite3`，Electron 内置 node 用 `better-sqlite3-electron` 副本——本机 Electron 31.7.7 是 125），客户端怎么 spawn 都通。装完依赖跑一次 `npm run build:dual-abi`（先重建原件到 137、再建副本匹配 Electron；注意原件被 app/MCP 占用时先关掉再跑）。若仍报，先跑 `npm run build:dual-abi` 再试 |
 
 ---

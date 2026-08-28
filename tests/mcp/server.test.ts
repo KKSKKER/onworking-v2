@@ -169,13 +169,19 @@ describe('mcp server', () => {
       params: { name: 'state.summary', arguments: {} },
     });
     expect(String((meta?.result as { content?: { text?: string }[] } | undefined)?.content?.[0]?.text ?? '')).not.toContain('AI_MODE_RESTRICTED');
-    // setup.detectHeaders 与 setup.detectSource 同级:external 下 metadata 类放行(读表头,不碰业务行数据)
+    // setup.detectHeaders 已改为仅本地模式可用:external 下与真实数据 API 同级,对 AI 禁用
     const headers = await handleMcpRequest(session, {
       jsonrpc: '2.0', id: 3, method: 'tools/call',
       params: { name: 'setup.detectHeaders', arguments: { filePath: 'nope.xlsx' } },
     });
-    expect(String((headers?.result as { content?: { text?: string }[] } | undefined)?.content?.[0]?.text ?? '')).not.toContain('AI_MODE_RESTRICTED');
+    expect(String((headers?.result as { content?: { text?: string }[] } | undefined)?.content?.[0]?.text ?? '')).toContain('AI_MODE_RESTRICTED');
     saveSettings(session.getCtx()!.ws, { name: 'ws', aiOpenMode: 'local' }); // 恢复
+    // local 模式放行 setup.detectHeaders(真实走到 handler,而非门禁拦截)
+    const localHeaders = await handleMcpRequest(session, {
+      jsonrpc: '2.0', id: 4, method: 'tools/call',
+      params: { name: 'setup.detectHeaders', arguments: { filePath: 'nope.xlsx' } },
+    });
+    expect(String((localHeaders?.result as { content?: { text?: string }[] } | undefined)?.content?.[0]?.text ?? '')).not.toContain('AI_MODE_RESTRICTED');
   });
 
   it('manual.read tool returns the operations manual text', async () => {

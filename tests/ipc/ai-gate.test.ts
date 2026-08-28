@@ -21,7 +21,6 @@ describe('ai-gate isAiAllowed', () => {
     expect(isAiAllowed('external', 'bigtable.sourceFiles')).toBe(true);
     expect(isAiAllowed('external', 'setup.sheets')).toBe(true);
     expect(isAiAllowed('external', 'setup.detectSource')).toBe(true);
-    expect(isAiAllowed('external', 'setup.detectHeaders')).toBe(true);
     expect(isAiAllowed('external', 'mapping.save')).toBe(true);
     expect(isAiAllowed('external', 'template.save')).toBe(true);
     // 管线管理(建/删/跑 + 拷贝源文件)
@@ -36,6 +35,8 @@ describe('ai-gate isAiAllowed', () => {
     expect(isAiAllowed('external', 'bigtable.exportCsv')).toBe(false);
     expect(isAiAllowed('external', 'setup.preview')).toBe(false);
     expect(isAiAllowed('external', 'setup.exportCsv')).toBe(false);
+    // 堆叠多表候选检测仅本地模式可用:候选含未确认行,外部模型可能误判表头
+    expect(isAiAllowed('external', 'setup.detectHeaders')).toBe(false);
   });
 
   it('local 模式放行一切', () => {
@@ -43,6 +44,7 @@ describe('ai-gate isAiAllowed', () => {
     expect(isAiAllowed('local', 'bigtable.addFiles')).toBe(true);
     expect(isAiAllowed('local', 'bigtable.previewRows')).toBe(true);
     expect(isAiAllowed('local', 'state.summary')).toBe(true);
+    expect(isAiAllowed('local', 'setup.detectHeaders')).toBe(true);
   });
 });
 

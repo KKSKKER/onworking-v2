@@ -8,11 +8,11 @@
 1. **唯一合法操作途径**：只能调用本 MCP 暴露的命令工具。禁止用任何 shell / 终端 / 文件工具查看或修改文件。
 2. **禁止直接访问工作区元数据目录** `.onworking/` 下的文件（`pipelines/*.json`、`bigtables/*/bigtable.json`、`rules/*.yaml`、`templates/*.json`、`db/*.db`），只能经命令读写。
 3. **想看数据用命令**：
-   - 源文件：`setup.sheets` / `setup.preview` / `setup.detectSource` / `setup.detectHeaders`
+   - 源文件：`setup.sheets` / `setup.preview` / `setup.detectSource` / `setup.detectHeaders`（仅本地模式）
    - 大表：`bigtable.previewRows`
    - 总表：`query.run` / `schema.tables`
    - 改配置：对应 `*.save` 命令；加文件：`bigtable.addFiles`。
-4. **一个 sheet 纵向堆叠多张表时**，用 `setup.detectHeaders` 列出全部候选表头行（含偏离值证据），挑出你要的那张表的表头行号再 `mapping.save`。
+4. **一个 sheet 纵向堆叠多张表时**，用 `setup.detectHeaders`（**仅 `local` 模式可用**）列出全部候选表头行（含偏离值证据），挑出你要的那张表的表头行号再 `mapping.save`。
 
 ## 数据链（两段式，最终产物是总表 master.db）
 
@@ -46,7 +46,7 @@
 ### 源文件探查
 - `setup.sheets`（列出 sheet 名）
 - `setup.detectSource`（检测单一表头行号，返回 detected）
-- **`setup.detectHeaders`**（候选表头行列表；见下方「堆叠多表」章节）
+- **`setup.detectHeaders`**（候选表头行列表；**仅 `local` 模式可用**；见下方「堆叠多表」章节）
 - `setup.preview`（按表头行号预览）
 - `setup.exportCsv`
 
@@ -82,6 +82,8 @@
 
 ## 堆叠多表（setup.detectHeaders）
 
+> ⚠️ **仅 `local` 模式（本地模型）可用**：`external` 模式下 AI 调用本命令返回 `AI_MODE_RESTRICTED`。
+
 一个 sheet 里纵向堆叠多张表时，`setup.detectSource` 只认第一张的表头就停，看不到后面的表。此时用 `setup.detectHeaders`：
 
 - **读全表**：从第一行扫到末尾（先裁掉尾部空行），给每个非空行打分。
@@ -95,4 +97,4 @@
 
 ## 工作流
 
-打开工作区（`workspace.open`）→ 建大表（`bigtable.save`）→ 加文件（`bigtable.addFiles`）→ 每文件每 sheet 写映射（`mapping.save`；堆叠表先 `setup.detectHeaders` 拿表头行号）→ 建并跑 clean（进大表）→ 建并跑 sql-clean（SQL 里选 sheet / 加月份 / 剔垃圾，进总表）→ `query.exportCsv` 导出交付。
+打开工作区（`workspace.open`）→ 建大表（`bigtable.save`）→ 加文件（`bigtable.addFiles`）→ 每文件每 sheet 写映射（`mapping.save`；堆叠表先 `setup.detectHeaders` 拿表头行号，仅本地模式）→ 建并跑 clean（进大表）→ 建并跑 sql-clean（SQL 里选 sheet / 加月份 / 剔垃圾，进总表）→ `query.exportCsv` 导出交付。

@@ -7,7 +7,7 @@ export const MANUAL_TEXT = `# Onworking Agent 操作须知(浓缩版)
 1. 唯一合法操作途径:只能调用本 MCP 暴露的命令工具。禁止用任何 shell/终端/文件工具查看或修改文件。
 2. 禁止直接访问工作区元数据目录 .onworking/ 下的文件(pipelines/*.json、bigtables/*/bigtable.json、rules/*.yaml、templates/*.json、db/*.db),只能经命令读写。
 3. 想看数据用命令:源文件→setup.preview/setup.detectSource;大表→bigtable.previewRows;总表→query.run/schema.tables。改配置→对应 save 命令。加文件→bigtable.addFiles。
-   - 一个 sheet 纵向堆叠多张表时,用 setup.detectHeaders 列出全部候选表头行(含偏离值证据),挑出你要的那张表的表头行号再 mapping.save。
+   - 一个 sheet 纵向堆叠多张表时,用 setup.detectHeaders(仅 local 模式可用)列出全部候选表头行(含偏离值证据),挑出你要的那张表的表头行号再 mapping.save。
 
 ## 数据链(两段式,最终产物是总表 master.db)
 源文件 → ① clean 管线 → 大表 DB(初步映射) → ② sql-clean 管线 → 总表 master.db → ③ query 管线/query.run。
