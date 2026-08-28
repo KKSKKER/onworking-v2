@@ -42,7 +42,12 @@ export interface QueryOutcome {
   changes?: number;
   /** 写语句时返回:最后插入的自增主键。 */
   lastInsertRowid?: number | bigint;
+  /** 无显式 LIMIT 且被默认封顶截断(恰达 5000 行)时 true。 */
+  truncated?: boolean;
 }
+
+/** 工作台查询默认行数上限:无 LIMIT 的 SELECT 自动追加(防大表整表物化进内存)。 */
+export const QUERY_DEFAULT_LIMIT = 5000;
 
 export interface TableInfo {
   name: string;
@@ -155,10 +160,19 @@ export class PipelineEngine {
     try {
       const stmt = db.prepare(sql);
       if (stmt.reader) {
-        const finalSql = limit === undefined ? sql : (/\blimit\b/i.test(sql) ? sql : `${sql} LIMIT ${limit}`);
-        const rows = (limit === undefined ? stmt : db.prepare(finalSql)).all() as Record<string, unknown>[];
+        // 规则:有显式 limit 参数 → 注入(语句已含 LIMIT 则不注入);
+        // 无参数且 SQL 已含 LIMIT → 不注入;无参数且无 LIMIT → 注入默认 5000(先剥末尾分号)。
+        const hasExplicitLimit = limit !== undefined;
+        const alreadyLimited = /\blimit\b/i.test(sql);
+        let finalSql = sql;
+        if (!alreadyLimited) {
+          const cap = hasExplicitLimit ? limit : QUERY_DEFAULT_LIMIT;
+          finalSql = `${sql.replace(/;\s*$/, '')} LIMIT ${cap}`;
+        }
+        const rows = (finalSql === sql ? stmt : db.prepare(finalSql)).all() as Record<string, unknown>[];
         const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
-        return { columns, rows, rowCount: rows.length };
+        const truncated = !hasExplicitLimit && !alreadyLimited && rows.length === QUERY_DEFAULT_LIMIT;
+        return { columns, rows, rowCount: rows.length, truncated };
       }
       const info = stmt.run();
       return { columns: [], rows: [], rowCount: 0, changes: info.changes, lastInsertRowid: info.lastInsertRowid };

@@ -1258,13 +1258,15 @@ git commit -m "feat(pipeline): clean 流式化——删除 allRows,边解析边�
 
 ```ts
 import { toolQuery } from '../../src/core/agent/tools';
+import { masterDbPath } from '../../src/core/workspace/workspace';
 ```
 
 在最后一个既有用例之后、describe 结束前追加(单个自包含用例,不依赖其他用例的数据):
 
 ```ts
 it('queryOn 无 LIMIT 自动封顶 5000 并标记 truncated;显式 limit/LIMIT 不注入;toolQuery 透传 limit', () => {
-  const db = openDatabase(dbPath());
+  // 注意:主库是 master.db(不是 onworking.db)——engine.queryOn 走 masterDbPath。
+  const db = openDatabase(masterDbPath(ws));
   db.exec('CREATE TABLE IF NOT EXISTS big (n INTEGER)');
   db.exec('DELETE FROM big');
   const ins = db.prepare('INSERT INTO big VALUES (?)');

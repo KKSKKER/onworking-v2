@@ -505,10 +505,11 @@ export function toolQuery(
   ws: Workspace,
   sql: string,
   folder?: string,
+  limit?: number,
 ): QueryOutcome {
   const eng = new PipelineEngine(ws);
   try {
-    return folder ? eng.queryBigTable(folder, sql) : eng.query(sql);
+    return folder ? eng.queryBigTable(folder, sql, limit) : eng.query(sql, limit);
   } finally {
     eng.close();
   }

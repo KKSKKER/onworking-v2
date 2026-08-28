@@ -150,7 +150,7 @@ export const handlers: { [K in SessionCommands]: HandlerFor<K> } = {
 
   'schema.tables': async (ctx, p) => toolSchemaTables(ctx.ws, p.folder),
 
-  'query.run': async (ctx, p) => toolQuery(ctx.ws, p.sql, p.folder),
+  'query.run': async (ctx, p) => toolQuery(ctx.ws, p.sql, p.folder, p.limit),
 
   'query.exportCsv': async (ctx, p) => toolExportQueryCsv(ctx.ws, p.sql, { path: p.path, folder: p.folder }),
 

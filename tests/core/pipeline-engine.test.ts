@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as XLSX from 'xlsx';
-import { initWorkspace, type Workspace } from '../../src/core/workspace/workspace';
+import { initWorkspace, masterDbPath, type Workspace } from '../../src/core/workspace/workspace';
 import { saveBigTableConfig, bigTableDbPath } from '../../src/core/bigtable/store';
 import { openDatabase } from '../../src/core/db/database';
 import { savePipeline } from '../../src/core/pipeline/store';
@@ -12,6 +12,7 @@ import { PipelineEngine } from '../../src/core/pipeline/engine';
 import { runSqlCleanPipeline } from '../../src/core/pipeline/sql-clean-runner';
 import type { SqlCleanPipelineConfig } from '../../src/core/pipeline/config';
 import { gitCurrentCommit } from '../../src/core/versioning/git';
+import { toolQuery } from '../../src/core/agent/tools';
 
 describe('pipeline engine', () => {
   let dir: string;
@@ -165,6 +166,43 @@ describe('pipeline engine', () => {
     const r = await eng.run('bad');
     expect(r.ok).toBe(false);
     expect(r.error).toBeTruthy();
+    eng.close();
+  });
+
+  it('queryOn 无 LIMIT 自动封顶 5000 并标记 truncated;显式 limit/LIMIT 不注入;toolQuery 透传 limit', () => {
+    // 主库是 master.db(不是 onworking.db):engine.queryOn 走 masterDbPath
+    const db = openDatabase(masterDbPath(ws));
+    db.exec('CREATE TABLE IF NOT EXISTS big (n INTEGER)');
+    db.exec('DELETE FROM big');
+    const ins = db.prepare('INSERT INTO big VALUES (?)');
+    const tx = db.transaction(() => { for (let i = 0; i < 6000; i++) ins.run(i); });
+    tx();
+    db.close();
+
+    const eng = new PipelineEngine(ws);
+    const capped = eng.query('SELECT * FROM big');
+    expect(capped.rows.length).toBe(5000);
+    expect(capped.truncated).toBe(true);
+
+    const withLimit = eng.query('SELECT * FROM big', 10);
+    expect(withLimit.rows.length).toBe(10);
+    expect(withLimit.truncated).toBe(false);
+
+    const own = eng.query('SELECT * FROM big LIMIT 100');
+    expect(own.rows.length).toBe(100);
+    expect(own.truncated).toBe(false);
+
+    const semi = eng.query('SELECT * FROM big;');
+    expect(semi.rows.length).toBe(5000);
+    expect(semi.truncated).toBe(true);
+
+    const tool = toolQuery(ws, 'SELECT * FROM big', undefined, 5);
+    expect(tool.rows.length).toBe(5);
+    expect(tool.truncated).toBe(false);
+
+    const toolFull = toolQuery(ws, 'SELECT * FROM big');
+    expect(toolFull.rows.length).toBe(5000);
+    expect(toolFull.truncated).toBe(true);
     eng.close();
   });
 });
