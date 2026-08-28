@@ -165,7 +165,7 @@ describe('tools', () => {
 
   it('toolExportBigTableCsv exports the big table to a CSV file', async () => {
     await toolRunPipeline(ws, 'c1');
-    const res = toolExportBigTableCsv(ws, 'seq');
+    const res = await toolExportBigTableCsv(ws, 'seq');
     expect(res.rows).toBe(2);
     expect(existsSync(res.file)).toBe(true);
     expect(res.file).toContain('exports');
@@ -176,13 +176,13 @@ describe('tools', () => {
     expect(readFileSync(res.file, 'utf-8')).toContain('2024-01');
 
     // includeLineage:true 带血缘列
-    const withLineage = toolExportBigTableCsv(ws, 'seq', { includeLineage: true });
+    const withLineage = await toolExportBigTableCsv(ws, 'seq', { includeLineage: true });
     expect(readFileSync(withLineage.file, 'utf-8').split('\n')[0]).toContain('__source_file');
   });
 
-  it('toolExportBigTableCsv writes to a caller-supplied path', () => {
+  it('toolExportBigTableCsv writes to a caller-supplied path', async () => {
     const custom = join(dir, 'out.csv');
-    const res = toolExportBigTableCsv(ws, 'seq', { path: custom });
+    const res = await toolExportBigTableCsv(ws, 'seq', { path: custom });
     expect(res.file).toBe(custom);
     expect(existsSync(custom)).toBe(true);
   });
@@ -326,7 +326,7 @@ describe('tools', () => {
     await eng.run('c1');
     await eng.run('m1');
     eng.close();
-    const res = toolExportQueryCsv(ws, 'SELECT date, debit FROM seq ORDER BY date');
+    const res = await toolExportQueryCsv(ws, 'SELECT date, debit FROM seq ORDER BY date');
     expect(res.rows).toBe(2);
     expect(existsSync(res.file)).toBe(true);
     const header = readFileSync(res.file, 'utf-8').split('\n')[0];
@@ -334,8 +334,8 @@ describe('tools', () => {
     expect(readFileSync(res.file, 'utf-8')).toContain('2024-01');
   });
 
-  it('toolExportQueryCsv rejects non-SELECT', () => {
-    expect(() => toolExportQueryCsv(ws, 'DELETE FROM seq')).toThrow(/only SELECT/);
+  it('toolExportQueryCsv rejects non-SELECT', async () => {
+    await expect(toolExportQueryCsv(ws, 'DELETE FROM seq')).rejects.toThrow(/only SELECT/);
   });
 
   it('toolListPipelineConfigs returns all pipeline configs', () => {
@@ -344,8 +344,8 @@ describe('tools', () => {
     expect(ids).toEqual(expect.arrayContaining(['c1', 'm1']));
   });
 
-  it('toolExportSourceCsv exports a source file sheet to CSV', () => {
-    const res = toolExportSourceCsv(ws, join(sourceDir, 'a.xlsx'), { sheetName: 'Sheet1', headerRow: 1 });
+  it('toolExportSourceCsv exports a source file sheet to CSV', async () => {
+    const res = await toolExportSourceCsv(ws, join(sourceDir, 'a.xlsx'), { sheetName: 'Sheet1', headerRow: 1 });
     expect(res.rows).toBe(2);
     expect(existsSync(res.file)).toBe(true);
     expect(readFileSync(res.file, 'utf-8').split('\n')[0]).toBe('日期,借方金额');

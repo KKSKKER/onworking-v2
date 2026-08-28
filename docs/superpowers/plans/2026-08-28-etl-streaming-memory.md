@@ -1522,7 +1522,7 @@ export async function writeRowsToCsvFile(
 
 - [ ] **Step 4: 改 tools.ts 三个导出工具为 async**
 
-`src/core/agent/tools.ts`:删本地 `csvEscape`(第 47-52 行),顶部加 `import { csvEscape, writeRowsToCsvFile } from '../export/csv';`。三个工具替换为:
+`src/core/agent/tools.ts`:删本地 `csvEscape`(第 47-52 行),顶部加 `import { writeRowsToCsvFile } from '../export/csv';`(csvEscape 不再被 tools 直接使用,只经 writeRowsToCsvFile 间接生效)。三个工具替换为:
 
 ```ts
 /** tool: 导出大表数据到 CSV 文件。缺省不含血缘列,写 `<工作区根>/exports/<tableName>.csv`。未清洗/空表导出空 CSV(表头取配置字段名)。 */
@@ -1590,6 +1590,25 @@ export async function toolExportQueryCsv(
   }
 }
 
+/**
+ * 位置数组行 → record 行(按列序映射,缺列 undefined)。源 sheet 行是 unknown[](非 record),
+ * 而 CSV 写入器按列名取 r[c];此处转换与旧实现 cols.map((_,j)=>csvEscape(row[j])) 字节等价。
+ */
+function positionalRowsToRecords(
+  columns: string[],
+  rows: Iterable<unknown[]> | AsyncIterable<unknown[]>,
+): AsyncIterable<Record<string, unknown>> {
+  return {
+    async *[Symbol.asyncIterator]() {
+      for await (const r of rows) {
+        const rec: Record<string, unknown> = {};
+        columns.forEach((c, j) => { rec[c] = r[j]; });
+        yield rec;
+      }
+    },
+  };
+}
+
 /** tool: 导出源文件指定 sheet 为 CSV(与预览同视角,含表头行)。 */
 export async function toolExportSourceCsv(
   ws: Workspace,
@@ -1602,9 +1621,7 @@ export async function toolExportSourceCsv(
     const sheets = parseCsvFile(filePath, { headerRow: opts?.headerRow ?? 1 });
     const sheet = (opts?.sheetName ? sheets.find((s) => s.sheetName === opts.sheetName) : undefined) ?? sheets[0];
     const columns = sheet ? sheet.headers : [];
-    const rows = sheet
-      ? { async *[Symbol.asyncIterator]() { for (const r of sheet.rows) yield r; } }
-      : [];
+    const rows = sheet ? positionalRowsToRecords(columns, sheet.rows) : [];
     const n = await writeRowsToCsvFile(file, columns, rows);
     return { file, rows: n };
   }
@@ -1613,7 +1630,7 @@ export async function toolExportSourceCsv(
     stream = await readExcelSheetStream(filePath, undefined, { headerRow: opts?.headerRow ?? 1 });
   }
   const columns = stream ? stream.headers : [];
-  const n = await writeRowsToCsvFile(file, columns, stream ? stream.rows : []);
+  const n = await writeRowsToCsvFile(file, columns, stream ? positionalRowsToRecords(columns, stream.rows) : []);
   return { file, rows: n };
 }
 ```

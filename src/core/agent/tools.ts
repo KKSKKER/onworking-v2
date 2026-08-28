@@ -1,7 +1,7 @@
 // src/core/agent/tools.ts
 // AI 工具函数层:SVG 泳道图里 AI(Agent)调用的每个 tool 封装成一个函数。
 // 入参 AI 友好,返回结构化结果(含下一步可用的项目状态)。底层复用 core。
-import { copyFileSync, mkdirSync, existsSync, writeFileSync, rmSync, unlinkSync } from 'node:fs';
+import { copyFileSync, mkdirSync, existsSync, rmSync, unlinkSync } from 'node:fs';
 import { basename, dirname, join, resolve, relative, sep } from 'node:path';
 import { openWorkspace, masterDbPath, type Workspace } from '../workspace/workspace';
 import { loadSettings, saveSettings, type WorkspaceSettings, type AiOpenMode } from '../workspace/settings';
@@ -14,7 +14,8 @@ import {
 } from '../bigtable/store';
 import type { BigTableConfig, BigTableField } from '../bigtable/schema';
 import { scanSourceDir, type ScannedFile } from '../ingest/scanner';
-import { parseCsvFile, parseExcelFile, parseExcelSheet, type ParsedSheet } from '../ingest/parser';
+import { parseCsvFile, parseExcelFile, parseExcelSheet, readExcelSheetStream, type ParsedSheet } from '../ingest/parser';
+import { writeRowsToCsvFile } from '../export/csv';
 import { detectSourceConfig } from '../pipeline/setup';
 import { savePipeline, listPipelines, loadPipeline, listPipelinesForBigTable } from '../pipeline/store';
 import { PipelineEngine, type RunSummary, type TableInfo, type QueryOutcome } from '../pipeline/engine';
@@ -44,51 +45,50 @@ export function toolCreateBigTable(ws: Workspace, folder: string, config: BigTab
   saveBigTableConfig(ws, folder, config);
 }
 
-/** CSV 字段转义(RFC 4180):含逗号/引号/换行时用双引号包裹,内部引号翻倍。 */
-function csvEscape(v: unknown): string {
-  if (v === null || v === undefined) return '';
-  const s = String(v);
-  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
 /** tool: 导出大表数据到 CSV 文件。缺省不含血缘列,写 `<工作区根>/exports/<tableName>.csv`。未清洗/空表导出空 CSV(表头取配置字段名)。 */
-export function toolExportBigTableCsv(
+export async function toolExportBigTableCsv(
   ws: Workspace,
   folder: string,
   opts?: { path?: string; includeLineage?: boolean },
-): { file: string; rows: number } {
+): Promise<{ file: string; rows: number }> {
   const cfg = loadBigTableConfig(ws, folder);
-  const dbPath = bigTableDbPath(ws, folder);
-  let rows: Record<string, unknown>[] = [];
-  if (existsSync(dbPath)) {
-    const db = openDatabase(dbPath);
-    try {
-      const tableExists = !!db
-        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?")
-        .get(cfg.tableName);
-      if (tableExists) {
-        rows = db.prepare(`SELECT * FROM "${cfg.tableName}"`).all() as Record<string, unknown>[];
-      }
-    } finally {
-      db.close();
-    }
-  }
-  const allCols = rows.length > 0 ? Object.keys(rows[0]) : cfg.fields.map((f) => f.name);
-  const cols = opts?.includeLineage ? allCols : allCols.filter((c) => !c.startsWith('__'));
-  const lines = [cols.join(',')];
-  for (const r of rows) lines.push(cols.map((c) => csvEscape(r[c])).join(','));
   const file = opts?.path ?? join(ws.root, 'exports', `${cfg.tableName}.csv`);
-  mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, lines.join('\n'), 'utf-8');
-  return { file, rows: rows.length };
+  const dbPath = bigTableDbPath(ws, folder);
+  const tableExists = existsSync(dbPath)
+    ? (() => {
+        const db = openDatabase(dbPath);
+        try {
+          return !!db
+            .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?")
+            .get(cfg.tableName);
+        } finally {
+          db.close();
+        }
+      })()
+    : false;
+  if (!tableExists) {
+    const headers = cfg.fields.map((f) => f.name);
+    const n = await writeRowsToCsvFile(file, headers, []);
+    return { file, rows: n };
+  }
+  const db = openDatabase(dbPath, { wal: false });
+  try {
+    const stmt = db.prepare(`SELECT * FROM "${cfg.tableName}"`);
+    const columns = stmt.columns().map((c) => c.name);
+    const keep = opts?.includeLineage ? columns : columns.filter((c) => !c.startsWith('__'));
+    const n = await writeRowsToCsvFile(file, keep, stmt.iterate() as IterableIterator<Record<string, unknown>>);
+    return { file, rows: n };
+  } finally {
+    db.close();
+  }
 }
 
 /** tool: 从总表导出查询结果到 CSV(交付清洗后的总表)。仅 SELECT/WITH。folder 给定时导出大表 DB。 */
-export function toolExportQueryCsv(
+export async function toolExportQueryCsv(
   ws: Workspace,
   sql: string,
   opts?: { path?: string; folder?: string },
-): { file: string; rows: number } {
+): Promise<{ file: string; rows: number }> {
   const trimmed = sql.trim();
   if (!/^(SELECT|WITH)\b/i.test(trimmed)) {
     throw new AppError({
@@ -98,16 +98,13 @@ export function toolExportQueryCsv(
       data: { sql },
     });
   }
+  const file = opts?.path ?? join(ws.root, 'exports', 'query.csv');
   const db = openDatabase(opts?.folder ? bigTableDbPath(ws, opts.folder) : masterDbPath(ws), { wal: false });
   try {
-    const rows = db.prepare(trimmed).all() as Record<string, unknown>[];
-    const cols = rows.length > 0 ? Object.keys(rows[0]) : [];
-    const lines = [cols.join(',')];
-    for (const r of rows) lines.push(cols.map((c) => csvEscape(r[c])).join(','));
-    const file = opts?.path ?? join(ws.root, 'exports', 'query.csv');
-    mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(file, lines.join('\n'), 'utf-8');
-    return { file, rows: rows.length };
+    const stmt = db.prepare(trimmed);
+    const columns = stmt.columns().map((c) => c.name);
+    const n = await writeRowsToCsvFile(file, columns, stmt.iterate() as IterableIterator<Record<string, unknown>>);
+    return { file, rows: n };
   } finally {
     db.close();
   }
@@ -144,25 +141,48 @@ export function toolGetBigTableContext(ws: Workspace, folder: string): {
   return { folder, sourceDir: bigTableSourceDir(ws, folder), config, rules, pipelines };
 }
 
+/**
+ * 位置数组行 → record 行(按列序映射,缺列 undefined)。源 sheet 行是 unknown[](非 record),
+ * 而 CSV 写入器按列名取 r[c];此处转换与旧实现 cols.map((_,j)=>csvEscape(row[j])) 字节等价。
+ */
+function positionalRowsToRecords(
+  columns: string[],
+  rows: Iterable<unknown[]> | AsyncIterable<unknown[]>,
+): AsyncIterable<Record<string, unknown>> {
+  return {
+    async *[Symbol.asyncIterator]() {
+      for await (const r of rows) {
+        const rec: Record<string, unknown> = {};
+        columns.forEach((c, j) => { rec[c] = r[j]; });
+        yield rec;
+      }
+    },
+  };
+}
+
 /** tool: 导出源文件指定 sheet 为 CSV(与预览同视角,含表头行)。 */
-export function toolExportSourceCsv(
+export async function toolExportSourceCsv(
   ws: Workspace,
   filePath: string,
   opts?: { sheetName?: string; headerRow?: number; path?: string },
-): { file: string; rows: number } {
-  const headerRow = opts?.headerRow ?? 1;
-  const sheets = filePath.toLowerCase().endsWith('.csv')
-    ? parseCsvFile(filePath, { headerRow })
-    : parseExcelFile(filePath, { headerRow });
-  const sheet = (opts?.sheetName ? sheets.find((s) => s.sheetName === opts.sheetName) : undefined) ?? sheets[0];
-  const cols = sheet.headers;
-  const lines = [cols.join(',')];
-  for (const row of sheet.rows) lines.push(cols.map((_, j) => csvEscape(row[j])).join(','));
+): Promise<{ file: string; rows: number }> {
   const base = basename(filePath).replace(/\.(xlsx|xls|csv)$/i, '');
   const file = opts?.path ?? join(ws.root, 'exports', `${base}.csv`);
-  mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, lines.join('\n'), 'utf-8');
-  return { file, rows: sheet.rows.length };
+  if (filePath.toLowerCase().endsWith('.csv')) {
+    const sheets = parseCsvFile(filePath, { headerRow: opts?.headerRow ?? 1 });
+    const sheet = (opts?.sheetName ? sheets.find((s) => s.sheetName === opts.sheetName) : undefined) ?? sheets[0];
+    const columns = sheet ? sheet.headers : [];
+    const rows = sheet ? positionalRowsToRecords(columns, sheet.rows) : [];
+    const n = await writeRowsToCsvFile(file, columns, rows);
+    return { file, rows: n };
+  }
+  let stream = await readExcelSheetStream(filePath, opts?.sheetName, { headerRow: opts?.headerRow ?? 1 });
+  if (!stream && opts?.sheetName) {
+    stream = await readExcelSheetStream(filePath, undefined, { headerRow: opts?.headerRow ?? 1 });
+  }
+  const columns = stream ? stream.headers : [];
+  const n = await writeRowsToCsvFile(file, columns, stream ? positionalRowsToRecords(columns, stream.rows) : []);
+  return { file, rows: n };
 }
 
 /** tool: 给大表增加源文件 —— 拷贝到大表自己的 source/ 目录。同名文件:overwrite=false(缺省)跳过,overwrite=true 覆盖。 */
