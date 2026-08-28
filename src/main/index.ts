@@ -1,6 +1,7 @@
 // src/main/index.ts — Electron 主进程
 // 窗口 + IPC 路由。前端经 CLI 桥执行:main 持有 onw CLI 子进程,转发 IpcRequest 并逐行回推输出。
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { saveCsvDialog, type SaveDialogLike } from './dialogs';
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import { watch } from 'node:fs';
@@ -88,6 +89,11 @@ ipcMain.handle('onw:pick-directory', async () => {
   const res = await dialog.showOpenDialog({ properties: ['openDirectory'] });
   return res.canceled ? null : (res.filePaths[0] ?? null);
 });
+
+// 保存 CSV 对话框桥(UI 专属):导出前让用户选保存路径。
+ipcMain.handle('onw:save-csv', async (_e, payload: { defaultName: string }) =>
+  saveCsvDialog(dialog as unknown as SaveDialogLike, payload.defaultName)
+);
 
 // CLI 桥通道:前端命令经 CLI 子进程执行,结果经 cli:event/cli:stderr 逐行回推。
 ipcMain.on('cli:command', (_event, request: IpcRequest) => {

@@ -11,6 +11,7 @@ declare global {
       pickWorkspace(): Promise<string | null>;
       pickFiles(): Promise<string[]>;
       pickDirectory(): Promise<string | null>;
+      pickSaveCsv(defaultName: string): Promise<string | null>;
     };
   }
 }

@@ -137,17 +137,22 @@ export function PreviewView() {
       ? `大表: ${selectedFolder}`
       : '(未选择)';
 
-  // 导出 CSV:大表→bigtable.exportCsv;源文件→setup.exportCsv(同预览视角的 sheet+表头行)
+  // 导出 CSV:大表→bigtable.exportCsv;源文件→setup.exportCsv(同预览视角的 sheet+表头行)。导出前先弹保存框。
   async function handleExport() {
     setExportMsg('');
     if (selectedFile) {
-      const res = await sendCli({ cmd: 'setup.exportCsv', filePath: selectedFile, sheetName: sheet || undefined, headerRow });
+      const base = fileNameOf(selectedFile).replace(/\.(xlsx|xls|csv)$/i, '');
+      const path = await window.onw.pickSaveCsv(`${base}.csv`);
+      if (!path) return;
+      const res = await sendCli({ cmd: 'setup.exportCsv', filePath: selectedFile, sheetName: sheet || undefined, headerRow, path });
       if (res.ok) {
         const d = res.data as { file: string; rows: number };
         setExportMsg(`已导出: ${d.file} (${d.rows} 行)`);
       } else setExportMsg(`导出失败: ${res.error.message}`);
     } else if (selectedFolder) {
-      const res = await sendCli({ cmd: 'bigtable.exportCsv', folder: selectedFolder });
+      const path = await window.onw.pickSaveCsv(`${selectedFolder}.csv`);
+      if (!path) return;
+      const res = await sendCli({ cmd: 'bigtable.exportCsv', folder: selectedFolder, path });
       if (res.ok) {
         const d = res.data as { file: string; rows: number };
         setExportMsg(`已导出: ${d.file} (${d.rows} 行)`);

@@ -18,6 +18,7 @@ interface QueryResult {
   rowCount: number;
   changes?: number;
   lastInsertRowid?: number | bigint;
+  truncated?: boolean;
 }
 
 /** 判断语句是否写(非 SELECT/WITH 开头视为写)。 */
@@ -81,9 +82,11 @@ export function SqlView() {
   }
 
   async function handleExport() {
+    const path = await window.onw.pickSaveCsv('query.csv');
+    if (!path) return;
     setExportMsg('');
     setBusy(true);
-    const res = await sendCli(dbSource === 'master' ? { cmd: 'query.exportCsv', sql } : { cmd: 'query.exportCsv', sql, folder: dbSource });
+    const res = await sendCli(dbSource === 'master' ? { cmd: 'query.exportCsv', sql, path } : { cmd: 'query.exportCsv', sql, folder: dbSource, path });
     setBusy(false);
     if (res.ok) setExportMsg(`已导出: ${(res.data as { file: string; rows: number }).file} (${(res.data as { rows: number }).rows} 行)`);
     else setExportMsg(`导出失败: ${res.error.message}`);
@@ -196,6 +199,11 @@ export function SqlView() {
             <span style={{ color: 'red' }}>{err}</span>
             {exportMsg && <span style={{ color: '#8b949e', fontSize: 11 }}>{exportMsg}</span>}
           </div>
+          {result?.truncated && (
+            <p style={{ color: '#9a6700', fontSize: 12, margin: '4px 0' }}>
+              结果已截断到 5000 行,如需完整数据请导出 CSV
+            </p>
+          )}
           {result && result.rows.length > 0 && (
             <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
               <PaginationBar page={page} pageSize={PAGE_SIZE} total={result.rowCount} onPageChange={setPage} />

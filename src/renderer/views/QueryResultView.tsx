@@ -45,8 +45,10 @@ export function QueryResultView({ params }: IDockviewPanelProps) {
   }, [runSql]);
 
   async function handleExport() {
+    const path = await window.onw.pickSaveCsv('result.csv');
+    if (!path) return;
     setExportMsg('');
-    const res = await sendCli({ cmd: 'query.exportCsv', sql: runSql });
+    const res = await sendCli({ cmd: 'query.exportCsv', sql: runSql, path });
     if (res.ok) {
       const d = res.data as { file: string; rows: number };
       setExportMsg(`已导出: ${d.file} (${d.rows} 行)`);

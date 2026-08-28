@@ -25,4 +25,6 @@ contextBridge.exposeInMainWorld('onw', {
   pickWorkspace: (): Promise<string | null> => ipcRenderer.invoke('onw:pick-workspace') as Promise<string | null>,
   pickFiles: (): Promise<string[]> => ipcRenderer.invoke('onw:pick-files') as Promise<string[]>,
   pickDirectory: (): Promise<string | null> => ipcRenderer.invoke('onw:pick-directory') as Promise<string | null>,
+  pickSaveCsv: (defaultName: string): Promise<string | null> =>
+    ipcRenderer.invoke('onw:save-csv', { defaultName }) as Promise<string | null>,
 });

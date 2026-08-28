@@ -36,6 +36,7 @@ export function installMockOnw(): void {
     pickWorkspace: async (): Promise<string | null> => 'D:/演示工作区',
     pickFiles: async (): Promise<string[]> => ['D:/data/工资表2025-01.xlsx', 'D:/data/工资表2025-02.xlsx'],
     pickDirectory: async (): Promise<string | null> => 'D:/data',
+    pickSaveCsv: async (defaultName: string): Promise<string | null> => `D:/演示工作区/exports/${defaultName}`,
   };
 }
 
