@@ -1889,7 +1889,7 @@ git commit -m "feat(ui): 导出弹保存框 + SQL 截断提示"
 
 - [ ] **Step 1: 加失败测试**
 
-`tests/core/pipeline-engine.test.ts` 追加(复用该文件既有 `ws`/`savePipeline`/`bigTableDbPath`/`openDatabase`/`dbPath()`;`savePipeline` 已在文件 import):
+`tests/core/pipeline-engine.test.ts` 追加(复用该文件既有 `ws`/`savePipeline`/`bigTableDbPath`/`openDatabase`/`masterDbPath`;`savePipeline` 与 `masterDbPath` 已在文件 import)。注意:sql-clean 物化进**总表 master.db**(engine 以 `openDatabase(masterDbPath(ws))` 调用 `runSqlCleanPipeline`),不是 onworking.db —— 断言须用 `masterDbPath(ws)`(同 Task 5 的 `big` 表用例;文件里残留的 `dbPath()` 辅助已废弃):
 
 ```ts
 it('sql-clean 游标物化 12000 行(多批事务)', async () => {
@@ -1898,6 +1898,7 @@ it('sql-clean 游标物化 12000 行(多批事务)', async () => {
   await eng.run('c1');
   const btPath = bigTableDbPath(ws, 'seq');
   const btdb = openDatabase(btPath, { wal: false });
+  btdb.exec('DELETE FROM seq'); // 清掉 clean 已导入的 2 行源数据,保证精确 12000 行(否则总数是 12002)
   const ins = btdb.prepare('INSERT INTO seq (date, debit) VALUES (?, ?)');
   const tx = btdb.transaction(() => { for (let i = 0; i < 12000; i++) ins.run('2024-01', i); });
   tx();
@@ -1906,7 +1907,8 @@ it('sql-clean 游标物化 12000 行(多批事务)', async () => {
   const r = await eng.run('m1'); // m1: SELECT date, debit FROM "bt_seq".seq → resultTable 'seq'
   expect(r.ok).toBe(true);
   expect(r.rows).toBe(12000);
-  const db = openDatabase(dbPath());
+  // sql-clean 物化到总表 master.db(不是 onworking.db)
+  const db = openDatabase(masterDbPath(ws));
   const n = (db.prepare('SELECT COUNT(*) AS n FROM seq').get() as { n: number }).n;
   expect(n).toBe(12000);
   db.close();
@@ -1923,7 +1925,7 @@ it('sql-clean 空结果集仍建 (empty INTEGER)', async () => {
   const r = await eng.run('m2');
   expect(r.ok).toBe(true);
   expect(r.rows).toBe(0);
-  const db = openDatabase(dbPath());
+  const db = openDatabase(masterDbPath(ws));
   const cols = db.prepare('PRAGMA table_info(empty_out)').all() as { name: string }[];
   expect(cols.map((c) => c.name)).toEqual(['empty']);
   db.close();
@@ -1936,47 +1938,78 @@ it('sql-clean 空结果集仍建 (empty INTEGER)', async () => {
 Run: `npx vitest run tests/core/pipeline-engine.test.ts`
 Expected: 现有实现 `.all()` 也能通过行数用例,但**空结果用例会失败**:旧 `.all()` 后 `Object.keys(rows[0])` 为空 → 建 `(empty INTEGER)`(实际上旧行为也建)……真正的差异在实现层;至少 `r.rows` 计数、PRAGMA 断言需对照新行为。若两个新用例意外全过,说明实现已等价,直接进 Step 3 的改造并保留用例作为回归。
 
-- [ ] **Step 3: 重写物化段**
+- [ ] **Step 3: 重写物化段(双连接;原单连接 iterate 方案与 better-sqlite3 不兼容)**
 
-`src/core/pipeline/sql-clean-runner.ts` 把第 66-85 行的「执行 SQL 取结果 + 物化」段替换为:
+> **执行期发现(2026-08-29):** better-sqlite3 同一连接上,`iterate()` 迭代器未耗尽时执行任何其他语句(如批次 `INSERT`)都会抛 `This database connection is busy executing a query`(裸脚本验证:中途 INSERT 失败,耗尽后成功)。因此**不能在主库连接上边迭代边写**。修正为**双连接**:读连接(独立打开同一 master.db,`{wal:false}`)负责 ATTACH + `stmt.iterate()` 流式取行;写连接(引擎传入的 `masterDb`)专职 `DROP/CREATE/INSERT` 分批物化。SELECT 只读 ATTACH 库、不读主库,journal 模式下写连接并发写不冲突(裸脚本验证通过)。计数修正:`first.value` 已放入首批批次,`inserted` 从 **0** 起算(计划原稿 `=1` 会把首行重复计数,2 行源 → 误报 3 行)。读连接在 `finally` 中 `iter.return()`(未耗尽也必须 return,否则连接保持 busy)+ `close()`(关闭即自动 DETACH),避免残留文件锁导致 Windows `EPERM`。
+
+把 `src/core/pipeline/sql-clean-runner.ts` 的「执行 SQL 取结果 + 物化」段替换为:
 
 ```ts
-  // 2. 执行清洗/汇总 SQL(读 ATTACH 库),游标取结果(不物化全量)
-  const stmt = masterDb.prepare(cfg.sql);
-  const iter = stmt.iterate() as IterableIterator<Record<string, unknown>>;
+  // 1. 读连接:ATTACH 各大表 DB(别名 = bt_<大表>;SQL 用 "bt_序时账".seq 引用)
+  //    读连接与写连接(masterDb)指向同一 master.db 文件;SELECT 只读 ATTACH 库,不锁主库,
+  //    journal 模式下写连接可并发 DROP/CREATE/INSERT。
+  const readDb = openDatabase(masterDbPath(ws), { wal: false });
+  let iter: IterableIterator<Record<string, unknown>> | null = null;
+  try {
+    for (const folder of cfg.bigTables) {
+      const path = bigTableDbPath(ws, folder).replace(/\\/g, '/').replace(/'/g, "''");
+      const alias = aliasOf(folder);
+      try {
+        readDb.exec(`ATTACH DATABASE '${path}' AS "${qt(alias)}"`);
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        throw new AppError({
+          module: 'pipeline/sql-clean',
+          code: 'SQLCLEAN_ATTACH_FAILED',
+          message: `cannot attach big table "${folder}": ${detail}`,
+          data: { folder, path },
+        });
+      }
+    }
 
-  // 3. 物化到总表(覆盖式)。显式 "main". 限定,避免误删附加库(大表)的同名表。
-  const mainTable = `main."${qt(cfg.resultTable)}"`;
-  const first = iter.next();
-  if (first.done) {
-    // 空结果集:保留旧行为 —— 建 (empty INTEGER) 占位表
+    // 2. 执行清洗/汇总 SQL(读 ATTACH 库),游标取结果(不物化全量,峰值内存与行数无关)
+    const stmt = readDb.prepare(cfg.sql);
+    iter = stmt.iterate() as IterableIterator<Record<string, unknown>>;
+
+    // 3. 物化到总表(覆盖式)。显式 "main". 限定,避免误删附加库(大表)的同名表。
+    const mainTable = `main."${qt(cfg.resultTable)}"`;
+    const first = iter.next();
+    if (first.done) {
+      // 空结果集:保留旧行为 —— 建 (empty INTEGER) 占位表
+      masterDb.exec(`DROP TABLE IF EXISTS ${mainTable}`);
+      masterDb.exec(`CREATE TABLE ${mainTable} (empty INTEGER)`);
+      return { pipelineId: cfg.id, rows: 0 };
+    }
+    const columns = stmt.columns().map((c) => c.name);
     masterDb.exec(`DROP TABLE IF EXISTS ${mainTable}`);
-    masterDb.exec(`CREATE TABLE ${mainTable} (empty INTEGER)`);
-    return { pipelineId: cfg.id, rows: 0 };
-  }
-  const columns = stmt.columns().map((c) => c.name);
-  masterDb.exec(`DROP TABLE IF EXISTS ${mainTable}`);
-  const colDefs = columns.map((c) => `"${qt(c)}"`).join(', ');
-  masterDb.exec(`CREATE TABLE ${mainTable} (${colDefs})`);
-  const insert = masterDb.prepare(
-    `INSERT INTO ${mainTable} VALUES (${columns.map(() => '?').join(', ')})`,
-  );
-  const tx = masterDb.transaction((batch: Record<string, unknown>[]) => {
-    for (const r of batch) insert.run(columns.map((c) => (r[c] === undefined ? null : r[c])));
-  });
+    const colDefs = columns.map((c) => `"${qt(c)}"`).join(', ');
+    masterDb.exec(`CREATE TABLE ${mainTable} (${colDefs})`);
+    const insert = masterDb.prepare(
+      `INSERT INTO ${mainTable} VALUES (${columns.map(() => '?').join(', ')})`,
+    );
+    const tx = masterDb.transaction((batch: Record<string, unknown>[]) => {
+      for (const r of batch) insert.run(columns.map((c) => (r[c] === undefined ? null : r[c])));
+    });
 
-  let inserted = 1; // first.value 已在下方批次里
-  let batch: Record<string, unknown>[] = [first.value];
-  for (const row of iter) {
-    batch.push(row);
-    if (batch.length >= 5000) { tx(batch); inserted += batch.length; batch = []; }
-  }
-  if (batch.length > 0) { tx(batch); inserted += batch.length; }
+    // 5000 行一批事务:读连接逐行流式消费 → 写连接分批物化。undefined → null 与旧 .all() 语义一致。
+    let inserted = 0; // first.value 已放入首批,从 0 起算避免重复计数
+    let batch: Record<string, unknown>[] = [first.value];
+    for (const row of iter) {
+      batch.push(row);
+      if (batch.length >= 5000) { tx(batch); inserted += batch.length; batch = []; }
+    }
+    if (batch.length > 0) { tx(batch); inserted += batch.length; }
 
-  // 4. DETACH 各大表(原样保留)
+    return { pipelineId: cfg.id, rows: inserted };
+  } finally {
+    if (iter) {
+      try { iter.return(); } catch { /* ignore */ }
+    }
+    readDb.close(); // 关闭读连接 → 自动 DETACH 各大表
+  }
 ```
 
-> `stmt.columns()` 对 0 行 SELECT 也返回列结构,所以「空结果」必须用 `iter.next()` 判空(不能靠 `columns.length === 0`)。`undefined → null` 与旧 `.all()` 后 `row[c]` 语义一致。ATTACH/DETACH 段、`SQLCLEAN_*` 校验段不动。注意把 `inserted` 初始化为 1 并从 `first.value` 起批,计数不含歧义。
+> `stmt.columns()` 对 0 行 SELECT 也返回列结构,所以「空结果」必须用 `iter.next()` 判空(不能靠 `columns.length === 0`)。`undefined → null` 与旧 `.all()` 后 `row[c]` 语义一致。`SQLCLEAN_*` 校验段不动;新增 import `openDatabase`(db/database)与 `masterDbPath`(workspace/workspace)。
 
 - [ ] **Step 4: 跑测试确认通过**
 

@@ -205,4 +205,44 @@ describe('pipeline engine', () => {
     expect(toolFull.truncated).toBe(true);
     eng.close();
   });
+
+  it('sql-clean 游标物化 12000 行(多批事务)', async () => {
+    // 直接在大表 DB 造数据(绕开大文件导入耗时);需先跑 clean 建出大表结构
+    const eng = new PipelineEngine(ws);
+    await eng.run('c1');
+    const btPath = bigTableDbPath(ws, 'seq');
+    const btdb = openDatabase(btPath, { wal: false });
+    btdb.exec('DELETE FROM seq'); // 清掉 clean 已导入的源数据,保证精确 12000 行
+    const ins = btdb.prepare('INSERT INTO seq (date, debit) VALUES (?, ?)');
+    const tx = btdb.transaction(() => { for (let i = 0; i < 12000; i++) ins.run('2024-01', i); });
+    tx();
+    btdb.close();
+
+    const r = await eng.run('m1'); // m1: SELECT date, debit FROM "bt_seq".seq → resultTable 'seq'
+    expect(r.ok).toBe(true);
+    expect(r.rows).toBe(12000);
+    // sql-clean 物化到总表 master.db(不是 onworking.db)
+    const db = openDatabase(masterDbPath(ws));
+    const n = (db.prepare('SELECT COUNT(*) AS n FROM seq').get() as { n: number }).n;
+    expect(n).toBe(12000);
+    db.close();
+    eng.close();
+  });
+
+  it('sql-clean 空结果集仍建 (empty INTEGER)', async () => {
+    savePipeline(ws, {
+      kind: 'sql-clean', id: 'm2', label: '', bigTables: ['seq'],
+      sql: 'SELECT date FROM "bt_seq".seq WHERE 1 = 0', resultTable: 'empty_out', createdAt: '',
+    });
+    const eng = new PipelineEngine(ws);
+    await eng.run('c1'); // 先跑 clean 建出大表 seq(否则 ATTACH 的库没有表,SELECT 会失败)
+    const r = await eng.run('m2');
+    expect(r.ok).toBe(true);
+    expect(r.rows).toBe(0);
+    const db = openDatabase(masterDbPath(ws));
+    const cols = db.prepare('PRAGMA table_info(empty_out)').all() as { name: string }[];
+    expect(cols.map((c) => c.name)).toEqual(['empty']);
+    db.close();
+    eng.close();
+  });
 });
