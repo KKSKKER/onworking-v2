@@ -919,11 +919,12 @@ describe('insertRowsInBatches', () => {
   });
 
   it('insert 失败整批抛出 ETL_INSERT_FAILED 并记日志(与 writeBigTable 一致)', async () => {
+    // 注意:SQLite 列亲和性会把 'not-an-int' 存进 INTEGER 列而不报错,必须用 NOT NULL + null 强制失败。
     const db = openDatabase(':memory:');
     const out: LogEntry[] = [];
     logger.addSink(arraySink(out));
     await expect(
-      insertRowsInBatches(db, 't', [{ name: 'n', sqlType: 'INTEGER' }], [{ n: 1 }, { n: 'not-an-int' }, { n: 3 }], {})
+      insertRowsInBatches(db, 't', [{ name: 'n', sqlType: 'TEXT NOT NULL' }], [{ n: 'a' }, { n: null }, { n: 'c' }], {})
     ).rejects.toThrow();
     expect(out.some((e) => e.level === 'error' && e.module === 'etl/writer')).toBe(true);
     logger.clearSinks();

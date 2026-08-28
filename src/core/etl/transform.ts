@@ -15,18 +15,31 @@ export interface TransformedRow {
   [outputName: string]: string | number | null;
 }
 
-export function applyMapping(sheet: ParsedSheet, mappings: FieldMapping[]): TransformedRow[] {
+/** 表头 → 列号索引(遍历覆盖:同名列取末次出现,与旧 applyMapping 的 colIndex 构建一致)。 */
+export function buildColIndex(headers: string[]): Map<string, number> {
   const colIndex = new Map<string, number>();
-  sheet.headers.forEach((h, i) => colIndex.set(h, i));
-  return sheet.rows.map((row) => {
-    const out: TransformedRow = {};
-    for (const m of mappings) {
-      const idx = colIndex.get(m.sourceHeader);
-      const raw = idx === undefined ? undefined : row[idx];
-      out[m.outputName] = applyTransform(raw, m.transform);
-    }
-    return out;
-  });
+  headers.forEach((h, i) => colIndex.set(h, i));
+  return colIndex;
+}
+
+/** 单行映射:与 applyMapping 的逐行逻辑完全一致(缺列 raw undefined → applyTransform → null)。 */
+export function applyMappingRow(
+  row: unknown[],
+  colIndex: Map<string, number>,
+  mappings: FieldMapping[],
+): TransformedRow {
+  const out: TransformedRow = {};
+  for (const m of mappings) {
+    const idx = colIndex.get(m.sourceHeader);
+    const raw = idx === undefined ? undefined : row[idx];
+    out[m.outputName] = applyTransform(raw, m.transform);
+  }
+  return out;
+}
+
+export function applyMapping(sheet: ParsedSheet, mappings: FieldMapping[]): TransformedRow[] {
+  const colIndex = buildColIndex(sheet.headers);
+  return sheet.rows.map((row) => applyMappingRow(row, colIndex, mappings));
 }
 
 function applyTransform(v: unknown, transform: ValueTransform): string | number | null {
