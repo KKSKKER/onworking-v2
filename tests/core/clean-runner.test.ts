@@ -173,4 +173,17 @@ describe('clean pipeline runner', () => {
     expect(out.some((e) => e.level === 'info' && e.message === 'clean start')).toBe(true);
     expect(out.some((e) => e.level === 'info' && e.message === 'clean complete')).toBe(true);
   });
+
+  it('流式:不物化 allRows——进度无 map 阶段,write 只发一次 100,parse 到 70', async () => {
+    const stages: { stage: string; percent: number }[] = [];
+    await runCleanPipeline(workspace, db, cfg, bigTable, (p) => stages.push(p));
+    expect(stages[0]).toEqual({ stage: 'scan', percent: 0 });
+    expect(stages.some((s) => s.stage === 'map')).toBe(false);
+    const parse = stages.filter((s) => s.stage === 'parse');
+    expect(parse.length).toBeGreaterThan(0);
+    expect(Math.max(...parse.map((s) => s.percent))).toBe(70);
+    const write = stages.filter((s) => s.stage === 'write');
+    expect(write).toHaveLength(1);
+    expect(write[0]).toEqual({ stage: 'write', percent: 100 });
+  });
 });

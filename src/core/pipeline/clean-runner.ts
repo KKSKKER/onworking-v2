@@ -6,9 +6,9 @@ import type Database from 'better-sqlite3';
 import { basename } from 'node:path';
 import type { Workspace } from '../workspace/workspace';
 import { scanSourceDir } from '../ingest/scanner';
-import { parseCsvFile, parseExcelFile, parseExcelSheet } from '../ingest/parser';
-import { applyMapping, type FieldMapping } from '../etl/transform';
-import { writeBigTable, type ColumnDef } from '../etl/writer';
+import { parseCsvFile, readExcelSheetStream, type SheetRowStream } from '../ingest/parser';
+import { applyMappingRow, buildColIndex, type FieldMapping } from '../etl/transform';
+import { insertRowsInBatches, type ColumnDef } from '../etl/writer';
 import { attachLineage, lineageColumnNames } from '../lineage';
 import { AppError } from '../errors';
 import { logger } from '../logging';
@@ -106,66 +106,73 @@ export async function runCleanPipeline(
   const colDefs = buildColDefs(colMappings, bigTable);
 
   const extractedAt = new Date().toISOString();
-  const allRows: Record<string, unknown>[] = [];
   const warnings = new Set<string>();
   const seenSource = new Set<string>();
 
-  // 按规则独立处理:每条规则只把自己的映射应用到它匹配的文件
-  let processedFiles = 0;
-  for (const rule of rules) {
-    const compiled = compileRule(rule);
-    const ruleMappings = compiled.mappings;
-    for (const source of compiled.sources) {
-      const srcKey = `${source.pattern}|${source.sheetName ?? ''}|${source.headerRow}`;
-      if (seenSource.has(srcKey)) continue;
-      seenSource.add(srcKey);
-      const re = patternToRegex(source.pattern);
-      const matched = files.filter((f) => re.test(f.relPath) || re.test(f.path));
-      for (const file of matched) {
-        processedFiles++;
-        onProgress?.({ stage: 'parse', percent: Math.round((processedFiles / files.length) * 40) });
-        try {
-          // 有 sheetName → 只解析该 sheet(避免全表解析被「格式蔓延」的假大范围拖慢);否则取第一张
-          const isCsv = file.path.toLowerCase().endsWith('.csv');
-          const sheet = source.sheetName
-            ? (isCsv
-                ? parseCsvFile(file.path, { headerRow: source.headerRow }).find((s) => s.sheetName === source.sheetName)
-                : parseExcelSheet(file.path, source.sheetName, { headerRow: source.headerRow }))
-            : (isCsv
-                ? parseCsvFile(file.path, { headerRow: source.headerRow })[0]
-                : parseExcelFile(file.path, { headerRow: source.headerRow })[0]);
-          if (!sheet) continue; // 目标 sheet 不存在 → 该文件跳过
-          // 重复表头检测:同名 sourceHeader 多次出现 → 映射只取其一,其余列数据不入(静默丢列)
-          for (const m of ruleMappings) {
-            const n = sheet.headers.filter((h) => h === m.sourceHeader).length;
-            if (n > 1) {
-              warnings.add(`表头「${m.sourceHeader}」出现 ${n} 次,映射只取其一,其余列数据不入`);
+  // 按规则独立处理:每条规则只把自己的映射应用到它匹配的文件。
+  // produceRows() 是惰性 AsyncGenerator:insertRowsInBatches 边拉边写,全程不物化 allRows。
+  async function* produceRows(): AsyncGenerator<Record<string, unknown>> {
+    let processedFiles = 0;
+    for (const rule of rules) {
+      const compiled = compileRule(rule);
+      const ruleMappings = compiled.mappings;
+      for (const source of compiled.sources) {
+        const srcKey = `${source.pattern}|${source.sheetName ?? ''}|${source.headerRow}`;
+        if (seenSource.has(srcKey)) continue;
+        seenSource.add(srcKey);
+        const re = patternToRegex(source.pattern);
+        const matched = files.filter((f) => re.test(f.relPath) || re.test(f.path));
+        for (const file of matched) {
+          processedFiles++;
+          onProgress?.({ stage: 'parse', percent: Math.round((processedFiles / files.length) * 70) });
+          try {
+            // 有 sheetName → 只解析该 sheet(避免全表解析被「格式蔓延」的假大范围拖慢);否则取第一张
+            const isCsv = file.path.toLowerCase().endsWith('.csv');
+            let stream: SheetRowStream | null;
+            if (isCsv) {
+              const sheets = parseCsvFile(file.path, { headerRow: source.headerRow });
+              const sheet = source.sheetName
+                ? sheets.find((s) => s.sheetName === source.sheetName)
+                : sheets[0];
+              stream = sheet
+                ? { sheetName: sheet.sheetName, headers: sheet.headers, rows: csvRows(sheet.rows) }
+                : null;
+            } else {
+              stream = await readExcelSheetStream(file.path, source.sheetName, { headerRow: source.headerRow });
             }
+            if (!stream) continue; // 目标 sheet 不存在 → 该文件跳过
+            // 重复表头检测:同名 sourceHeader 多次出现 → 映射只取其一,其余列数据不入(静默丢列)
+            for (const m of ruleMappings) {
+              const n = stream.headers.filter((h) => h === m.sourceHeader).length;
+              if (n > 1) {
+                warnings.add(`表头「${m.sourceHeader}」出现 ${n} 次,映射只取其一,其余列数据不入`);
+              }
+            }
+            const colIndex = buildColIndex(stream.headers);
+            let rowNo = 0;
+            for await (const row of stream.rows) {
+              const mapped = applyMappingRow(row, colIndex, ruleMappings);
+              attachLineage([mapped], {
+                sourceFile: file.path,
+                sourceSheet: stream.sheetName,
+                sourceRow: source.headerRow + 1 + rowNo,
+              }, extractedAt);
+              rowNo++;
+              yield mapped;
+            }
+          } catch (e) {
+            // 单个文件读不了(如密码保护/损坏)不拖垮整条管线:跳过并在告警里说明
+            warnings.add(`跳过无法读取的文件 ${basename(file.path)}: ${(e as Error).message}`);
           }
-          const mapped = applyMapping(sheet, ruleMappings);
-          attachLineage(mapped, { sourceFile: file.path, sourceSheet: sheet.sheetName, sourceRow: source.headerRow + 1 }, extractedAt);
-          // 不能 push(...mapped):单文件行数超过 V8 函数实参上限(~125k)会栈溢出。
-          // 旧上限 100k 恰好不触发;改大上限后大文件会崩在 try/catch 里被当「无法读取」跳过 → 0 行。
-          for (const row of mapped) allRows.push(row);
-        } catch (e) {
-          // 单个文件读不了(如密码保护/损坏)不拖垮整条管线:跳过并在告警里说明
-          warnings.add(`跳过无法读取的文件 ${basename(file.path)}: ${(e as Error).message}`);
         }
       }
     }
   }
 
-  onProgress?.({ stage: 'write', percent: 70 });
-  const result = await writeBigTable(
-    db,
-    bigTable.tableName,
-    colDefs,
-    allRows,
-    (p) => {
-      onProgress?.({ stage: 'write', percent: 70 + Math.round(p.percent * 0.3) });
-    },
-    { dropExisting: true }, // 合并 = 重建大表
-  );
+  const result = await insertRowsInBatches(db, bigTable.tableName, colDefs, produceRows(), {
+    dropExisting: true, // 合并 = 重建大表
+  });
+  onProgress?.({ stage: 'write', percent: 100 });
 
   logger.info(MODULE, 'clean complete', {
     pipelineId: cfg.id,
@@ -182,4 +189,11 @@ export async function runCleanPipeline(
     files: files.length,
     warnings: [...warnings],
   };
+}
+
+/** 把已物化的 CSV 行包成异步生成器(与 readExcelSheetStream 的 rows 同构)。 */
+function csvRows(rows: unknown[][]): AsyncGenerator<unknown[]> {
+  return (async function* () {
+    for (const r of rows) yield r;
+  })();
 }
