@@ -46,7 +46,7 @@ export const METADATA_ALLOWED = new Set([
   'state.summary', 'bigtable.list', 'pipeline.list', 'template.list', 'vcs.status', 'schema.tables', 'settings.get',
   // schema/配置命令:只写/读大表字段定义、sheet 名、映射规则、模板,不碰业务行数据。
   'bigtable.save', 'bigtable.get', 'bigtable.sourceFiles',
-  'setup.sheets', 'setup.detectSource',
+  'setup.sheets', 'setup.detectSource', 'setup.detectHeaders',
   'mapping.save', 'template.save',
   // 管线管理(建/删/跑管线 + 拷贝源文件):external 下开放给 AI。
   'pipeline.save', 'pipeline.run', 'pipeline.delete', 'bigtable.addFiles',

@@ -62,6 +62,16 @@ describe('mcp server', () => {
     expect(preview?.inputSchema.required).toEqual(['folder']);
   });
 
+  it('setup.detectHeaders is registered with filePath schema', async () => {
+    const res = await handleMcpRequest(session, { jsonrpc: '2.0', id: 1, method: 'tools/list' });
+    const tools = (res?.result as {
+      tools: { name: string; inputSchema: { properties?: Record<string, unknown>; required?: string[] } }[];
+    }).tools;
+    const t = tools.find((x) => x.name === 'setup.detectHeaders');
+    expect(t?.inputSchema.properties?.filePath).toBeTruthy();
+    expect(t?.inputSchema.required).toEqual(['filePath']);
+  });
+
   it('calls a tool and returns the dispatch result as text content', async () => {
     const res = await handleMcpRequest(session, {
       jsonrpc: '2.0',
@@ -159,6 +169,12 @@ describe('mcp server', () => {
       params: { name: 'state.summary', arguments: {} },
     });
     expect(String((meta?.result as { content?: { text?: string }[] } | undefined)?.content?.[0]?.text ?? '')).not.toContain('AI_MODE_RESTRICTED');
+    // setup.detectHeaders 与 setup.detectSource 同级:external 下 metadata 类放行(读表头,不碰业务行数据)
+    const headers = await handleMcpRequest(session, {
+      jsonrpc: '2.0', id: 3, method: 'tools/call',
+      params: { name: 'setup.detectHeaders', arguments: { filePath: 'nope.xlsx' } },
+    });
+    expect(String((headers?.result as { content?: { text?: string }[] } | undefined)?.content?.[0]?.text ?? '')).not.toContain('AI_MODE_RESTRICTED');
     saveSettings(session.getCtx()!.ws, { name: 'ws', aiOpenMode: 'local' }); // 恢复
   });
 

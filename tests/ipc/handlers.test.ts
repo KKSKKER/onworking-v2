@@ -99,6 +99,31 @@ describe('ipc handlers', () => {
     if (res.ok) expect((res.data as { headers: string[] }).headers).toEqual(['日期', '借方金额']);
   });
 
+  it('setup.detectHeaders lists stacked table header candidates via ipc', async () => {
+    const f = join(dir, 'stacked.xlsx');
+    const aoa = [
+      ['日期', '借方金额'], // row 1:表1 表头
+      [20240101, 100],
+      [20240102, 200],
+      [20240103, 300],
+      ['', ''],
+      ['', ''],
+      ['序号', '金额'], // row 7:表2 表头
+      [1, 5],
+      [2, 6],
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Sheet1');
+    XLSX.writeFile(wb, f);
+    const res = await dispatch({ cmd: 'setup.detectHeaders', filePath: f }, ctx);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      const d = res.data as { candidates: { rowNumber: number; deviation: number; cells: string[] }[] };
+      expect(d.candidates.map((c) => c.rowNumber)).toEqual([1, 7]);
+      expect(d.candidates[0].cells).toEqual(['日期', '借方金额']);
+    }
+  });
+
   it('setup.detectSource honors sheetName', async () => {
     const f = join(dir, 'multi.xlsx');
     const wb = XLSX.utils.book_new();

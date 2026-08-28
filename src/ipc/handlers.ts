@@ -22,6 +22,7 @@ import type { ApiCommand, ApiResult, CommandPayloads, CommandResults, IpcRequest
 import {
   toolCreateBigTable,
   toolGetFileHeaders,
+  toolDetectHeaderCandidates,
   toolSetMapping,
   toolCreateCleaningPipeline,
   toolCreateSqlCleanPipeline,
@@ -122,6 +123,12 @@ export const handlers: { [K in SessionCommands]: HandlerFor<K> } = {
   'pipeline.recomputeByDependency': async (ctx, p) => ctx.getEngine().recomputeByDependency(p.trigger),
 
   'setup.detectSource': async (_ctx, p) => toolGetFileHeaders(p.filePath, p.sheetName).detected,
+  'setup.detectHeaders': async (_ctx, p) =>
+    toolDetectHeaderCandidates(p.filePath, p.sheetName, {
+      minScore: p.minScore,
+      deviationFloor: p.deviationFloor,
+      limit: p.limit,
+    }),
   'setup.sheets': async (_ctx, p) => {
     const sheets = p.filePath.toLowerCase().endsWith('.csv')
       ? parseCsvFile(p.filePath)

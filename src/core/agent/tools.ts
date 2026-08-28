@@ -15,6 +15,7 @@ import {
 import type { BigTableConfig, BigTableField } from '../bigtable/schema';
 import { scanSourceDir, type ScannedFile } from '../ingest/scanner';
 import { parseCsvFile, parseExcelFile, parseExcelSheet, readExcelSheetStream, type ParsedSheet } from '../ingest/parser';
+import { detectHeaderCandidates, type HeaderCandidate } from '../ingest/header-detect';
 import { writeRowsToCsvFile } from '../export/csv';
 import { detectSourceConfig } from '../pipeline/setup';
 import { savePipeline, listPipelines, loadPipeline, listPipelinesForBigTable } from '../pipeline/store';
@@ -282,6 +283,23 @@ export function toolGetFileHeaders(filePath: string, sheetName?: string): {
 } {
   const sheets = filePath.toLowerCase().endsWith('.csv') ? parseCsvFile(filePath) : parseExcelFile(filePath);
   return { sheets: sheets.map((s) => s.sheetName), detected: detectSourceConfig(filePath, sheetName) };
+}
+
+/** tool: 全表扫描列出「可能是表头」的行(含偏离值证据 + 行内容),供 AI 在多表纵向堆叠时挑选真正的表头。
+ *  sheetName 指定对哪个 sheet 检测;minScore/deviationFloor 收紧或放松候选门槛;limit 限制返回条数。 */
+export function toolDetectHeaderCandidates(
+  filePath: string,
+  sheetName?: string,
+  opts?: { minScore?: number; deviationFloor?: number; limit?: number },
+): { sheetName: string; candidates: HeaderCandidate[] } {
+  const sheets = filePath.toLowerCase().endsWith('.csv') ? parseCsvFile(filePath) : parseExcelFile(filePath);
+  const sheet = (sheetName ? sheets.find((s) => s.sheetName === sheetName) : undefined) ?? sheets[0];
+  let candidates = detectHeaderCandidates(sheet, {
+    minScore: opts?.minScore,
+    deviationFloor: opts?.deviationFloor,
+  });
+  if (opts?.limit !== undefined) candidates = candidates.slice(0, opts.limit);
+  return { sheetName: sheet.sheetName, candidates };
 }
 
 /** tool: 导入文件(扫描源目录,返回文件清单)。 */

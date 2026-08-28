@@ -21,6 +21,7 @@ describe('ai-gate isAiAllowed', () => {
     expect(isAiAllowed('external', 'bigtable.sourceFiles')).toBe(true);
     expect(isAiAllowed('external', 'setup.sheets')).toBe(true);
     expect(isAiAllowed('external', 'setup.detectSource')).toBe(true);
+    expect(isAiAllowed('external', 'setup.detectHeaders')).toBe(true);
     expect(isAiAllowed('external', 'mapping.save')).toBe(true);
     expect(isAiAllowed('external', 'template.save')).toBe(true);
     // 管线管理(建/删/跑 + 拷贝源文件)
