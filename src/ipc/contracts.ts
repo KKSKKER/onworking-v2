@@ -44,7 +44,7 @@ export interface CommandPayloads {
   'pipeline.recomputeAll': {};
   'pipeline.recomputeByDependency': { trigger: string };
   'setup.detectSource': { filePath: string; sheetName?: string };
-  'setup.detectHeaders': { filePath: string; sheetName?: string; minScore?: number; deviationFloor?: number; limit?: number };
+  'setup.detectHeaders': { filePath: string; sheetName?: string; minScore?: number; limit?: number };
   'setup.sheets': { filePath: string };
   'setup.preview': { filePath: string; sheetName?: string; headerRow?: number; offset?: number; limit?: number };
   'setup.exportCsv': { filePath: string; sheetName?: string; headerRow?: number; path?: string };

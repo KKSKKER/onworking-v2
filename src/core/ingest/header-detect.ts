@@ -39,28 +39,43 @@ export interface HeaderCandidate {
   rowNumber: number;
   /** scoreHeaderCandidate 得分(字符串密度)。 */
   score: number;
-  /** 偏离值 = score − 基线(非空行得分中位数):偏离越大越可能是表头。 */
+  /** 偏离值 = score − 基线(非空行得分众数):偏离越大越可能是表头。 */
   deviation: number;
   /** 行内容(字符串化,超长格截断),给 AI 看一眼。 */
   cells: string[];
 }
 
 export interface DetectCandidatesOptions {
-  /** 相对基线的偏离阈值,默认 3。 */
-  deviationFloor?: number;
-  /** 绝对最低分,默认 2。 */
+  /** 绝对最低分(挡单格标题等弱行),默认 3。 */
   minScore?: number;
   /** 单格最长字符(含截断标记),默认 60。 */
   cellTruncate?: number;
 }
 
-/** 全表扫描列出「可能是表头」的行:裁尾部空行 → 逐行打分(跳过中间空行)→ 基线 = 非空行得分中位数
- *  → 候选 = score≥minScore 且 deviation(=score−基线)≥floor,按偏离降序。整表无数据基线(如全字符串)时返回空。 */
+/** 众数;并列取分数较大的那个(阈值更严、候选更少)。 */
+function modeScore(scores: number[]): number {
+  const counts = new Map<number, number>();
+  for (const s of scores) counts.set(s, (counts.get(s) ?? 0) + 1);
+  let best = scores[0];
+  let bestN = 0;
+  for (const [s, n] of counts) {
+    if (n > bestN || (n === bestN && s > best)) {
+      best = s;
+      bestN = n;
+    }
+  }
+  return best;
+}
+
+/** 全表扫描列出「可能是表头」的行:裁尾部空行 → 逐行打分(跳过中间空行)→ 基线 = 非空行得分众数
+ *  → 候选 = score≥minScore 且 score>基线 且 该分数出现≤2 次,按偏离降序。
+ *  基线代表「常规数据行」的分数;表头是「稀有高分行」(同分的少数派),数据行同分会以 >2 次出现被排除。
+ *  整表退化(无高于众数的稀有行,如全字符串)时返回空。 */
 export function detectHeaderCandidates(
   sheet: ParsedSheet,
   opts: DetectCandidatesOptions = {},
 ): HeaderCandidate[] {
-  const { deviationFloor = 3, minScore = 2, cellTruncate = 60 } = opts;
+  const { minScore = 3, cellTruncate = 60 } = opts;
   const fullRows: unknown[][] = [sheet.headers, ...sheet.rows];
 
   // 裁尾部全空行
@@ -80,13 +95,12 @@ export function detectHeaderCandidates(
   }
   if (scored.length === 0) return [];
 
-  // 基线 = 所有非空行得分的中位数,代表「常规数据行」的格式
-  const sorted = scored.map((s) => s.score).sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  const median = sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  const mode = modeScore(scored.map((s) => s.score));
+  const freq = new Map<number, number>();
+  for (const s of scored) freq.set(s.score, (freq.get(s.score) ?? 0) + 1);
 
   return scored
-    .map((s) => ({ ...s, deviation: s.score - median }))
-    .filter((c) => c.score >= minScore && c.deviation >= deviationFloor)
+    .map((s) => ({ ...s, deviation: s.score - mode }))
+    .filter((c) => c.score >= minScore && c.score > mode && (freq.get(c.score) ?? 0) <= 2)
     .sort((a, b) => b.deviation - a.deviation || a.rowNumber - b.rowNumber);
 }

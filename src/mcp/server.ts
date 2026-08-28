@@ -86,7 +86,7 @@ export const TOOL_SCHEMAS: Record<string, ToolSchema> = {
   'pipeline.recomputeAll': schema({}),
   'pipeline.recomputeByDependency': schema({ trigger: str }, ['trigger']),
   'setup.detectSource': schema({ filePath: str, sheetName: str }, ['filePath']),
-  'setup.detectHeaders': schema({ filePath: str, sheetName: str, minScore: int, deviationFloor: int, limit: int }, ['filePath']),
+  'setup.detectHeaders': schema({ filePath: str, sheetName: str, minScore: int, limit: int }, ['filePath']),
   'setup.sheets': schema({ filePath: str }, ['filePath']),
   'setup.preview': schema({ filePath: str, sheetName: str, headerRow: int, offset: int, limit: int }, ['filePath']),
   'setup.exportCsv': schema({ filePath: str, sheetName: str, headerRow: int, path: str }, ['filePath']),

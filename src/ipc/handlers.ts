@@ -126,7 +126,6 @@ export const handlers: { [K in SessionCommands]: HandlerFor<K> } = {
   'setup.detectHeaders': async (_ctx, p) =>
     toolDetectHeaderCandidates(p.filePath, p.sheetName, {
       minScore: p.minScore,
-      deviationFloor: p.deviationFloor,
       limit: p.limit,
     }),
   'setup.sheets': async (_ctx, p) => {

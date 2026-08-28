@@ -136,7 +136,7 @@ MCP 模式通过 stdin/stdout 传输 JSON-RPC 2.0，可在任意 MCP 客户端�
 | 命令 | 用途 |
 |---|---|
 | `setup.sheets {filePath}` / `setup.detectSource {filePath}` / `setup.preview {filePath}` | 读源文件表头/预览 |
-| `setup.detectHeaders {filePath, sheetName?, minScore?, deviationFloor?, limit?}` | **堆叠多表**：读全表并列出所有候选表头行（每项含 `rowNumber`/`score`/`deviation` 偏离证据 + `cells` 内容，按偏离降序），挑出你要的那张表的表头行号再 `mapping.save`；扁平表/退化表返回空，回退 `setup.detectSource` |
+| `setup.detectHeaders {filePath, sheetName?, minScore?, limit?}` | **堆叠多表**：读全表列出「稀有高分行」候选表头（基线 = 分数众数，`score > 众数` 且该分数出现 ≤2 次；每项含 `rowNumber`/`score`/`deviation` + `cells` 内容，按偏离降序），挑出你要的那张表的表头行号再 `mapping.save`；扁平表/退化表返回空，回退 `setup.detectSource` |
 | `query.run {sql, folder?}` | 查询/执行 SQL：**不填 `folder` 默认操作总表 master.db**；填 `folder` 则操作该大表自己的 DB。读（SELECT/WITH）返回行；写（INSERT/UPDATE/DELETE/DDL）直接改所选 DB、返回影响行数。写语句谨慎使用 |
 | `query.exportCsv {sql, path?, folder?}` | 跑 SELECT 落 CSV：不填 `folder` 从总表导出，填了从该大表 DB 导出 |
 | `template.list` / `template.save {template}` / `template.apply {name, sheet}` | 映射模板管理 |
