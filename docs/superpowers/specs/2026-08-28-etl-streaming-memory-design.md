@@ -1,8 +1,8 @@
-# ETL 内存流式化设计(Phase 1 + 2 合并:含 ExcelJS 真流式解析)
+# ETL 内存流式化设计(Phase 1 + 2 合并:含自研流式解析)
 
 日期:2026-08-28
-状态:待用户审阅
-关联:性能问题根因调查(实测数据见下);本版将原「范围外」的 Phase 2(ExcelJS 真流式)纳入主计划。
+状态:已批准(架构自 ExcelJS 转向自研读取器,2026-08-28 用户批复「继续」)
+关联:性能问题根因调查(实测数据见下);本版将原「范围外」的 Phase 2(自研流式读取器)纳入主计划。
 
 ## 背景与动机
 
@@ -24,65 +24,66 @@
 
 ## 决策记录(本版新增)
 
-- **Phase 2 纳入主计划**:ExcelJS `stream.xlsx.WorkbookReader` 真流式解析 `.xlsx`,峰值**不再随文件大小涨**(目标 ~200MB)。用户明确要求「必须做 Phase 2」。
-- **ExcelJS `{stream:true}` 解码补丁必需**:spike 实测 ExcelJS 4.4.0 流式读 12.5MB sharedStrings.xml 会把多字节字符切裂成 U+FFFD(296 个不同字符串 / 556 格)。根因:`lib/utils/browser-buffer-decode.js` 模块级 `new TextDecoder('utf-8')`,`parse-sax.js` 对每个读块调 `decode(chunk)` 不带 `{stream:true}`,块边界切在多字节序列中间即损坏。补丁改 `decode(chunk, {stream:true})`。**已用真实文件验证**:补丁后行数 207,508 / 表头 / 全部值逐字节一致,真字符差异 = 0。
+- **Phase 2 纳入主计划**:自研流式读取器(unzipper 流式解压 + saxes 逐块 XML 解析)真流式解析 `.xlsx`,峰值**不再随文件大小涨**(实测最终堆 19.1MB)。用户明确要求「必须做 Phase 2」。
+- **自研读取器替代 ExcelJS(用户拍板,2026-08-28 批复「继续」)**:ExcelJS 4.4.0 `WorkbookReader` 需 postinstall 打 `{stream:true}` 解码补丁避免多字节切裂 U+FFFD,且在 SheetJS 写的文件上实测崩溃;改为自研 `unzip+saxes` 读取器——saxes 正是 ExcelJS 内部用的 XML 解析器,读取器以 `TextDecoder.decode(chunk, {stream:true})` 逐块喂入,U+FFFD 从机制上消除,**不需要任何补丁**。**已用真实文件验证**:11 个 fixture(含 207,508 行真文件、前导空行、行缺失 gap、孤值列、错误/布尔单元格、单格 dimension)与旧 `parseExcelFile` **全 0 差异**(CRLF→LF 归一化后);内存实测 3.2s / 最终堆 19.1MB(512MB 上限下)。
 - **CRLF→LF 归一化接受(用户拍板)**:saxes 按 XML 1.0 规范把字面 CR 归一化为 LF,实测 3770 格(如摘要 `...Nilotinib Hard Capsules\r\n) 欧盟` 变 `\n`)。**不做**字节级复刻(`0x0D→&#13;` 预处理弃用),spec 文档化为已知差异。Excel 渲染无感。
-- **`.xls` 旧格式回退 SheetJS 全量解析(用户接受)**:ExcelJS 不读 `.xls`(BIFF)。`.xls` 文件的 clean/导出峰值仍随文件大小涨,文档化为已知限制(真实数据均为 `.xlsx`)。
-- 墙钟接受劣化:ExcelJS 流式比 SheetJS 慢,目标 ≤60s(现状 22.5s),换内存有界。
+- **`.xls` 旧格式回退 SheetJS 全量解析(用户接受)**:自研读取器不读 `.xls`(BIFF)。`.xls` 文件的 clean/导出峰值仍随文件大小涨,文档化为已知限制(真实数据均为 `.xlsx`)。
+- 墙钟目标 ≤60s(现状 SheetJS 22.5s;自研读取器实测 **3.2s**,反超 SheetJS,无劣化)。
 
 ## 目标与验收标准
 
 以真实 `特瑞 seq` 文件(10.75MB / 20.7 万行)为验收基准:
 
-1. **clean 管线峰值内存 ~1,049 MB → ≤ 250 MB(目标 ~200MB),且不随文件大小涨**(ExcelJS 每次只驻留一行单元格)。
+1. **clean 管线峰值内存 ~1,049 MB → ≤ 250 MB(目标 ~200MB),且不随文件大小涨**(读取器逐块消费工作表 XML,每次只驻留一行单元格)。
 2. sql-clean 峰值 **403 MB → < 200 MB**。
 3. SQL 工作台无 LIMIT 查询后端自动封顶,不再全表物化 + 119MB JSON 过 IPC。
 4. 三条 CSV 导出路径改为流式游标写盘,O(全表)→ O(1);前端弹文件保存框由用户指定路径。
-5. **行为不变(含 ExcelJS 路径)**:
+5. **行为不变(含流式路径)**:
    - 行数 207,508、金额分/日期/格式蔓延边界、血缘列、重复表头告警、单文件跳过告警、CSV 字节输出(无 BOM)与现状一致。
-   - **已接受例外**:单元格文本内嵌换行 CRLF→LF 归一化;`.xls` 文件峰值不封顶;声明 `<dimension>` 低估数据的罕见畸形文件按真实数据读全。
-   - **不得出现 U+FFFD 字符**(补丁失效的强信号)。
+   - **已接受例外**:单元格文本内嵌换行 CRLF→LF 归一化;`.xls` 文件峰值不封顶。
+   - **不得出现 U+FFFD 字符**(解码器缺陷的强信号)。
 6. `npm test` + `npm run typecheck` 全绿;用现有 `measure-onw2.ps1` 复测达标;墙钟记录对比(目标 ≤60s)。
 
 ## 架构决策
 
-**解析层**:`.xlsx` 一律走 ExcelJS `WorkbookReader` 流式(clean、source-CSV 导出)。SheetJS 保留给:preview / setup / detectSource 等交互小预览、`.xls` 回退、以及所有现有 `parseExcelFile` / `parseExcelSheet` / `parseCsvFile` 调用点。新增依赖 `exceljs@4.4.0`(纯 JS,无原生绑定)。
+**解析层**:`.xlsx` 一律走自研读取器流式(`src/core/ingest/xlsx-reader.ts`:unzipper 流式解压 + saxes 逐块 XML 解析;clean、source-CSV 导出)。SheetJS 保留给:preview / setup / detectSource 等交互小预览、`.xls` 回退、以及所有现有 `parseExcelFile` / `parseExcelSheet` / `parseCsvFile` 调用点。新增依赖 `unzipper@^0.12.5`(纯 JS)+ `saxes@^5.0.1`(纯 JS,ExcelJS 同款 XML 解析器);unzipper 无类型声明,补 `src/types/unzipper.d.ts`。
 
-**解码补丁**:把 `node_modules/exceljs/lib/utils/browser-buffer-decode.js` 的 `textDecoder.decode(chunk)` 改为 `decode(chunk, {stream:true})`,以 checked-in 补丁文件在 `postinstall`(扩展现有 `scripts/postinstall-dual-abi.js`)里应用,不引 patch-package 新工具。**运行时 monkey-patch 无效**(parse-sax 模块加载时解构导出),必须改源文件。pin exceljs 版本。
+**解码正确性(无需补丁)**:saxes 是 ExcelJS 内部用的 XML 解析器,自研读取器直接以 `TextDecoder.decode(chunk, {stream:true})` 逐块喂给它,块边界永不切裂多字节 UTF-8 —— U+FFFD 从机制上消除,不需要 postinstall 打补丁、不碰 `node_modules`。
 
-**改动边界**:只改核心数据路径(parser / clean-runner / engine / sql-clean-runner / export / 前端导出交互)+ 打包(postinstall 补丁)。小预览路径保留全量 API 不动。
+**改动边界**:只改核心数据路径(parser / clean-runner / engine / sql-clean-runner / export / 前端导出交互)+ 新增依赖。小预览路径保留全量 API 不动。
 
 ## 组件设计
 
-### ① `src/core/ingest/parser.ts` — 新增 `.xlsx` 流式行读取 API
+### ① `src/core/ingest/xlsx-reader.ts` — 自研 `.xlsx` 流式行读取器(新模块)
 
-现有 `parseExcelFile` / `parseExcelSheet` / `parseCsvFile`(供 preview/setup/agent 小预览)**原样保留**。新增:
+现有 `parseExcelFile` / `parseExcelSheet` / `parseCsvFile`(供 preview/setup/agent 小预览)**原样保留**。新增独立读取器模块;parser 的 `readExcelSheetStream`(见下)委托给它。
+
+**公共类型(供 Task 2 消费):**
 
 ```ts
-export interface SheetRowStream {
-  sheetName: string;
-  headers: string[];                       // 与现有 trimTrailingEmpty + String().trim() 语义一致
-  rows: AsyncIterableIterator<unknown[]>;  // 逐行惰性产出(异步,ExcelJS 流式)
-}
-export function readExcelSheetStream(
-  filePath: string,
-  sheetName?: string,                      // 省略 → 第一个 sheet
-  opts?: ParseOptions,                     // 仅 headerRow 生效
-): Promise<SheetRowStream>
+export class CellError { constructor(public readonly code: number) {} }   // 公式错误格,持 SheetJS 内部数值码
+export function toOutputValue(v: unknown): unknown;                        // CellError:码 0(#NULL!)→ null,其余 → ''
+export function resolveCellValue(t: string, isInline: boolean, raw: string,
+                                 sharedStrings: string[] | null): unknown; // 逐类型复刻 SheetJS
+export function trimTrailingEmpty(arr: unknown[]): unknown[];
+export interface SheetPlan { headerAbs: number; rowEnd: number; effColCount: number; }
+export interface XlsxWorkbook { byPath: Map<string, UnzipEntry>; sharedStrings: string[] | null; }
+export function openXlsxWorkbook(filePath: string): Promise<XlsxWorkbook>;
+export async function* scanSheetRows(entry: UnzipEntry, sharedStrings: string[] | null,
+                                     onDimension?: (d: Dimension) => void): AsyncGenerator<{ rowIdx: number; cells: unknown[] }>;
+export async function planSheetRange(entry: UnzipEntry, sharedStrings: string[] | null,
+                                     headerRowIdx: number): Promise<SheetPlan>;
+export async function* readSheetRows(entry: UnzipEntry, sharedStrings: string[] | null,
+                                     plan: SheetPlan): AsyncGenerator<unknown[]>;
 ```
 
-**`.xlsx` 路径(ExcelJS 流式)实现要点:**
-- `new ExcelJS.stream.xlsx.WorkbookReader(filePath)` → 迭代到目标 sheet;headers 取第 `headerRowIdx` 行(trim + String().trim),后续逐行产出。
-- **值兼容层**(与 SheetJS `raw:true` 对齐,逐单元格):
-  - 数字/字符串/布尔 → 原样;`null/undefined` → `''`(defval)。
-  - `Date` 实例 → Excel 序列号 `(d.getTime()/86400000)+25569`(SheetJS raw 对日期格给序列号;本文件实测日期列直接是数字,兼容层防御性处理)。
-  - `{formula, result}` → 取 `result`(缺失 → `''`);富文本 `{richText:[...]}` → 拼接 text;超链接对象 → 取 `.text`。
-- **格式蔓延边界(流式版,已用真实文件验证等价)**:
-  - `rowEnd` = 最后一个「有值」行;`colEnd` = 有 ≥2 个值的最大列(与 `dataBounds` 同规则,但边流边统计)。
-  - 产出所有 `[headerRowIdx+1, rowEnd]` 的行(含中间空行 → `[]`),**丢弃尾部空行**(保持一个尾部空行缓冲,遇非空行 flush、EOF 丢弃)——与 SheetJS `buildRange` 行截断等价。
-  - 列:每行按 `trimTrailingEmpty` 裁剪,不显式截 `colEnd`;**孤值列(某列全表 <2 值)里被映射的单元格本应被 SheetJS 丢弃**——此边缘在真实 fixture 与特瑞文件上实测不存在(0 差异),文档化为已知边缘;如 parity 测试暴露,升级为「含 count<2 列单元格的行进 pending 缓冲」方案(有界内存、精确)。
-  - 声明 `<dimension>` 不暴露于 WorksheetReader(实测 `dimensions.model` 恒 0),行/列边界全部按流式真实值计算;声明范围低估数据的畸形文件行为略变(按真实数据读全),文档化。
-- **不得出现 U+FFFD** —— 由 ⑤ 补丁保证。
+**`.xlsx` 读取流程(两遍:先预扫描定边界,再定位输出,均流式):**
+- `openXlsxWorkbook`:unzipper `Open.file` 解出中央目录;zip 路径归一化(`\\`→`/`,兼容 Compress-Archive/WinRAR 存的反斜杠路径);saxes 解析 `xl/sharedStrings.xml` 收集共享字符串(整份驻留——与 SheetJS `readFile` 一致,实测 11.9 万串仍 0 差异;若后续内存验收超限再切片,当前不做)。
+- `planSheetRange`(第一遍,拉式流扫):按 `<row r>` 统计 `maxRow`(最后有值行)与 `maxCol`(≥2 值的最右列),同时捕获 `<dimension ref>` 声明;复刻 SheetJS `buildRange`:`rowEnd=min(dim.rowEnd, max(maxRow, headerRowIdx))`、`realCol=maxCol≥0?maxCol:dim.colEnd`、`colEnd=min(dim.colEnd, realCol)`、`effColCount=colEnd+1`、`headerAbs=dim.rowStart+headerRowIdx`。
+- `readSheetRows`(第二遍,定位 gap-fill):产出 `headerAbs..rowEnd` 的全部物理行;缺失 `<row>` 的 gap 用 `[]` 补齐(与 SheetJS 位置化 `sheet_to_json` 一致);每行按 `effColCount` 截/补 `''` 再 `trimTrailingEmpty`;到达 `rowEnd` 即断(尾空不产出)。错误/布尔单元格走 `resolveCellValue`(与 SheetJS `parse_ws_xml_data`/`parsexmlbool` 逐类型一致)。
+- **孤值列与 SheetJS 精确一致**:count<2 的列不进 `maxCol` → 不出现在 `effColCount`,孤值格被丢弃(orphan fixture 0 差异)。
+- **不得出现 U+FFFD** —— saxes + 流式 `TextDecoder` 从机制上保证(无需补丁)。
+- **内存**:工作表 XML 逐块喂 saxes(`it.next()` 拉一块 → `p.write`),从未整份物化;真文件实测最终堆 19.1MB、耗时 3.2s。
 
 **`.xls` 路径(回退)**:SheetJS `parseExcelSheet/parseExcelFile` 全量解析后包一层惰性迭代器,API 形状一致、输出一致,峰值不封顶(已知限制)。
 
@@ -126,33 +127,34 @@ export function readExcelSheetStream(
 - 保留:DROP+重建 resultTable、ATTACH/DETACH、`main."..."` 限定、空结果集建 `(empty INTEGER)` 行为。
 - 不物化全表(403MB → <200MB)。
 
-### ⑤ ExcelJS 解码补丁(patch + postinstall)
+### ⑤ 自研读取器 `xlsx-reader.ts`(无补丁,依赖即正确性)
 
-- 新增补丁文件 `patches/exceljs+4.4.0-utf8-stream.patch`:`lib/utils/browser-buffer-decode.js` 的 `textDecoder.decode(chunk)` → `textDecoder.decode(chunk, {stream:true})`。
-- 扩展现有 `scripts/postinstall-dual-abi.js`(或直接追加到 `package.json` 的 `postinstall`):每次 `npm install` 时对 `node_modules/exceljs` 应用该补丁(patch 前校验文件指纹,已打则跳过)。
-- `package.json` 依赖新增 `exceljs: ^4.4.0`(pin 次版本,防 patch 失效)。
-- 打包链路:补丁在 `npm run build:dual-abi`/`dist` 之前生效,`node_modules/exceljs` 被 electron-builder 自动打进生产依赖。
+- 新增依赖:`unzipper: ^0.12.5`(已随 app-builder-lib 传递安装,需升为直接依赖)+ `saxes: ^5.0.1`。两者纯 JS,无原生绑定。
+- unzipper 无类型声明(`types: NONE`),新增 `src/types/unzipper.d.ts` 声明本项目用到的子集(`Open.file` → `dir.files[]` → `entry.stream()/buffer()`);tsconfig `include: ["src"]` 自动收录。
+- 打包链路:两个依赖被 electron-builder 自动打进生产依赖,无 postinstall 动作。
 
 ## 测试计划(TDD,先写失败测试)
 
-- `tests/core/parser.test.ts`:新增 `readExcelSheetStream` 用例——
-  - **ExcelJS 逐字节 parity**:同一 fixture(.xlsx)流式输出与 `parseExcelFile` 输出逐单元格一致(复用现有 fixture 文件);真实 特瑞 文件行数 207,508 / 表头 / 值一致(CR 归一化后相等)。
-  - 兼容层:Date 单元格 → 序列号;公式单元格 → result;富文本 → 拼接;null → `''`。
-  - 边界:中间空行保留为 `[]`、尾部空行丢弃、headerRow 偏移、首个 sheet 回退、`.xls` 回退路径回归。
-  - **孤值列边缘**:构造含 count<2 尾列(有映射表头)的 fixture,断言行为与预期一致(文档化边缘,如触发则升级 pending 缓冲)。
+- `tests/core/xlsx-reader.test.ts`(新):读取器单元 + parity 用例——
+  - **逐字节 parity**:同一 fixture(.xlsx)流式输出与 `parseExcelFile` 输出逐单元格一致;真实 特瑞 文件行数 207,508 / 表头 / 值一致(CR 归一化后相等)。
+  - `resolveCellValue` 逐类型:t="s"(共享字符串查表,空 raw→'')、t="str"、t="b"(parsexmlbool 语义:仅 1/true/TRUE 为真)、t="e"(错误文本→数值码 `CellError`)、inlineStr、默认 parseFloat(空→'')。
+  - `toOutputValue`:CellError 码 0(#NULL!)→ null,其余 → ''。
+  - 边界:中间空行保留为 `[]`、尾部空行丢弃、行缺失 gap 补 `[]`、headerRow 偏移、前导空行(dimRowStart>0)。
+  - **孤值列**:构造含 count<2 尾列的 fixture,断言与 `parseExcelFile` 0 差异(orphan 实测通过,不再需要 pending 缓冲升级)。
+- `tests/core/parser.test.ts`:新增 `readExcelSheetStream` 用例——首个 sheet 回退、`.xls` 回退路径回归、与 `parseExcelFile` 行数/表头一致。
 - `tests/core/pipeline-clean-stream.test.ts`(或扩 clean-runner.test.ts):流式 clean 后 DB 行数与 fixture 完全一致;非 5000 整数倍余量 flush;单文件报错跳过与告警保留;血缘列一致。
 - `tests/core/etl.test.ts`:`applyMappingRow` 与 `applyMapping` 逐行等价。
 - `tests/core/pipeline-integration.test.ts`:clean → sql-clean → query 全链路,行数与值一致。
 - `tests/core/pipeline-engine.test.ts`:queryOn 无 LIMIT 注入 5000 + `truncated=true`;显式 limit 优先;已有 LIMIT 不重复注入;尾部分号剥离;非 SELECT 写语句不受影响。
 - `tests/core/sql-clean-runner` / query-runner 相关:游标结果与旧 `.all()` 结果一致(空结果集、行数)。
 - `tests/core/export`(新):三个导出工具流式输出字节与旧实现逐字节一致(无 BOM、`csvEscape`、列顺序、换行符);空表仅表头。
-- **补丁行为测试**:生成一个 sharedStrings >64KB 的 fixture(数千条不同 CJK 字符串,保证读块切到多字节字符),流式解析后**断言无 U+FFFD**;并断言 node_modules 里 `browser-buffer-decode.js` 已含 `{stream:true}`(补丁落地检查)。
+- **解码正确性测试**:生成一个 sharedStrings >64KB 的 fixture(数千条不同 CJK 字符串,保证读块切到多字节字符),流式解析后**断言无 U+FFFD**(覆盖 `xlsx-reader` 的流式 `TextDecoder` 路径)。
 - `tests/ipc/handlers.test.ts`/`tests/main/cli-bridge.test.ts` 模式参照:save-csv IPC handler 通过 `dialog.showSaveDialog` mock 测试。
 
 ## 验收与回归
 
 1. 现有 `npm test` + `npm run typecheck` 全绿。
-2. 用 `%TEMP%\measure-onw2.ps1` 在真实工作区复测:
+2. 在真实工作区复测(用 `%TEMP%\measure-onw2.ps1`;该脚本若不存在,按计划 Task 9 手工步骤):
    - **clean 峰值 ≤250MB**(与 1,049MB 对比),且用更大文件(如 2× 特瑞)验证峰值不随行数线性涨;
    - sql-clean 峰值 <200MB;
    - 行数仍为 207,508;导出 CSV 与旧内容一致(CR 归一化外);
@@ -162,6 +164,7 @@ export function readExcelSheetStream(
 ## 范围外(本次明确不做)
 
 - `.xls` 真流式解析(无现成流式 xls 解析器;保持 SheetJS 全量回退)。
+- 共享字符串切片化/分块(当前整份驻留;实测 11.9 万串仍 0 差异、内存达标,不做;若后续峰值超限再评估)。
 - 大 CSV 的 clean 解析流式化(`parseCsvFile` 全量读入)。
 - 解析/清洗挪 worker 线程(当前引擎已在独立 node 子进程,收益有限,优先级低)。
 - Electron 基线内存优化(需先解决本机打包版启动即退的问题)。
@@ -169,11 +172,12 @@ export function readExcelSheetStream(
 
 ## 风险
 
-- **ExcelJS 墙钟劣化**(比 SheetJS 慢 2~3x)→ 接受并以 ≤60s 为目标,实现后实测记录;若严重超预期,评估 ExcelJS 流式选项(如 `worksheets: 'emit'`)。
-- **补丁脆弱**(exceljs 升级即失效)→ pin 4.4.0 + 补丁落地检查测试 + 无 U+FFFD 行为测试三重兜底。
-- **孤值列边缘**(count<2 的映射列单元格)→ 真实数据实测不存在;parity 测试兜底,触发则升级 pending 缓冲方案。
-- **`<dimension>` 不暴露** → 边界全部按流式真实值;声明低估数据的畸形文件行为略变(文档化)。
-- **公式/富文本/日期单元格兼容** → compat 层 + 专项 fixture 测试。
+- **流式两遍读**(预扫描 + 输出各一遍 XML)→ 墙钟约 2× 单遍;实测 3.2s 仍远低于 60s 目标,接受。
+- **自研解析器正确性风险**(XML 状态机 / 边界算法手写)→ 以 11 个 fixture 全量 parity 测试兜底(含真文件 207,508 行、前导空行、行缺失 gap、孤值列、错误/布尔单元格),任何行为回归立即可见。
+- **孤值列边缘**(count<2 的映射列单元格)→ 自研读取器与 SheetJS 同为「count≥2 才入列」,orphan fixture 0 差异;parity 测试兜底。
+- **`<dimension>` 解析** → 已从 `<dimension ref>` 捕获行/列声明,行为与 SheetJS `buildRange` 取小一致(single-cell / lead-blank / row-gap fixture 0 差异)。
+- **公式错误/布尔/内联字符串单元格** → `resolveCellValue` 逐类型复刻 SheetJS(ezt / err fixture 0 差异)。
+- 进度语义简化对 UI 的影响 → 实现时确认前端对 stage/percent 的消费方式。
 - 进度语义简化对 UI 的影响 → 实现时确认前端对 stage/percent 的消费方式。
 - CSV 字节一致性(BOM、转义)需要逐字节对比测试兜底。
 - 自动封顶可能影响用户对聚合/大结果的习惯用法 → 以截断提示 + 引导导出 CSV 缓解,不做隐藏截断。
