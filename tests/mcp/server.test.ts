@@ -62,15 +62,16 @@ describe('mcp server', () => {
     expect(preview?.inputSchema.required).toEqual(['folder']);
   });
 
-  it('setup.detectHeaders is registered with filePath schema', async () => {
-    const res = await handleMcpRequest(session, { jsonrpc: '2.0', id: 1, method: 'tools/list' });
-    const tools = (res?.result as {
-      tools: { name: string; inputSchema: { properties?: Record<string, unknown>; required?: string[] } }[];
-    }).tools;
-    const t = tools.find((x) => x.name === 'setup.detectHeaders');
-    expect(t?.inputSchema.properties?.filePath).toBeTruthy();
-    expect(t?.inputSchema.required).toEqual(['filePath']);
-  });
+  // [禁用 2026-08-29] setup.detectHeaders 接口下线,schema 已注释,tools/list 不再出现
+  // it('setup.detectHeaders is registered with filePath schema', async () => {
+  //   const res = await handleMcpRequest(session, { jsonrpc: '2.0', id: 1, method: 'tools/list' });
+//     const tools = (res?.result as {
+//       tools: { name: string; inputSchema: { properties?: Record<string, unknown>; required?: string[] } }[];
+//     }).tools;
+  //   const t = tools.find((x) => x.name === 'setup.detectHeaders');
+  //   expect(t?.inputSchema.properties?.filePath).toBeTruthy();
+  //   expect(t?.inputSchema.required).toEqual(['filePath']);
+//   });
 
   it('calls a tool and returns the dispatch result as text content', async () => {
     const res = await handleMcpRequest(session, {
@@ -169,19 +170,19 @@ describe('mcp server', () => {
       params: { name: 'state.summary', arguments: {} },
     });
     expect(String((meta?.result as { content?: { text?: string }[] } | undefined)?.content?.[0]?.text ?? '')).not.toContain('AI_MODE_RESTRICTED');
-    // setup.detectHeaders 已改为仅本地模式可用:external 下与真实数据 API 同级,对 AI 禁用
-    const headers = await handleMcpRequest(session, {
-      jsonrpc: '2.0', id: 3, method: 'tools/call',
-      params: { name: 'setup.detectHeaders', arguments: { filePath: 'nope.xlsx' } },
-    });
-    expect(String((headers?.result as { content?: { text?: string }[] } | undefined)?.content?.[0]?.text ?? '')).toContain('AI_MODE_RESTRICTED');
+    // [禁用 2026-08-29] setup.detectHeaders 接口下线:external/local 门禁断言一并注释,unknown tool 兜底已由上方错误用例覆盖
+//     const headers = await handleMcpRequest(session, {
+//       jsonrpc: '2.0', id: 3, method: 'tools/call',
+//       params: { name: 'setup.detectHeaders', arguments: { filePath: 'nope.xlsx' } },
+//     });
+//     expect(String((headers?.result as { content?: { text?: string }[] } | undefined)?.content?.[0]?.text ?? '')).toContain('AI_MODE_RESTRICTED');
     saveSettings(session.getCtx()!.ws, { name: 'ws', aiOpenMode: 'local' }); // 恢复
-    // local 模式放行 setup.detectHeaders(真实走到 handler,而非门禁拦截)
-    const localHeaders = await handleMcpRequest(session, {
-      jsonrpc: '2.0', id: 4, method: 'tools/call',
-      params: { name: 'setup.detectHeaders', arguments: { filePath: 'nope.xlsx' } },
-    });
-    expect(String((localHeaders?.result as { content?: { text?: string }[] } | undefined)?.content?.[0]?.text ?? '')).not.toContain('AI_MODE_RESTRICTED');
+    // [禁用 2026-08-29] local 模式放行 setup.detectHeaders:接口已下线,此断言不再适用。
+//     const localHeaders = await handleMcpRequest(session, {
+//       jsonrpc: '2.0', id: 4, method: 'tools/call',
+//       params: { name: 'setup.detectHeaders', arguments: { filePath: 'nope.xlsx' } },
+//     });
+//     expect(String((localHeaders?.result as { content?: { text?: string }[] } | undefined)?.content?.[0]?.text ?? '')).not.toContain('AI_MODE_RESTRICTED');
   });
 
   it('manual.read tool returns the operations manual text', async () => {

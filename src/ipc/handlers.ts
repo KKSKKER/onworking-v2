@@ -22,7 +22,7 @@ import type { ApiCommand, ApiResult, CommandPayloads, CommandResults, IpcRequest
 import {
   toolCreateBigTable,
   toolGetFileHeaders,
-  toolDetectHeaderCandidates,
+  // toolDetectHeaderCandidates, // [禁用 2026-08-29] setup.detectHeaders 接口下线
   toolSetMapping,
   toolCreateCleaningPipeline,
   toolCreateSqlCleanPipeline,
@@ -123,11 +123,11 @@ export const handlers: { [K in SessionCommands]: HandlerFor<K> } = {
   'pipeline.recomputeByDependency': async (ctx, p) => ctx.getEngine().recomputeByDependency(p.trigger),
 
   'setup.detectSource': async (_ctx, p) => toolGetFileHeaders(p.filePath, p.sheetName).detected,
-  'setup.detectHeaders': async (_ctx, p) =>
-    toolDetectHeaderCandidates(p.filePath, p.sheetName, {
-      minScore: p.minScore,
-      limit: p.limit,
-    }),
+  // 'setup.detectHeaders': async (_ctx, p) => // [禁用 2026-08-29] 多表头接口下线;核心算法与工具函数已注释,恢复时接回
+  //   toolDetectHeaderCandidates(p.filePath, p.sheetName, {
+  //     minScore: p.minScore,
+  //     limit: p.limit,
+  //   }),
   'setup.sheets': async (_ctx, p) => {
     const sheets = p.filePath.toLowerCase().endsWith('.csv')
       ? parseCsvFile(p.filePath)

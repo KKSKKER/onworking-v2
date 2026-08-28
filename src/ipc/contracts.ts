@@ -9,7 +9,8 @@ import type { FieldMapping } from '../core/etl/transform';
 import type { Workspace } from '../core/workspace/workspace';
 import type { RunSummary, QueryOutcome } from '../core/pipeline/engine';
 import type { SourceConfig } from '../core/pipeline/setup';
-import type { HeaderCandidate } from '../core/ingest/header-detect';
+// [禁用 2026-08-29] setup.detectHeaders 多表头接口下线;HeaderCandidate 仅其使用,一并注释。
+// import type { HeaderCandidate } from '../core/ingest/header-detect';
 import type { RuleYaml } from '../core/rule/rule';
 import type { WorkspaceSettings, AiOpenMode } from '../core/workspace/settings';
 
@@ -44,7 +45,7 @@ export interface CommandPayloads {
   'pipeline.recomputeAll': {};
   'pipeline.recomputeByDependency': { trigger: string };
   'setup.detectSource': { filePath: string; sheetName?: string };
-  'setup.detectHeaders': { filePath: string; sheetName?: string; minScore?: number; limit?: number };
+  // 'setup.detectHeaders': { filePath: string; sheetName?: string; minScore?: number; limit?: number }; // [禁用 2026-08-29]
   'setup.sheets': { filePath: string };
   'setup.preview': { filePath: string; sheetName?: string; headerRow?: number; offset?: number; limit?: number };
   'setup.exportCsv': { filePath: string; sheetName?: string; headerRow?: number; path?: string };
@@ -87,7 +88,7 @@ export interface CommandResults {
   'pipeline.recomputeAll': RunSummary[];
   'pipeline.recomputeByDependency': RunSummary[];
   'setup.detectSource': SourceConfig;
-  'setup.detectHeaders': { sheetName: string; candidates: HeaderCandidate[] };
+  // 'setup.detectHeaders': { sheetName: string; candidates: HeaderCandidate[] }; // [禁用 2026-08-29]
   'setup.sheets': string[];
   'setup.preview': { sheetName: string; headerRow: number; headers: string[]; rows: unknown[][]; total: number };
   'setup.exportCsv': { file: string; rows: number };
