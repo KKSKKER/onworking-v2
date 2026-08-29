@@ -1,6 +1,7 @@
 // src/core/etl/transform.ts
 // 字段映射 + 值转换。类型用数据库原生类型(存于大表配置);这里只管"值怎么变"。
 import type { ParsedSheet } from '../ingest/parser';
+import { canonicalizeHeaders } from './headers';
 
 /** 值转换:清洗阶段对源值做的处理。类型与转换解耦。 */
 export type ValueTransform = 'none' | 'to-cents' | 'normalize-date' | 'trim';
@@ -15,10 +16,11 @@ export interface TransformedRow {
   [outputName: string]: string | number | null;
 }
 
-/** 表头 → 列号索引(遍历覆盖:同名列取末次出现,与旧 applyMapping 的 colIndex 构建一致)。 */
+/** 表头 → 列号索引:先规范化(重复表头编号 姓名_1..N),再精确映射;名字唯一,无覆盖。 */
 export function buildColIndex(headers: string[]): Map<string, number> {
+  const { names } = canonicalizeHeaders(headers);
   const colIndex = new Map<string, number>();
-  headers.forEach((h, i) => colIndex.set(h, i));
+  names.forEach((h, i) => colIndex.set(h, i));
   return colIndex;
 }
 

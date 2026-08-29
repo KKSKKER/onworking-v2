@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import Database from 'better-sqlite3';
-import { applyMapping, centsToInt, normalizeDate, type FieldMapping } from '../../src/core/etl/transform';
+import { applyMapping, buildColIndex, centsToInt, normalizeDate, type FieldMapping } from '../../src/core/etl/transform';
 import { openDatabase } from '../../src/core/db/database';
 import { writeBigTable } from '../../src/core/etl/writer';
 import { logger } from '../../src/core/logging';
@@ -41,6 +41,13 @@ describe('transform', () => {
   it('normalizeDate handles various inputs', () => {
     expect(normalizeDate('2024-01-15')).toBe('2024-01-15');
     expect(normalizeDate('2024/1/5')).toBe('2024-01-05');
+  });
+
+  it('buildColIndex maps numbered duplicates exactly (no last-wins overwrite)', () => {
+    const idx = buildColIndex(['姓名', '出生日期', '姓名', '账号', '姓名']);
+    expect(idx.get('姓名_2')).toBe(2);
+    expect(idx.get('姓名')).toBeUndefined(); // 裸名不再指向最右
+    expect(idx.get('账号')).toBe(3);
   });
 });
 
