@@ -61,4 +61,37 @@ describe('template store', () => {
     expect(res.skipped).toEqual(['不存在的列']);
     expect(res.mappings.map((m) => m.outputName)).toEqual(['date', 'debit']);
   });
+
+  it('applyTemplateToSheet matches numbered sourceHeaders on duplicate-header sheets', () => {
+    const sheet: ParsedSheet = {
+      sheetName: 's',
+      headers: ['姓名', '出生日期', '姓名', '账号', '姓名'],
+      rows: [],
+    };
+    const r = applyTemplateToSheet(sheet, {
+      name: 't',
+      createdAt: '',
+      mappings: [
+        { sourceHeader: '姓名_2', outputName: 'name', transform: 'none' as const },
+        { sourceHeader: '出生日期', outputName: 'birth', transform: 'normalize-date' as const },
+      ],
+    });
+    expect(r.matched).toBe(2);
+    expect(r.skipped).toEqual([]);
+  });
+
+  it('applyTemplateToSheet skips a bare sourceHeader that is duplicated on the sheet', () => {
+    const sheet: ParsedSheet = {
+      sheetName: 's',
+      headers: ['姓名', '出生日期', '姓名'],
+      rows: [],
+    };
+    const r = applyTemplateToSheet(sheet, {
+      name: 't',
+      createdAt: '',
+      mappings: [{ sourceHeader: '姓名', outputName: 'name', transform: 'none' as const }],
+    });
+    expect(r.matched).toBe(0);
+    expect(r.skipped).toEqual(['姓名']);
+  });
 });

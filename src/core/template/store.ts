@@ -11,6 +11,7 @@ import {
 } from 'node:fs';
 import type { Workspace } from '../workspace/workspace';
 import type { FieldMapping } from '../etl/transform';
+import { canonicalizeHeaders } from '../etl/headers';
 import type { ParsedSheet } from '../ingest/parser';
 import { AppError } from '../errors';
 
@@ -74,7 +75,8 @@ export function applyTemplateToSheet(
   sheet: ParsedSheet,
   tpl: MappingTemplate,
 ): { mappings: FieldMapping[]; matched: number; skipped: string[] } {
-  const headers = new Set(sheet.headers);
+  // 用规范名匹配:模板可写编号名(姓名_2)精确命中重复列;裸名不会误命中重复表头(进 skipped)
+  const headers = new Set(canonicalizeHeaders(sheet.headers).names);
   const mappings: FieldMapping[] = [];
   const skipped: string[] = [];
   for (const m of tpl.mappings) {
