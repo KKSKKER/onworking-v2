@@ -32,6 +32,8 @@ export interface RunSummary {
   error?: string;
   /** 运行告警(如清洗入库时重复表头导致丢列)。 */
   warnings?: string[];
+  /** clean:源文件中存在但未被任何映射引用的表头(数据未导入大表),供 agent 核对映射是否漏写。 */
+  unusedHeaders?: string[];
 }
 
 export interface QueryOutcome {
@@ -113,8 +115,8 @@ export class PipelineEngine {
         st.registerMapping(cfg.bigTableFolder, bigTable.fields.length);
         st.save();
         commitWorkspaceChanges(this.ws, `pipeline ${id} (clean) ran`);
-        logger.info(MODULE, 'run ok', { pipelineId: id, kind: 'clean', rows: result.rowsInserted, warnings: result.warnings });
-        return { pipelineId: id, kind: 'clean', ok: true, rows: result.rowsInserted, warnings: result.warnings };
+        logger.info(MODULE, 'run ok', { pipelineId: id, kind: 'clean', rows: result.rowsInserted, warnings: result.warnings, unusedHeaders: result.unusedHeaders });
+        return { pipelineId: id, kind: 'clean', ok: true, rows: result.rowsInserted, warnings: result.warnings, unusedHeaders: result.unusedHeaders };
       }
       // query / sql-clean:用总表 DB
       const db = openDatabase(this.masterDb());

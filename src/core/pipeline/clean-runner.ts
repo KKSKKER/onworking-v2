@@ -28,6 +28,8 @@ export interface CleanResult {
   files: number;
   /** 入库告警(如重复表头导致映射只取一列、其余列数据不入)。 */
   warnings: string[];
+  /** 源文件中存在但未被任何映射引用的表头(数据未导入大表)。 */
+  unusedHeaders: string[];
 }
 
 export interface CleanProgress {
@@ -108,6 +110,8 @@ export async function runCleanPipeline(
   const extractedAt = new Date().toISOString();
   const warnings = new Set<string>();
   const seenSource = new Set<string>();
+  // 源表头中被映射引用之外的(数据未导入大表)。跨文件/跨规则去重汇总。
+  const unusedHeaders = new Set<string>();
 
   // 按规则独立处理:每条规则只把自己的映射应用到它匹配的文件。
   // produceRows() 是惰性 AsyncGenerator:insertRowsInBatches 边拉边写,全程不物化 allRows。
@@ -141,6 +145,12 @@ export async function runCleanPipeline(
               stream = await readExcelSheetStream(file.path, source.sheetName, { headerRow: source.headerRow });
             }
             if (!stream) continue; // 目标 sheet 不存在 → 该文件跳过
+            // 未用表头检测:源表头里没被当前规则任一映射 sourceHeader 引用的,
+            // 数据不会进大表 —— 收集起来返回给 agent(可能有映射漏写/拼写不匹配)
+            const mappedHeaders = new Set(ruleMappings.map((m) => m.sourceHeader));
+            for (const h of stream.headers) {
+              if (!mappedHeaders.has(h)) unusedHeaders.add(h);
+            }
             // 重复表头检测:同名 sourceHeader 多次出现 → 映射只取其一,其余列数据不入(静默丢列)
             for (const m of ruleMappings) {
               const n = stream.headers.filter((h) => h === m.sourceHeader).length;
@@ -174,11 +184,17 @@ export async function runCleanPipeline(
   });
   onProgress?.({ stage: 'write', percent: 100 });
 
+  const unused = [...unusedHeaders].sort();
+  if (unused.length > 0) {
+    warnings.add(`以下源表头未被任何映射使用(数据未导入大表): ${unused.join(', ')}`);
+  }
+
   logger.info(MODULE, 'clean complete', {
     pipelineId: cfg.id,
     rows: result.rowsInserted,
     files: files.length,
     warnings: [...warnings],
+    unusedHeaders: unused,
   });
 
   return {
@@ -188,6 +204,7 @@ export async function runCleanPipeline(
     rowsInserted: result.rowsInserted,
     files: files.length,
     warnings: [...warnings],
+    unusedHeaders: unused,
   };
 }
 

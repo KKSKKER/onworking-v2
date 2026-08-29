@@ -267,4 +267,25 @@ describe('pipeline engine', () => {
     expect(r.error).toContain('尚未清洗'); // 指引用户先跑 clean,而不是暴露 SQLite 底层错误
     eng.close();
   });
+
+  it('clean 把源文件中未被映射使用的表头收集进 unusedHeaders 返回给 agent', async () => {
+    // 额外加一个源文件:表头「备注」未被任何映射使用(映射只含 日期/借方金额)
+    const bws = XLSX.utils.aoa_to_sheet([
+      ['日期', '借方金额', '备注'],
+      ['2024-03', 300, 'extra'],
+    ]);
+    const bwb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(bwb, bws, 'Sheet1');
+    XLSX.writeFile(bwb, join(sourceDir, 'b.xlsx'));
+
+    const eng = new PipelineEngine(ws);
+    const r = await eng.run('c1');
+    expect(r.ok).toBe(true);
+    expect(r.unusedHeaders ?? []).toContain('备注'); // 多余表头 → 上报
+    expect(r.unusedHeaders ?? []).not.toContain('日期'); // 已映射的 → 不上报
+    expect(r.unusedHeaders ?? []).not.toContain('借方金额');
+    // 同时也以告警形式告知 agent(agent 必读 warnings)
+    expect(r.warnings?.some((w) => w.includes('备注'))).toBe(true);
+    eng.close();
+  });
 });
