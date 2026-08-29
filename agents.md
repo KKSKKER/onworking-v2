@@ -261,8 +261,8 @@ Agent 侧配合：`bigtable.previewRows {folder}` 拉样例 + `schema.tables {fo
 - **导出用命令**：`bigtable.exportCsv` 落盘 CSV，缺省 `<工作区根>/exports/<tableName>.csv`；禁止自己拼 CSV 写文件。
 - **`previewRows` 语义**：`rowCount`=当页行数、`total`=总数（分页时两者不同）。
 - **小计/页脚/空行不会自动剔除**：若源表含「小计」行、签名行、空行，需在后续处理中过滤（当前无内置过滤，属已知限制）。
-- **重复表头会歧义**：同一列名出现两次时按 `sourceHeader` 映射无法区分（属已知限制，需先处理源文件）。
-- **跑完管线必读 `warnings` 并汇报**：`pipeline.run` 的返回里有 `warnings` 数组，可能含「跳过无法读取的文件（密码保护/损坏）」「重复表头只取其一」等。**必须把每条告警转告操作者**——被跳过的文件=数据没进，这类尤其要明确报告，不能只说「跑完了」。
+- **重复表头按列编号映射**：同表头出现 N 次 → 规范名 `姓名_1`..`姓名_N`（与预览/模板/自动映射一致）。映射的 `sourceHeader` 必须写编号名（如 `姓名_2`）精确指定列；写裸名「姓名」时 `mapping.save` 抛 `MAPPING_DUPLICATE_HEADER`、clean 抛 `CLEAN_DUPLICATE_HEADER`（整个 run 失败 `ok:false`）。
+- **跑完管线必读 `warnings` 并汇报**：`pipeline.run` 的返回里有 `warnings` 数组，可能含「跳过无法读取的文件（密码保护/损坏）」「重复表头未按编号映射」等。**必须把每条告警转告操作者**——被跳过的文件=数据没进，这类尤其要明确报告，不能只说「跑完了」。
 - **clean 返回 `unusedHeaders`：源表头没被映射引用 = 数据没进大表**：clean 跑完后 `unusedHeaders` 数组列出**源文件中存在、但没有任何映射 `sourceHeader` 引用的表头**（这些列的数据没进大表），同时 `warnings` 里有「以下源表头未被任何映射使用…」。**非空时必须向操作者汇报**，通常是这几种情况：① 源文件新增了列、映射漏配（补 `mapping.save` 后重跑）；② `sourceHeader` 拼写/换行符不匹配（表头含 `\n` 时容易踩）；③ 操作者本就不需要这些列（在总表 SQL 里也不引用）。不能当没看见就往下走。
 - **pipeline id 由调用方显式传入**：禁止用 `Date.now()` 等不可复现的 id。
 - **`query.run` 读为主**：读（SELECT/WITH）返回行；写（INSERT/UPDATE/DELETE/DDL）会直接改所选 DB（默认总表 master.db，带 `folder` 改该大表 DB），**除非操作者明确要求，不要用写**。
