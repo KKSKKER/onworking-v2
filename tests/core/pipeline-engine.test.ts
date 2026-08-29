@@ -288,4 +288,38 @@ describe('pipeline engine', () => {
     expect(r.warnings?.some((w) => w.includes('备注'))).toBe(true);
     eng.close();
   });
+
+  it('clean run with bare sourceHeader on duplicate headers returns ok:false with error', async () => {
+    const wsx = XLSX.utils.aoa_to_sheet([
+      ['姓名', '出生日期', '姓名', '账号', '姓名', '备注'],
+      ['', '1990-01-01', '张三', 'A1', '', 'x'],
+      ['', '1991-02-02', '李四', 'A2', '', 'y'],
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, wsx, 'Sheet1');
+    XLSX.writeFile(wb, join(sourceDir, 'dup.xlsx'));
+    saveBigTableConfig(ws, 'seq', {
+      tableName: 'seq',
+      autoIncrement: true,
+      fields: [
+        { name: 'date', type: 'TEXT', order: 1 },
+        { name: 'debit', type: 'INTEGER', order: 2 },
+        { name: 'name', type: 'TEXT', order: 3 },
+      ],
+    });
+    saveRule(ws, 'seq', {
+      name: 'seq_rule',
+      display: '重复表头',
+      version: 1,
+      sources: [{ pattern: '**/*', headerRow: 1 }],
+      fields: [
+        { sourceHeader: '姓名', outputName: 'name', included: true, order: 1, transforms: [{ kind: 'coerce_string' }] },
+      ],
+    });
+    const eng = new PipelineEngine(ws);
+    const r = await eng.run('c1');
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/姓名_1/);
+    eng.close();
+  });
 });

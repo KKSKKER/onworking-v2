@@ -8,6 +8,7 @@ import type { Workspace } from '../workspace/workspace';
 import { scanSourceDir } from '../ingest/scanner';
 import { parseCsvFile, readExcelSheetStream, type SheetRowStream } from '../ingest/parser';
 import { applyMappingRow, buildColIndex, type FieldMapping } from '../etl/transform';
+import { canonicalizeHeaders, resolveHeaderIndex } from '../etl/headers';
 import { insertRowsInBatches, type ColumnDef } from '../etl/writer';
 import { attachLineage, lineageColumnNames } from '../lineage';
 import { AppError } from '../errors';
@@ -129,10 +130,10 @@ export async function runCleanPipeline(
         for (const file of matched) {
           processedFiles++;
           onProgress?.({ stage: 'parse', percent: Math.round((processedFiles / files.length) * 70) });
+          let stream: SheetRowStream | null;
           try {
             // 有 sheetName → 只解析该 sheet(避免全表解析被「格式蔓延」的假大范围拖慢);否则取第一张
             const isCsv = file.path.toLowerCase().endsWith('.csv');
-            let stream: SheetRowStream | null;
             if (isCsv) {
               const sheets = parseCsvFile(file.path, { headerRow: source.headerRow });
               const sheet = source.sheetName
@@ -144,22 +145,36 @@ export async function runCleanPipeline(
             } else {
               stream = await readExcelSheetStream(file.path, source.sheetName, { headerRow: source.headerRow });
             }
-            if (!stream) continue; // 目标 sheet 不存在 → 该文件跳过
-            // 未用表头检测:源表头里没被当前规则任一映射 sourceHeader 引用的,
-            // 数据不会进大表 —— 收集起来返回给 agent(可能有映射漏写/拼写不匹配)
-            const mappedHeaders = new Set(ruleMappings.map((m) => m.sourceHeader));
-            for (const h of stream.headers) {
-              if (!mappedHeaders.has(h)) unusedHeaders.add(h);
+          } catch (e) {
+            // 单个文件读不了(如密码保护/损坏)不拖垮整条管线:跳过并在告警里说明
+            warnings.add(`跳过无法读取的文件 ${basename(file.path)}: ${(e as Error).message}`);
+            continue;
+          }
+          if (!stream) continue; // 目标 sheet 不存在 → 该文件跳过
+
+          // 统一规范化表头 + 解析映射:裸名命中重复表头 → 整个 run 失败(配置错误,
+          // 必须抛错,不落入上面"跳过文件"的 catch 分支 → engine 包成 ok:false)
+          const canonical = canonicalizeHeaders(stream.headers);
+          for (const m of ruleMappings) {
+            const r = resolveHeaderIndex(canonical, m.sourceHeader);
+            if (r.kind === 'duplicate-bare') {
+              throw new AppError({
+                module: 'pipeline/clean',
+                code: 'CLEAN_DUPLICATE_HEADER',
+                message: r.error,
+                data: { sourceFile: file.path, sourceHeader: m.sourceHeader },
+              });
             }
-            // 重复表头检测:同名 sourceHeader 多次出现 → 映射只取其一,其余列数据不入(静默丢列)
-            for (const m of ruleMappings) {
-              const n = stream.headers.filter((h) => h === m.sourceHeader).length;
-              if (n > 1) {
-                warnings.add(`表头「${m.sourceHeader}」出现 ${n} 次,映射只取其一,其余列数据不入`);
-              }
-            }
-            const colIndex = buildColIndex(stream.headers);
-            let rowNo = 0;
+          }
+          // 未用表头检测:源表头(规范名)里没被当前规则任一映射 sourceHeader 引用的,
+          // 数据不会进大表 —— 收集起来返回给 agent(可能有映射漏写/拼写不匹配)
+          const mappedHeaders = new Set(ruleMappings.map((m) => m.sourceHeader));
+          for (const h of canonical.names) {
+            if (!mappedHeaders.has(h)) unusedHeaders.add(h);
+          }
+          const colIndex = buildColIndex(canonical.names);
+          let rowNo = 0;
+          try {
             for await (const row of stream.rows) {
               const mapped = applyMappingRow(row, colIndex, ruleMappings);
               attachLineage([mapped], {
@@ -171,7 +186,6 @@ export async function runCleanPipeline(
               yield mapped;
             }
           } catch (e) {
-            // 单个文件读不了(如密码保护/损坏)不拖垮整条管线:跳过并在告警里说明
             warnings.add(`跳过无法读取的文件 ${basename(file.path)}: ${(e as Error).message}`);
           }
         }

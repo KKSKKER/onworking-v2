@@ -141,7 +141,7 @@ describe('clean pipeline runner', () => {
     await expect(runCleanPipeline(workspace, db, empty, bigTable)).rejects.toThrow();
   });
 
-  it('warns when a mapped source header is duplicated in the source', async () => {
+  it('bare sourceHeader on duplicated headers fails the run (was: take-one warning)', async () => {
     const dupDir = join(dir, 'dup-src');
     mkdirSync(dupDir, { recursive: true });
     const wsx = XLSX.utils.aoa_to_sheet([
@@ -162,8 +162,72 @@ describe('clean pipeline runner', () => {
       ],
     });
     const dupCfg: CleanPipelineConfig = { kind: 'clean', id: 'c2', label: '', bigTableFolder: 'seq', sourceDir: dupDir, createdAt: '' };
-    const res = await runCleanPipeline(workspace, db, dupCfg, bigTable);
-    expect(res.warnings.some((w) => w.includes('其他'))).toBe(true);
+    const err = await runCleanPipeline(workspace, db, dupCfg, bigTable).then(
+      () => null,
+      (e) => e,
+    );
+    expect(err).toMatchObject({ code: 'CLEAN_DUPLICATE_HEADER' });
+    expect(err.message).toMatch(/其他_1/);
+  });
+
+  it('fails the whole run when a bare sourceHeader matches duplicate headers', async () => {
+    const dupDir = join(dir, 'dup-src');
+    mkdirSync(dupDir, { recursive: true });
+    // 3 个「姓名」列:第 2 个有数据,其余空;右侧「备注」有数据保证重复列存活
+    const wsx = XLSX.utils.aoa_to_sheet([
+      ['姓名', '出生日期', '姓名', '账号', '姓名', '备注'],
+      ['', '1990-01-01', '张三', 'A1', '', 'x'],
+      ['', '1991-02-02', '李四', 'A2', '', 'y'],
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, wsx, 'Sheet1');
+    XLSX.writeFile(wb, join(dupDir, 'dup.xlsx'));
+    saveRule(workspace, 'seq', {
+      name: 'seq_rule',
+      display: '重复表头',
+      version: 1,
+      sources: [{ pattern: '**/*', headerRow: 1 }],
+      fields: [
+        { sourceHeader: '姓名', outputName: 'name', included: true, order: 1, transforms: [{ kind: 'coerce_string' }] },
+      ],
+    });
+    const dupCfg: CleanPipelineConfig = { kind: 'clean', id: 'c4', label: '', bigTableFolder: 'seq', sourceDir: dupDir, createdAt: '' };
+    // 裸名「姓名」+ 重复表头 → 整个 run 失败(抛 CLEAN_DUPLICATE_HEADER,不进"跳过该文件"分支)
+    const err = await runCleanPipeline(workspace, db, dupCfg, bigTable).then(
+      () => null,
+      (e) => e,
+    );
+    expect(err).toMatchObject({ code: 'CLEAN_DUPLICATE_HEADER' });
+    expect(err.message).toMatch(/姓名_1/);
+  });
+
+  it('resolves a numbered sourceHeader to the exact duplicate column', async () => {
+    const dupDir = join(dir, 'dup-src2');
+    mkdirSync(dupDir, { recursive: true });
+    const wsx = XLSX.utils.aoa_to_sheet([
+      ['姓名', '出生日期', '姓名', '账号', '姓名', '备注'],
+      ['', '1990-01-01', '张三', 'A1', '', 'x'],
+      ['', '1991-02-02', '李四', 'A2', '', 'y'],
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, wsx, 'Sheet1');
+    XLSX.writeFile(wb, join(dupDir, 'dup.xlsx'));
+    saveRule(workspace, 'seq', {
+      name: 'seq_rule',
+      display: '重复表头',
+      version: 1,
+      sources: [{ pattern: '**/*', headerRow: 1 }],
+      fields: [
+        { sourceHeader: '姓名_2', outputName: 'name', included: true, order: 1, transforms: [{ kind: 'coerce_string' }] },
+      ],
+    });
+    const dupCfg: CleanPipelineConfig = { kind: 'clean', id: 'c5', label: '', bigTableFolder: 'seq', sourceDir: dupDir, createdAt: '' };
+    // 大表 fields 需含 name 列:复用共享 bigTable 追加一个
+    const bt: BigTableConfig = { ...bigTable, fields: [...bigTable.fields, { name: 'name', type: 'TEXT', order: 4 }] };
+    const res = await runCleanPipeline(workspace, db, dupCfg, bt);
+    expect(res.rowsInserted).toBe(2);
+    const rows = db.prepare('SELECT name FROM seq').all() as { name: string }[];
+    expect(rows.map((r) => r.name)).toEqual(['张三', '李四']); // 取的是第 2 个姓名列
   });
 
   it('logs clean start and complete (logging wired)', async () => {
