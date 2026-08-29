@@ -493,6 +493,8 @@ git commit -m "feat(pipeline): 裸 sourceHeader 命中重复表头 → CLEAN_DUP
 
 ```ts
   it('toolSetMapping accepts a numbered sourceHeader on duplicate-header files', () => {
+    const src = bigTableSourceDir(ws, 'seq'); // findMissingSourceHeaders 扫的是大表自己的 source 目录
+    mkdirSync(src, { recursive: true });
     const wsx = XLSX.utils.aoa_to_sheet([
       ['姓名', '出生日期', '姓名', '账号', '姓名', '备注'],
       ['', '1990-01-01', '张三', 'A1', '', 'x'],
@@ -500,15 +502,17 @@ git commit -m "feat(pipeline): 裸 sourceHeader 命中重复表头 → CLEAN_DUP
     ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, wsx, 'Sheet1');
-    XLSX.writeFile(wb, join(sourceDir, 'dup.xlsx'));
+    XLSX.writeFile(wb, join(src, 'dup.xlsx'));
 
     const { ruleFile } = toolSetMapping(ws, 'seq', 1, [
       { sourceHeader: '姓名_2', outputName: 'name', transform: 'none' },
-    ]);
+    ], { pattern: 'dup.xlsx', sheetName: 'Sheet1' });
     expect(ruleFile).toMatch(/\.yaml$/);
   });
 
   it('toolSetMapping rejects a bare sourceHeader on duplicate-header files (MAPPING_DUPLICATE_HEADER)', () => {
+    const src = bigTableSourceDir(ws, 'seq');
+    mkdirSync(src, { recursive: true });
     const wsx = XLSX.utils.aoa_to_sheet([
       ['姓名', '出生日期', '姓名', '账号', '姓名', '备注'],
       ['', '1990-01-01', '张三', 'A1', '', 'x'],
@@ -516,15 +520,15 @@ git commit -m "feat(pipeline): 裸 sourceHeader 命中重复表头 → CLEAN_DUP
     ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, wsx, 'Sheet1');
-    XLSX.writeFile(wb, join(sourceDir, 'dup.xlsx'));
+    XLSX.writeFile(wb, join(src, 'dup.xlsx'));
 
     expect(() => toolSetMapping(ws, 'seq', 1, [
       { sourceHeader: '姓名', outputName: 'name', transform: 'none' },
-    ])).toThrowError(/MAPPING_DUPLICATE_HEADER|姓名_1/);
+    ], { pattern: 'dup.xlsx', sheetName: 'Sheet1' })).toThrowError(/MAPPING_DUPLICATE_HEADER|姓名_1/);
   });
 ```
 
-（`姓名_2` 对 dup.xlsx 精确命中 → 校验通过；裸 `姓名` 对 dup.xlsx 返回 `duplicate-bare` → 抛错。a.xlsx 无姓名列 → `ok,undefined`,不影响任一用例。）
+（`姓名_2` 对 dup.xlsx 精确命中 → 校验通过；裸 `姓名` 对 dup.xlsx 返回 `duplicate-bare` → 抛错。**fixture 必须写进 `bigTableSourceDir(ws, 'seq')`**（大表自己的 source 目录，与真实 addFiles 流程一致），否则 `findMissingSourceHeaders` 扫不到 → 校验被静默跳过 → 两条用例假绿。
 
 - [ ] **Step 2: 运行确认失败**
 

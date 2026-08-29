@@ -136,6 +136,42 @@ describe('tools', () => {
     expect(preview.total).toBe(4); // a.xlsx 2 行 + b.xlsx 2 行
   });
 
+  it('toolSetMapping accepts a numbered sourceHeader on duplicate-header files', () => {
+    // 文件放进大表自己的 source 目录(与真实 addFiles 流程一致),校验才看得到
+    const src = bigTableSourceDir(ws, 'seq');
+    mkdirSync(src, { recursive: true });
+    const wsx = XLSX.utils.aoa_to_sheet([
+      ['姓名', '出生日期', '姓名', '账号', '姓名', '备注'],
+      ['', '1990-01-01', '张三', 'A1', '', 'x'],
+      ['', '1991-02-02', '李四', 'A2', '', 'y'],
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, wsx, 'Sheet1');
+    XLSX.writeFile(wb, join(src, 'dup.xlsx'));
+
+    const { ruleFile } = toolSetMapping(ws, 'seq', 1, [
+      { sourceHeader: '姓名_2', outputName: 'name', transform: 'none' },
+    ], { pattern: 'dup.xlsx', sheetName: 'Sheet1' });
+    expect(ruleFile).toMatch(/\.yaml$/);
+  });
+
+  it('toolSetMapping rejects a bare sourceHeader on duplicate-header files (MAPPING_DUPLICATE_HEADER)', () => {
+    const src = bigTableSourceDir(ws, 'seq');
+    mkdirSync(src, { recursive: true });
+    const wsx = XLSX.utils.aoa_to_sheet([
+      ['姓名', '出生日期', '姓名', '账号', '姓名', '备注'],
+      ['', '1990-01-01', '张三', 'A1', '', 'x'],
+      ['', '1991-02-02', '李四', 'A2', '', 'y'],
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, wsx, 'Sheet1');
+    XLSX.writeFile(wb, join(src, 'dup.xlsx'));
+
+    expect(() => toolSetMapping(ws, 'seq', 1, [
+      { sourceHeader: '姓名', outputName: 'name', transform: 'none' },
+    ], { pattern: 'dup.xlsx', sheetName: 'Sheet1' })).toThrowError(/MAPPING_DUPLICATE_HEADER|姓名_1/);
+  });
+
   it('toolAddFilesToBigTable copies files into the big table source dir', () => {
     const srcFile = join(dir, 'a.xlsx');
     writeFileSync(srcFile, 'content-a');
