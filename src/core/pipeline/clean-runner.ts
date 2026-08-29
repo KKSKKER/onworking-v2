@@ -27,7 +27,7 @@ export interface CleanResult {
   tableName: string;
   rowsInserted: number;
   files: number;
-  /** 入库告警(如重复表头导致映射只取一列、其余列数据不入)。 */
+  /** 入库告警(如跳过无法读取的文件;重复表头裸名映射会抛错让整个 run 失败,不会静默只取一列)。 */
   warnings: string[];
   /** 源文件中存在但未被任何映射引用的表头(数据未导入大表)。 */
   unusedHeaders: string[];

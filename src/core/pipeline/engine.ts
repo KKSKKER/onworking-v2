@@ -30,7 +30,7 @@ export interface RunSummary {
   ok: boolean;
   rows?: number;
   error?: string;
-  /** 运行告警(如清洗入库时重复表头导致丢列)。 */
+  /** 运行告警(如跳过无法读取的文件;重复表头未按编号映射会直接让 run 失败,不会静默丢列)。 */
   warnings?: string[];
   /** clean:源文件中存在但未被任何映射引用的表头(数据未导入大表),供 agent 核对映射是否漏写。 */
   unusedHeaders?: string[];
