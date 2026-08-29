@@ -258,4 +258,13 @@ describe('pipeline engine', () => {
     raw.close();
     eng.close();
   });
+
+  it('sql-clean 引用未清洗的大表时给出清晰错误(而非 unable to open database)', async () => {
+    // fixture 只建了大表配置 + 管线,没跑 clean —— bigtables/seq/db/ 目录不存在
+    const eng = new PipelineEngine(ws);
+    const r = await eng.run('m1');
+    expect(r.ok).toBe(false);
+    expect(r.error).toContain('尚未清洗'); // 指引用户先跑 clean,而不是暴露 SQLite 底层错误
+    eng.close();
+  });
 });

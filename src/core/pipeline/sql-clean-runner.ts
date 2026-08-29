@@ -6,6 +6,7 @@
 // 双连接:better-sqlite3 同一连接上 iterate() 迭代器未耗尽时不能执行其他语句("busy"),
 // 所以 ATTACH + SELECT 游标放独立的只读连接,主库连接专职 DROP/CREATE/INSERT 分批物化。
 import type Database from 'better-sqlite3';
+import { existsSync } from 'node:fs';
 import { bigTableDbPath } from '../bigtable/store';
 import { AppError } from '../errors';
 import type { Workspace } from '../workspace/workspace';
@@ -59,7 +60,18 @@ export async function runSqlCleanPipeline(
   let iter: IterableIterator<Record<string, unknown>> | null = null;
   try {
     for (const folder of cfg.bigTables) {
-      const path = bigTableDbPath(ws, folder).replace(/\\/g, '/').replace(/'/g, "''");
+      const dbPath = bigTableDbPath(ws, folder);
+      // 大表 DB 由 clean 管线创建(bigTableDb 会 mkdir db/);没跑过 clean 时目录都不存在,
+      // 直接 ATTACH 会暴露 SQLite 底层 "unable to open database"。先给清晰的用户指引。
+      if (!existsSync(dbPath)) {
+        throw new AppError({
+          module: 'pipeline/sql-clean',
+          code: 'SQLCLEAN_BIGTABLE_NOT_CLEANED',
+          message: `大表 "${folder}" 尚未清洗(没有数据),请先运行 clean 管线`,
+          data: { folder, path: dbPath },
+        });
+      }
+      const path = dbPath.replace(/\\/g, '/').replace(/'/g, "''");
       const alias = aliasOf(folder);
       try {
         readDb.exec(`ATTACH DATABASE '${path}' AS "${qt(alias)}"`);
