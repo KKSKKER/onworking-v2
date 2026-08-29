@@ -40,7 +40,7 @@
     | { kind: 'duplicate-bare'; error: string };     // 裸名存在于 duplicateOf → 报错
   ```
 
-- [ ] **Step 1: 写失败测试 `tests/core/headers.test.ts`**
+- [x] **Step 1: 写失败测试 `tests/core/headers.test.ts`**
 
 ```ts
 import { describe, it, expect } from 'vitest';
@@ -97,12 +97,12 @@ describe('resolveHeaderIndex', () => {
 });
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `npx vitest run tests/core/headers.test.ts`
 Expected: FAIL — `Cannot find module '../../src/core/etl/headers'`
 
-- [ ] **Step 3: 实现 `src/core/etl/headers.ts`**
+- [x] **Step 3: 实现 `src/core/etl/headers.ts`**
 
 ```ts
 // src/core/etl/headers.ts
@@ -162,12 +162,12 @@ export function resolveHeaderIndex(
 }
 ```
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 Run: `npx vitest run tests/core/headers.test.ts`
 Expected: PASS（5 + 4 用例全绿）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/core/etl/headers.ts tests/core/headers.test.ts
@@ -186,7 +186,7 @@ git commit -m "feat(etl): 重复表头统一编号 canonicalizeHeaders + resolve
 - Consumes: `canonicalizeHeaders`（Task 1）
 - Produces: `buildColIndex(headers: string[]): Map<string, number>` 签名不变，但内部先规范化 → 名字唯一、无覆盖；`姓名_2` 精确命中，裸 `姓名` 在重复场景下 `get` 返回 `undefined`（不再指向最右）
 
-- [ ] **Step 1: 写失败测试（追加到 `tests/core/etl.test.ts` 末尾 describe 内）**
+- [x] **Step 1: 写失败测试（追加到 `tests/core/etl.test.ts` 末尾 describe 内）**
 
 ```ts
 import { applyMapping, buildColIndex, centsToInt, normalizeDate, type FieldMapping } from '../../src/core/etl/transform';
@@ -200,12 +200,12 @@ import { applyMapping, buildColIndex, centsToInt, normalizeDate, type FieldMappi
   });
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `npx vitest run tests/core/etl.test.ts`
 Expected: FAIL — `expect(idx.get('姓名_2')).toBe(2)` 得到 `undefined`（当前 buildColIndex 不产生编号名）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `transform.ts` 顶部新增：`import { canonicalizeHeaders } from './headers';`
 替换 `buildColIndex` 为：
@@ -220,12 +220,12 @@ export function buildColIndex(headers: string[]): Map<string, number> {
 }
 ```
 
-- [ ] **Step 4: 运行确认通过 + 既有用例回归**
+- [x] **Step 4: 运行确认通过 + 既有用例回归**
 
 Run: `npx vitest run tests/core/etl.test.ts tests/core/etl-stream.test.ts`
 Expected: PASS（新增用例 + 全部既有用例；`applyMapping` 路径在无重复表头下行为不变）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/core/etl/transform.ts tests/core/etl.test.ts
@@ -248,7 +248,7 @@ git commit -m "feat(etl): buildColIndex 基于规范名构建,消除重复表头
 - Consumes: `canonicalizeHeaders` / `resolveHeaderIndex`（Task 1）、`buildColIndex`（Task 2，签名不变）
 - Produces: `runCleanPipeline` 抛 `AppError{ code:'CLEAN_DUPLICATE_HEADER' }`；engine（已存在 catch）将其包成 `RunSummary{ ok:false, error }` —— 即用户要的"整个 run 失败、错误进返回值"
 
-- [ ] **Step 1: 写失败测试（追加到 `tests/core/clean-runner.test.ts`）**
+- [x] **Step 1: 写失败测试（追加到 `tests/core/clean-runner.test.ts`）**
 
 复制现有 `beforeEach` 的夹具模式。每条新用例用**独立 `dupDir` + `dupCfg`**（不要写进共享 `sourceDir`，否则 pattern `**/*` 会连 beforeEach 的 a.xlsx 一起匹配，行数断言会错）。fixture 关键：第 2 个「姓名」列有数据；右侧「备注」有数据列保证空重复列不被读取器孤值列规则丢弃（xlsx-reader.ts:276 `maxCol = 最右 count≥2 的列`）。
 
@@ -314,7 +314,7 @@ git commit -m "feat(etl): buildColIndex 基于规范名构建,消除重复表头
   });
 ```
 
-- [ ] **Step 1b: 更新既有『重复表头只取其一』告警用例（行为已改为整体报错）**
+- [x] **Step 1b: 更新既有『重复表头只取其一』告警用例（行为已改为整体报错）**
 
 现有 `warns when a mapped source header is duplicated in the source`（clean-runner.test.ts:144-167）断言「裸名 `其他` + 重复表头」仍成功且出告警 —— 与新契约直接冲突（会回归失败），必须改为报错断言。id 沿用 c2 覆盖原用例：
 
@@ -389,14 +389,14 @@ git commit -m "feat(etl): buildColIndex 基于规范名构建,消除重复表头
   });
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `npx vitest run tests/core/clean-runner.test.ts tests/core/pipeline-engine.test.ts`
 Expected: FAIL
 - 裸名用例：当前不抛错，`rejects` 断言失败（数据被静默取到最右空列）
 - 编号名用例：当前 `姓名_2` 在 colIndex 里不存在 → name 列为 null，断言失败
 
-- [ ] **Step 3: 实现（重构 clean-runner 文件循环体）**
+- [x] **Step 3: 实现（重构 clean-runner 文件循环体）**
 
 把当前 129-176 行的循环体整体替换为（保留 `csvRows` 辅助函数不动）：
 
@@ -465,12 +465,12 @@ Expected: FAIL
         }
 ```
 
-- [ ] **Step 4: 运行确认通过 + 回归**
+- [x] **Step 4: 运行确认通过 + 回归**
 
 Run: `npx vitest run tests/core/clean-runner.test.ts tests/core/pipeline-engine.test.ts`
 Expected: PASS（新用例绿；既有 clean/engine 用例不受影响——无重复表头路径行为不变）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/core/pipeline/clean-runner.ts tests/core/clean-runner.test.ts tests/core/pipeline-engine.test.ts
@@ -489,7 +489,7 @@ git commit -m "feat(pipeline): 裸 sourceHeader 命中重复表头 → CLEAN_DUP
 - Consumes: `canonicalizeHeaders` / `resolveHeaderIndex`（Task 1）
 - Produces: `findMissingSourceHeaders` 返回 `{ missing: string[]; duplicate: string[]; actual: string[] }`；`toolSetMapping` 对 `duplicate.length>0` 抛 `AppError{ code:'MAPPING_DUPLICATE_HEADER', message: 首个 duplicate 文案 }`
 
-- [ ] **Step 1: 写失败测试（追加到 `tests/core/tools.test.ts`）**
+- [x] **Step 1: 写失败测试（追加到 `tests/core/tools.test.ts`）**
 
 ```ts
   it('toolSetMapping accepts a numbered sourceHeader on duplicate-header files', () => {
@@ -530,14 +530,14 @@ git commit -m "feat(pipeline): 裸 sourceHeader 命中重复表头 → CLEAN_DUP
 
 （`姓名_2` 对 dup.xlsx 精确命中 → 校验通过；裸 `姓名` 对 dup.xlsx 返回 `duplicate-bare` → 抛错。**fixture 必须写进 `bigTableSourceDir(ws, 'seq')`**（大表自己的 source 目录，与真实 addFiles 流程一致），否则 `findMissingSourceHeaders` 扫不到 → 校验被静默跳过 → 两条用例假绿。
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `npx vitest run tests/core/tools.test.ts`
 Expected: FAIL
 - 编号名用例：`姓名_2` 不在原始 headers 里 → 现有校验报 `MAPPING_HEADER_MISMATCH` 而非通过
 - 裸名用例：裸名在原始 headers 里 → 现有校验通过（错误地接受），断言不抛错
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 在 tools.ts 顶部（import 区）加 `import { canonicalizeHeaders, resolveHeaderIndex } from '../etl/headers';`
 
@@ -611,12 +611,12 @@ function findMissingSourceHeaders(
   }
 ```
 
-- [ ] **Step 4: 运行确认通过 + 回归**
+- [x] **Step 4: 运行确认通过 + 回归**
 
 Run: `npx vitest run tests/core/tools.test.ts`
 Expected: PASS（新增 2 用例绿；既有 toolSetMapping 用例不受影响——无重复表头时 `duplicate=[]`，走原逻辑）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/core/agent/tools.ts tests/core/tools.test.ts
@@ -635,7 +635,7 @@ git commit -m "feat(agent): mapping.save 校验规范名,裸名+重复 → MAPPI
 - Consumes: `canonicalizeHeaders`（Task 1）
 - Produces: `applyTemplateToSheet` 对模板 `sourceHeader` 用规范名精确匹配；`姓名_2` 命中重复表头第 2 列，裸 `姓名` 在重复表头上进 `skipped`
 
-- [ ] **Step 1: 写失败测试（追加到 `tests/core/template.test.ts`）**
+- [x] **Step 1: 写失败测试（追加到 `tests/core/template.test.ts`）**
 
 ```ts
   it('applyTemplateToSheet matches numbered sourceHeaders on duplicate-header sheets', () => {
@@ -672,12 +672,12 @@ git commit -m "feat(agent): mapping.save 校验规范名,裸名+重复 → MAPPI
   });
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `npx vitest run tests/core/template.test.ts`
 Expected: FAIL（当前用原始 headers 精确匹配：`姓名_2` 匹配不到 → matched 0；裸 `姓名` 能匹配到 → matched 1）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `store.ts` 顶部新增 `import { canonicalizeHeaders } from '../etl/headers';`
 替换 `applyTemplateToSheet` 内 `const headers = new Set(sheet.headers);` 为：
@@ -686,12 +686,12 @@ Expected: FAIL（当前用原始 headers 精确匹配：`姓名_2` 匹配不到 
   const headers = new Set(canonicalizeHeaders(sheet.headers).names);
 ```
 
-- [ ] **Step 4: 运行确认通过 + 回归**
+- [x] **Step 4: 运行确认通过 + 回归**
 
 Run: `npx vitest run tests/core/template.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/core/template/store.ts tests/core/template.test.ts
@@ -710,7 +710,7 @@ git commit -m "feat(template): 模板匹配用规范名,支持 姓名_2 精确�
 - Consumes: `canonicalizeHeaders`（Task 1）
 - Produces: 预览列名显示 `姓名_1, 姓名_2, 姓名_3`，与 YAML 可写名完全对齐
 
-- [ ] **Step 1: 改代码**
+- [x] **Step 1: 改代码**
 
 删除 `dedupeHeaders`（21-29 行整段）。`PreviewView.tsx` 顶部 import 区加：
 
@@ -724,12 +724,12 @@ import { canonicalizeHeaders } from '../../core/etl/headers';
 const cols = canonicalizeHeaders(d.headers).names;
 ```
 
-- [ ] **Step 2: typecheck + 全量测试**
+- [x] **Step 2: typecheck + 全量测试**
 
 Run: `npm run typecheck`
 Expected: 无错误
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 git add src/renderer/views/PreviewView.tsx
@@ -748,7 +748,7 @@ git commit -m "feat(renderer): 预览重复表头改用 canonicalizeHeaders,列�
 - Consumes: `canonicalizeHeaders`（Task 1）
 - Produces: 自动生成的 `sourceHeader`/字段名用规范名，重复列显示为 `姓名_1/姓名_2/姓名_3`（依赖 Task 4 的校验放行）
 
-- [ ] **Step 1: 写失败测试（追加到 `tests/core/agent-flow.test.ts`）**
+- [x] **Step 1: 写失败测试（追加到 `tests/core/agent-flow.test.ts`）**
 
 ```ts
   it('initial setup on a duplicate-header file generates numbered sourceHeaders (姓名_1/姓名_2)', async () => {
@@ -783,12 +783,12 @@ git commit -m "feat(renderer): 预览重复表头改用 canonicalizeHeaders,列�
 
 （import 区需补：`import { loadRules } from '../../src/core/rule/store';`。`rmSync`、`join`、`openWorkspace` 均已 import。）
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `npx vitest run tests/core/agent-flow.test.ts`
 Expected: FAIL — 当前自动映射用原始 headers，生成的 sourceHeader 是裸 `姓名`（×3），断言 `姓名_1` 失败
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `flow.ts` 顶部加 `import { canonicalizeHeaders } from '../etl/headers';`，替换 `guessFieldsAndMappings` 内 `headers.forEach(...)` 为：
 
@@ -807,12 +807,12 @@ Expected: FAIL — 当前自动映射用原始 headers，生成的 sourceHeader 
       canonicalizeHeaders(d.headers).names.map((h) => ({
 ```
 
-- [ ] **Step 4: 运行确认通过 + 回归**
+- [x] **Step 4: 运行确认通过 + 回归**
 
 Run: `npx vitest run tests/core/agent-flow.test.ts && npm run typecheck`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/core/agent/flow.ts src/renderer/views/MappingView.tsx tests/core/agent-flow.test.ts
@@ -828,12 +828,12 @@ git commit -m "feat(agent/renderer): 自动映射用规范名,重复表头生成
 - Modify: `agents.md`（如含"重复表头只取其一"表述）
 - Test: `npm run typecheck`（manual.ts 是源码，改文案需编译通过）
 
-- [ ] **Step 1: 查现状**
+- [x] **Step 1: 查现状**
 
 Run: `grep -rn "重复表头只取其一\|只取其一" src/mcp/manual.ts agents.md`
 Expected: 命中 manual.ts:32 及可能 agents.md
 
-- [ ] **Step 2: 改文案**
+- [x] **Step 2: 改文案**
 
 `manual.ts:32` 中"重复表头只取其一"改为：
 
@@ -841,12 +841,12 @@ Expected: 命中 manual.ts:32 及可能 agents.md
 
 `agents.md` 若有"重复表头只取其一"类表述，同步改为上述语义。
 
-- [ ] **Step 3: 验证**
+- [x] **Step 3: 验证**
 
 Run: `npm run typecheck`
 Expected: 无错误
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add src/mcp/manual.ts agents.md
@@ -860,16 +860,16 @@ git commit -m "docs(agent): 重复表头映射改为编号名语义,更新告警
 **Files:**
 - 无（验收）
 
-- [ ] **Step 1: 全量测试 + 类型检查**
+- [x] **Step 1: 全量测试 + 类型检查**
 
 Run: `npm test` && `npm run typecheck`
 Expected: 全部通过（重点回归：无重复表头的既有 clean / tools / template / etl / agent-flow 用例）
 
-- [ ] **Step 2: 手工冒烟（可选，若有真实重复表头文件）**
+- [x] **Step 2: 手工冒烟（可选，若有真实重复表头文件）**
 
 用带 3 个「姓名」列的真实文件跑一条 clean：确认裸名规则报错、改成 `姓名_2` 后取到对应列数据、预览列名显示 `姓名_1..N`。
 
-- [ ] **Step 3: 提交（若本任务有任何改动）**
+- [x] **Step 3: 提交（若本任务有任何改动）**
 
 ```bash
 git status
