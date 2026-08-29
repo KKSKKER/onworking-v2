@@ -132,11 +132,11 @@ printf '%s\n' \
 
 把仓库根目录交给 AI 是**安全**的——OnWorking 内置 **AI 开放模式**（`external` / `local`，存于工作区 `.onworking/settings.json`，默认 `external`），对 AI 能接触的数据做了硬隔离：
 
-- **`external`（默认，推荐）** —— AI 只能用元数据、schema/配置与管线管理类命令（`schema.tables`、`setup.detectSource`、`pipeline.run`、`bigtable.addFiles` 等），**读不到也改不到任何真实业务行数据**：`query.run` / `query.exportCsv`、`bigtable.previewRows` / `bigtable.exportCsv`、`setup.preview` 等真实数据命令对 AI 一律返回 `AI_MODE_RESTRICTED`；破坏性操作（删大表 / 删源文件 / 删映射规则）也仅限人类界面。
+- **`external`（默认，推荐）** —— AI 能用元数据、schema/配置、管线管理类命令与 CSV 导出（`schema.tables`、`setup.detectSource`、`pipeline.run`、`bigtable.addFiles`、`query.exportCsv` / `bigtable.exportCsv` / `setup.exportCsv` 等），**读不到也改不到真实业务行数据本身**：`query.run`、`bigtable.previewRows`、`setup.preview` 等真实数据命令对 AI 一律返回 `AI_MODE_RESTRICTED`；CSV 导出仅跑 SELECT 落盘、不暴露写库，作为交付物放行；破坏性操作（删大表 / 删源文件 / 删映射规则）也仅限人类界面。
 - **`local`** —— 放开全部命令给 AI（仅限可信的本地环境使用）。
 - **模式只能由界面（人类）设置，AI 无权修改**；即使 AI 自己 spawn 一个 CLI 也绕不过——主进程用会话秘密（`ONW_AUTH_SECRET`）把「人类请求」裹进鉴权信封，外部 CLI 没有秘密，命令一律按 AI 走门禁。
 
-也就是说：**哪怕把仓库根目录交给外部 AI，它也拿不走一行业务数据**——它只能帮你搭结构、写映射、跑管线，查数、导出留给人类在应用内完成。
+也就是说：外部 AI 不能直接查数或写库（`query.run` / `bigtable.previewRows` / `setup.preview` 返回 `AI_MODE_RESTRICTED`），破坏性操作仅限人类界面；但 **CSV 导出已对 external 放行**（`query.exportCsv` / `bigtable.exportCsv` / `setup.exportCsv`，仅 SELECT 落盘），把仓库根目录交给外部 AI 即意味着它可经导出把数据带走——这是有意取舍，部署前请确认可接受。
 
 ### 测试与类型检查
 

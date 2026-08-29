@@ -30,11 +30,12 @@ describe('ai-gate isAiAllowed', () => {
     expect(isAiAllowed('external', 'bigtable.addFiles')).toBe(true);
     // 真实数据读写仍封
     expect(isAiAllowed('external', 'query.run')).toBe(false);
-    expect(isAiAllowed('external', 'query.exportCsv')).toBe(false);
     expect(isAiAllowed('external', 'bigtable.previewRows')).toBe(false);
-    expect(isAiAllowed('external', 'bigtable.exportCsv')).toBe(false);
     expect(isAiAllowed('external', 'setup.preview')).toBe(false);
-    expect(isAiAllowed('external', 'setup.exportCsv')).toBe(false);
+    // CSV 导出(交付物):仅 SELECT 落盘,不暴露写库能力,external 放行
+    expect(isAiAllowed('external', 'query.exportCsv')).toBe(true);
+    expect(isAiAllowed('external', 'bigtable.exportCsv')).toBe(true);
+    expect(isAiAllowed('external', 'setup.exportCsv')).toBe(true);
     // 堆叠多表候选检测仅本地模式可用:候选含未确认行,外部模型可能误判表头
     expect(isAiAllowed('external', 'setup.detectHeaders')).toBe(false);
   });

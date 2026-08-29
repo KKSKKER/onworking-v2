@@ -257,7 +257,7 @@ $lines | npm run --silent onw -- open D:/ws
 | `TEMPLATE_NOT_FOUND` | 模板不存在 | `template.list` 查名 |
 | `p.bigTables is not iterable` | sql-clean config 写错字段 | 用 `bigTables` 数组，不要用 `bigTableFolder` |
 | `SQLCLEAN_NO_RESULT_TABLE` | sql-clean 缺少 `resultTable` | config 里加 `"resultTable":"你的表名"` |
-| `AI_MODE_RESTRICTED` | 当前模式(external)不允许 AI 调用该 API | `setup.preview` / `bigtable.previewRows` / `query.run` / `query.exportCsv` / `bigtable.exportCsv` 在 AI 模式下被禁用；替代：看表头用 `setup.detectSource`，查大表结构用 `schema.tables {folder}`，查总表结构用 `schema.tables`（无 folder），数据量看 `pipeline.run` 返回的 `rows`，导出需在 Onworking 应用内手动操作 |
+| `AI_MODE_RESTRICTED` | 当前模式(external)不允许 AI 调用该 API | `setup.preview` / `bigtable.previewRows` / `query.run` 在 AI 模式下被禁用；替代：看表头用 `setup.detectSource`，查大表结构用 `schema.tables {folder}`，查总表结构用 `schema.tables`（无 folder），数据量看 `pipeline.run` 返回的 `rows`，导出 CSV 用 `query.exportCsv` / `bigtable.exportCsv` / `setup.exportCsv`（external 可用，仅 SELECT 落盘） |
 | 环境：`better-sqlite3` ABI 不匹配 | 报 `NODE_MODULE_VERSION` 不符（如 `137 vs 125`） | **已双装载免疫**：`sqlite.ts` 按进程 ABI 自动选（系统 node 137 用 `better-sqlite3`，Electron 内置 node 用 `better-sqlite3-electron` 副本——本机 Electron 31.7.7 是 125），客户端怎么 spawn 都通。装完依赖跑一次 `npm run build:dual-abi`（先重建原件到 137、再建副本匹配 Electron；注意原件被 app/MCP 占用时先关掉再跑）。若仍报，先跑 `npm run build:dual-abi` 再试 |
 
 ---
