@@ -12,6 +12,7 @@
    - 大表：`bigtable.previewRows`
    - 总表：`query.run` / `schema.tables`
    - 改配置：对应 `*.save` 命令；加文件：`bigtable.addFiles`。
+4. **导出的 CSV 只作交付文件，禁止读取内容**：`query.exportCsv` / `bigtable.exportCsv` 只用于生成交付件；导出的 CSV 禁止以任何方式读取（cat / 打开 / 命令预览一律不行），确认内容靠导出前的查询与返回的 `{file, rows}`。
 
 ## 数据链（两段式，最终产物是总表 master.db）
 

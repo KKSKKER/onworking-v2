@@ -87,7 +87,8 @@ MCP 模式通过 stdin/stdout 传输 JSON-RPC 2.0，可在任意 MCP 客户端�
    - 想看文件内容 → `setup.preview` / `setup.detectSource`（源文件）、`bigtable.previewRows`（大表数据）、`query.run` / `schema.tables`（总表 DB）
    - 想改配置 → 对应 `save` 命令（`bigtable.save` / `mapping.save` / `pipeline.save` / `template.save`）
    - 想加文件 → `bigtable.addFiles`（只拷贝，不直接写文件）
-5. **任何数据导入/清洗任务必须生成总表 master.db**（硬性要求，不可省略）：
+5. **导出的 CSV 只作交付文件，禁止读取内容**：`query.exportCsv` / `bigtable.exportCsv` 只用于生成交付件；导出的 CSV（`exports/` 下及自定义 `path`）**禁止以任何方式读取**（`cat` / 打开文件 / `setup.preview` 等命令预览一律不行）。要确认导出了什么，靠导出前的查询与返回的 `{file, rows}`，不读文件本身。
+6. **任何数据导入/清洗任务必须生成总表 master.db**（硬性要求，不可省略）：
    - 只把数据做到大表（`bigtable.previewRows` 有数据）**不算完成**。
    - 必须建 sql-clean 管线（`pipeline.save`，`kind:'sql-clean'`）并 `pipeline.run`，把大表汇进总表。
    - **完成判据**：`schema.tables` 在总表能查到结果表、`query.run` 能查到数据。二者任一不满足，任务未完成，继续补建/重跑，不得宣告完成。
@@ -257,7 +258,7 @@ $lines | npm run --silent onw -- open D:/ws
 | `TEMPLATE_NOT_FOUND` | 模板不存在 | `template.list` 查名 |
 | `p.bigTables is not iterable` | sql-clean config 写错字段 | 用 `bigTables` 数组，不要用 `bigTableFolder` |
 | `SQLCLEAN_NO_RESULT_TABLE` | sql-clean 缺少 `resultTable` | config 里加 `"resultTable":"你的表名"` |
-| `AI_MODE_RESTRICTED` | 当前模式(external)不允许 AI 调用该 API | `setup.preview` / `bigtable.previewRows` / `query.run` 在 AI 模式下被禁用；替代：看表头用 `setup.detectSource`，查大表结构用 `schema.tables {folder}`，查总表结构用 `schema.tables`（无 folder），数据量看 `pipeline.run` 返回的 `rows`，导出 CSV 用 `query.exportCsv` / `bigtable.exportCsv` / `setup.exportCsv`（external 可用，仅 SELECT 落盘） |
+| `AI_MODE_RESTRICTED` | 当前模式(external)不允许 AI 调用该 API | `setup.preview` / `bigtable.previewRows` / `query.run` / `setup.exportCsv`（源文件原样导出）在 AI 模式下被禁用；替代：看表头用 `setup.detectSource`，查大表结构用 `schema.tables {folder}`，查总表结构用 `schema.tables`（无 folder），数据量看 `pipeline.run` 返回的 `rows`，导出 CSV 用 `query.exportCsv` / `bigtable.exportCsv`（external 可用，仅 SELECT 落盘） |
 | 环境：`better-sqlite3` ABI 不匹配 | 报 `NODE_MODULE_VERSION` 不符（如 `137 vs 125`） | **已双装载免疫**：`sqlite.ts` 按进程 ABI 自动选（系统 node 137 用 `better-sqlite3`，Electron 内置 node 用 `better-sqlite3-electron` 副本——本机 Electron 31.7.7 是 125），客户端怎么 spawn 都通。装完依赖跑一次 `npm run build:dual-abi`（先重建原件到 137、再建副本匹配 Electron；注意原件被 app/MCP 占用时先关掉再跑）。若仍报，先跑 `npm run build:dual-abi` 再试 |
 
 ---

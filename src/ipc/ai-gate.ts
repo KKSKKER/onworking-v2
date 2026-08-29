@@ -41,7 +41,7 @@ export function parseRequestLine(line: string): { req: IpcRequest; trusted: bool
 //   - schema/配置(不碰业务行数据):bigtable.save/get/sourceFiles、setup.sheets/detectSource、mapping.save、template.save、pipeline.delete
 //   - 管线管理:bigtable.addFiles(拷贝文件不解析)、pipeline.save/run
 //   - 真实数据仍封:query.run(工作台可写,AI 更不能用)、bigtable.previewRows/config、setup.preview 等
-//   - CSV 导出(交付物):query/bigtable/setup 的 exportCsv 仅 SELECT 落盘、不暴露写库,external 放行
+//   - CSV 导出(交付物):query/bigtable 的 exportCsv 仅 SELECT 落盘、不暴露写库,external 放行;setup.exportCsv(源文件原样导出)仍封
 //   - 破坏性操作仍封:bigtable.delete、bigtable.deleteSourceFile、mapping.delete(删大表/源文件/规则,仅人类 UI)
 //   - setup.detectHeaders 多表头候选检测已整体下线(2026-08-29):候选含未确认行,外部模型可能误判表头,恢复也仅应本地可用,故不在本表。
 export const METADATA_ALLOWED = new Set([
@@ -52,8 +52,8 @@ export const METADATA_ALLOWED = new Set([
   'mapping.save', 'template.save',
   // 管线管理(建/删/跑管线 + 拷贝源文件):external 下开放给 AI。
   'pipeline.save', 'pipeline.run', 'pipeline.delete', 'bigtable.addFiles',
-  // CSV 导出(交付物):query.exportCsv / bigtable.exportCsv / setup.exportCsv 仅 SELECT 落盘,不暴露写库能力。
-  'query.exportCsv', 'bigtable.exportCsv', 'setup.exportCsv',
+  // CSV 导出(交付物):query.exportCsv / bigtable.exportCsv 仅 SELECT 落盘,不暴露写库能力。
+  'query.exportCsv', 'bigtable.exportCsv',
 ]);
 
 export function isAiAllowed(mode: AiOpenMode, cmd: string): boolean {

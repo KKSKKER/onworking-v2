@@ -174,9 +174,9 @@ default `external`) that hard-isolates what the AI can reach:
   schema/config, and pipeline-management commands (`schema.tables`,
   `setup.detectSource`, `pipeline.run`, `bigtable.addFiles`, …). It **can never
   read or alter real business rows directly**: read commands such as `query.run`,
-  `bigtable.previewRows`, and `setup.preview` return `AI_MODE_RESTRICTED`;
-  CSV-export commands (`query.exportCsv` / `bigtable.exportCsv` /
-  `setup.exportCsv`) are allowed, since they only run SELECT and write a
+  `bigtable.previewRows`, `setup.preview`, and `setup.exportCsv` (raw source-file
+  export) return `AI_MODE_RESTRICTED`; CSV-export commands (`query.exportCsv` /
+  `bigtable.exportCsv`) are allowed, since they only run SELECT and write a
   deliverable file. Destructive operations
   (deleting BigTables / source files / mapping rules) stay human/UI-only.
 - **`local`** — opens every command to the AI (for trusted, local environments
@@ -190,10 +190,10 @@ default `external`) that hard-isolates what the AI can reach:
 In other words: an external AI cannot run in-app queries or write the DB
 (`query.run` / `bigtable.previewRows` / `setup.preview` return
 `AI_MODE_RESTRICTED`), and destructive operations stay human-only — but **CSV
-export is now open to external mode** (`query.exportCsv` / `bigtable.exportCsv` /
-`setup.exportCsv`, SELECT-to-file only). Handing the repo root to an external AI
-means it can extract data through those exports — a deliberate trade-off to
-accept before deployment.
+export is now open to external mode** (`query.exportCsv` / `bigtable.exportCsv`,
+SELECT-to-file only). Handing the repo root to an external AI means it can
+extract data through those exports — a deliberate trade-off to accept before
+deployment.
 
 ### Tests & typecheck
 
