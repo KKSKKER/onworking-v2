@@ -48,7 +48,8 @@ export function createCliBridge(opts: CliBridgeOptions): CliBridge {
     child = spawn(opts.command, [...opts.args, wsPath], {
       shell: opts.shell ?? false,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, ...opts.env },
+      // bridge 是长驻用法(跨命令保持存活),必须禁用 CLI 的空闲退出;批处理用法(管道喂一批即退)才是默认。
+      env: { ...process.env, ...opts.env, ONW_CLI_NO_IDLE_EXIT: '1' },
     });
     stdoutBuf = '';
     stderrBuf = '';

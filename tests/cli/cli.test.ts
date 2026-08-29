@@ -52,4 +52,37 @@ describe('cli', () => {
     expect(code).toBe(0);
     expect(stdout.some((l) => l.includes('"reqId":1'))).toBe(true);
   });
+
+  it('force-exits after idleExitMs when stdin never EOFs (harness keeps stdin open)', async () => {
+    const { writer, stdout } = memWriter();
+    let returned = 0;
+    let i = 0;
+    const lines = [
+      JSON.stringify({ cmd: 'workspace.open', path: dir, reqId: 1 }),
+      JSON.stringify({ cmd: 'state.summary', reqId: 2 }),
+    ];
+    // 模拟 harness:发完一批命令后不关闭 stdin —— next() 在耗尽行后永远 pending。
+    const stdin: AsyncIterable<string> = {
+      [Symbol.asyncIterator]() {
+        return {
+          next: () =>
+            i < lines.length
+              ? Promise.resolve({ done: false, value: lines[i++] })
+              : new Promise(() => { /* 永不结束 */ }),
+          return: async () => {
+            returned++;
+            return { done: true, value: undefined };
+          },
+        };
+      },
+    };
+    const started = Date.now();
+    const code = await main(['open', dir], stdin, writer, { idleExitMs: 60 });
+    const elapsed = Date.now() - started;
+    expect(code).toBe(0);
+    expect(returned).toBe(1); // 空闲退出主动终止了迭代器,而不是等 EOF
+    expect(elapsed).toBeGreaterThanOrEqual(40);
+    expect(elapsed).toBeLessThan(2000);
+    expect(stdout.some((l) => l.includes('"reqId":2'))).toBe(true);
+  });
 });

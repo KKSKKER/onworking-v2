@@ -64,10 +64,16 @@ export function createCliState(writer: CliWriter): CliState {
   };
 }
 
+// 空闲退出阈值(ms):部分 harness 用管道喂完一批 NDJSON 后不关闭 stdin,
+// readline 读不到 EOF → 命令循环永不结束 → 进程挂起,harness 超时强杀报
+// "pipes did not close after process exit"。命令批之间空闲超过该值即主动终止读取。
+const IDLE_EXIT_MS = 500;
+
 export async function main(
   argv: string[],
   stdin: AsyncIterable<string>,
   writer: CliWriter,
+  options?: { idleExitMs?: number },
 ): Promise<number> {
   if (argv[0] === 'mcp') {
     // 不写死工作区:onw mcp 可无路径启动,agent 用 workspace.open 打开/切换
@@ -94,8 +100,40 @@ export async function main(
   const state = createCliState(writer);
   const openIdx = argv.indexOf('open');
   if (openIdx >= 0 && argv[openIdx + 1]) state.open(argv[openIdx + 1]);
-  for await (const line of stdin) {
-    const trimmed = line.trim();
+
+  // 空闲退出:stdin 不关闭(harness 常见)时,不能干等 EOF;命令批之间空闲
+  // idleExitMs 即终止读取,走与 EOF 相同的正常退出路径。mcp 分支不受影响(长连接)。
+  const idleExitMs = options?.idleExitMs ?? 0;
+  const iterator = stdin[Symbol.asyncIterator]();
+  let idleTimer: NodeJS.Timeout | null = null;
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    if (idleTimer) clearTimeout(idleTimer);
+    state.close();
+  };
+
+  while (!finished) {
+    let entry: IteratorResult<string>;
+    if (idleExitMs > 0) {
+      const idleP = new Promise<'idle'>((resolve) => {
+        idleTimer = setTimeout(() => resolve('idle'), idleExitMs);
+      });
+      const lineP = iterator.next().then((e) => ({ kind: 'line' as const, e }));
+      const winner = await Promise.race([lineP, idleP]);
+      if (winner === 'idle') {
+        void iterator.return?.(); // 终止仍挂起的 next(),释放 stdin(同 EOF)
+        break;
+      }
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = null;
+      entry = winner.e;
+    } else {
+      entry = await iterator.next();
+    }
+    if (entry.done) break;
+    const trimmed = (entry.value ?? '').trim();
     if (!trimmed) continue;
     let req: IpcRequest;
     let trusted = false;
@@ -107,7 +145,7 @@ export async function main(
     }
     await state.handleRequest(req, trusted);
   }
-  state.close();
+  finish();
   return 0;
 }
 
@@ -119,7 +157,29 @@ if (typeof require !== 'undefined' && require.main === module) {
     stdout: (line) => process.stdout.write(line + '\n'),
     stderr: (line) => process.stderr.write(line + '\n'),
   };
-  main(process.argv.slice(2), createInterface({ input: process.stdin, crlfDelay: Infinity }), writer)
-    .then((code) => { process.exitCode = code; })
-    .catch((err: unknown) => { process.stderr.write(String(err) + '\n'); process.exitCode = 1; });
+  main(
+    process.argv.slice(2),
+    createInterface({ input: process.stdin, crlfDelay: Infinity }),
+    writer,
+    // 管道输入才启用空闲退出;TTY 交互输入保持"等 EOF"(避免手动输入时被掐断);
+    // 长驻调用方(如 cli-bridge)显式置 ONW_CLI_NO_IDLE_EXIT=1 关闭。
+    { idleExitMs: process.stdin.isTTY || process.env.ONW_CLI_NO_IDLE_EXIT === '1' ? 0 : IDLE_EXIT_MS },
+  )
+    .then((code) => { exitAfterFlush(code); })
+    .catch((err: unknown) => {
+      process.stderr.write(String(err) + '\n');
+      exitAfterFlush(1);
+    });
+}
+
+// 批处理 CLI 必须显式退出:stdin 管道被 harness 保持打开时,进程.stdin 句柄会把事件循环
+// 一直挂住(只设 process.exitCode 不够,进程永远不退出 → harness 超时强杀报 "pipes did not close")。
+// 先 flush 再退出,避免最后一批 NDJSON 响应还留在缓冲区里被 process.exit() 截断。
+function exitAfterFlush(code: number): void {
+  const exit = () => process.exit(code);
+  const pending: Promise<void>[] = [];
+  if (!process.stdout.writableEnded) pending.push(new Promise<void>((resolve) => { process.stdout.end(() => resolve()); }));
+  if (!process.stderr.writableEnded) pending.push(new Promise<void>((resolve) => { process.stderr.end(() => resolve()); }));
+  if (pending.length === 0) exit();
+  else Promise.all(pending).then(exit, exit);
 }
