@@ -82,7 +82,7 @@ export class PipelineEngine {
   private bigTableDb(folder: string): Database.Database {
     const path = bigTableDbPath(this.ws, folder);
     mkdirSync(dirname(path), { recursive: true }); // 确保 db/ 目录存在
-    return openDatabase(path, { wal: false }); // 非 WAL:保证 sql-clean ATTACH 可靠
+    return openDatabase(path); // 一律 WAL:sql-clean ATTACH 在 WAL 下同样可靠(探针 F/H)
   }
 
   private pipelineNodeIds(): string[] {
@@ -117,7 +117,7 @@ export class PipelineEngine {
         return { pipelineId: id, kind: 'clean', ok: true, rows: result.rowsInserted, warnings: result.warnings };
       }
       // query / sql-clean:用总表 DB
-      const db = openDatabase(this.masterDb(), { wal: false });
+      const db = openDatabase(this.masterDb());
       try {
         if (cfg.kind === 'query') {
           const result = await runQueryPipeline(db, cfg);
@@ -194,7 +194,7 @@ export class PipelineEngine {
   }
 
   private schemaTablesOn(dbPath: string): TableInfo[] {
-    const db = openDatabase(dbPath, { wal: false });
+    const db = openDatabase(dbPath);
     try {
       const tables = db
         .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")

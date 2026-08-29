@@ -11,6 +11,7 @@ import { saveRule } from '../../src/core/rule/store';
 import { PipelineEngine } from '../../src/core/pipeline/engine';
 import { runSqlCleanPipeline } from '../../src/core/pipeline/sql-clean-runner';
 import type { SqlCleanPipelineConfig } from '../../src/core/pipeline/config';
+import { loadSqlite } from '../../src/core/db/sqlite';
 import { gitCurrentCommit } from '../../src/core/versioning/git';
 import { toolQuery } from '../../src/core/agent/tools';
 
@@ -211,7 +212,7 @@ describe('pipeline engine', () => {
     const eng = new PipelineEngine(ws);
     await eng.run('c1');
     const btPath = bigTableDbPath(ws, 'seq');
-    const btdb = openDatabase(btPath, { wal: false });
+    const btdb = openDatabase(btPath);
     btdb.exec('DELETE FROM seq'); // 清掉 clean 已导入的源数据,保证精确 12000 行
     const ins = btdb.prepare('INSERT INTO seq (date, debit) VALUES (?, ?)');
     const tx = btdb.transaction(() => { for (let i = 0; i < 12000; i++) ins.run('2024-01', i); });
@@ -243,6 +244,18 @@ describe('pipeline engine', () => {
     const cols = db.prepare('PRAGMA table_info(empty_out)').all() as { name: string }[];
     expect(cols.map((c) => c.name)).toEqual(['empty']);
     db.close();
+    eng.close();
+  });
+
+  it('sql-clean 首次创建 master.db 即 WAL(日志模式确定,消除 DELETE 模式同库读写死锁)', async () => {
+    const eng = new PipelineEngine(ws);
+    await eng.run('c1'); // 先建大表,否则 sql-clean ATTACH 的库没有表
+    await eng.run('m1'); // sql-clean 是 master.db 首次创建路径(曾用 wal:false → 建出 DELETE)
+    // 裸打开读持久化日志模式(不走 openDatabase,避免 pragma 把 DELETE 现场转成 WAL 掩盖问题)
+    const Sqlite = loadSqlite();
+    const raw = new Sqlite(masterDbPath(ws));
+    expect(raw.pragma('journal_mode', { simple: true })).toBe('wal');
+    raw.close();
     eng.close();
   });
 });

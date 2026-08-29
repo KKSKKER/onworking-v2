@@ -73,7 +73,7 @@ export async function toolExportBigTableCsv(
     const n = await writeRowsToCsvFile(file, headers, []);
     return { file, rows: n };
   }
-  const db = openDatabase(dbPath, { wal: false });
+  const db = openDatabase(dbPath);
   try {
     const stmt = db.prepare(`SELECT * FROM "${cfg.tableName}"`);
     const columns = stmt.columns().map((c) => c.name);
@@ -101,7 +101,7 @@ export async function toolExportQueryCsv(
     });
   }
   const file = opts?.path ?? join(ws.root, 'exports', 'query.csv');
-  const db = openDatabase(opts?.folder ? bigTableDbPath(ws, opts.folder) : masterDbPath(ws), { wal: false });
+  const db = openDatabase(opts?.folder ? bigTableDbPath(ws, opts.folder) : masterDbPath(ws));
   try {
     const stmt = db.prepare(trimmed);
     const columns = stmt.columns().map((c) => c.name);

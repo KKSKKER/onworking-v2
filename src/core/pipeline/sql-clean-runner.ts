@@ -53,8 +53,9 @@ export async function runSqlCleanPipeline(
 
   // 1. 读连接:ATTACH 各大表 DB(别名 = bt_<大表>;SQL 用 "bt_序时账".seq 引用)
   //    读连接与写连接(masterDb)指向同一 master.db 文件;SELECT 只读 ATTACH 库,不锁主库,
-  //    journal 模式下写连接可并发 DROP/CREATE/INSERT(见 tests/core/pipeline-engine.test.ts 用例)。
-  const readDb = openDatabase(masterDbPath(ws), { wal: false });
+  //    WAL 下写连接可并发 DROP/CREATE/INSERT —— 本双连接设计依赖 master.db 是 WAL
+  //    (openDatabase 一律 WAL;若落入 DELETE,同库读+写会 database is locked)。
+  const readDb = openDatabase(masterDbPath(ws));
   let iter: IterableIterator<Record<string, unknown>> | null = null;
   try {
     for (const folder of cfg.bigTables) {
