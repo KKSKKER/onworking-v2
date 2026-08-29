@@ -278,13 +278,23 @@ export function toolSetBigTableFields(
   saveBigTableConfig(ws, folder, { ...existing, fields });
 }
 
-/** tool: 获取文件表头(sheets 列表 + 自动检测结果)。sheetName 指定对哪个 sheet 检测。 */
+/** tool: 获取文件表头(sheets 列表 + 自动检测结果)。sheetName 指定对哪个 sheet 检测。
+ *  headers 返回规范名(重复表头编号 姓名_1..N),与 mapping.save 校验/预览/自动映射一致:
+ *  agent 一眼看到编号名直接照抄进 mapping.save,不必先撞 MAPPING_DUPLICATE_HEADER 报错才知道怎么写。 */
 export function toolGetFileHeaders(filePath: string, sheetName?: string): {
   sheets: string[];
   detected: { sheetName: string; headerRow: number; headers: string[] };
 } {
   const sheets = filePath.toLowerCase().endsWith('.csv') ? parseCsvFile(filePath) : parseExcelFile(filePath);
-  return { sheets: sheets.map((s) => s.sheetName), detected: detectSourceConfig(filePath, sheetName) };
+  const detected = detectSourceConfig(filePath, sheetName);
+  return {
+    sheets: sheets.map((s) => s.sheetName),
+    detected: {
+      sheetName: detected.sheetName,
+      headerRow: detected.headerRow,
+      headers: canonicalizeHeaders(detected.headers).names,
+    },
+  };
 }
 
 // [禁用 2026-08-29] tool: 全表扫描列出「可能是表头」的行(含偏离值证据 + 行内容),供 AI 在多表纵向堆叠时挑选真正的表头。

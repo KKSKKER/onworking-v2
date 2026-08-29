@@ -7,7 +7,7 @@ import { initWorkspace, type Workspace } from '../../src/core/workspace/workspac
 import { saveBigTableConfig, bigTableSourceDir } from '../../src/core/bigtable/store';
 import { savePipeline } from '../../src/core/pipeline/store';
 import { saveRule } from '../../src/core/rule/store';
-import { toolRunPipeline, toolRunPipelines, toolPreviewCleanResult, toolSaveTemplate, toolSetMapping, toolAddFilesToBigTable, toolExportBigTableCsv, toolExportQueryCsv, toolExportSourceCsv, toolGetBigTableContext, toolListPipelineConfigs, toolDeleteBigTable, toolDeleteSourceFile, toolQuery, toolSchemaTables } from '../../src/core/agent/tools';
+import { toolRunPipeline, toolRunPipelines, toolPreviewCleanResult, toolSaveTemplate, toolSetMapping, toolGetFileHeaders, toolAddFilesToBigTable, toolExportBigTableCsv, toolExportQueryCsv, toolExportSourceCsv, toolGetBigTableContext, toolListPipelineConfigs, toolDeleteBigTable, toolDeleteSourceFile, toolQuery, toolSchemaTables } from '../../src/core/agent/tools';
 import { listTemplates } from '../../src/core/template/store';
 import { listRules, loadRules } from '../../src/core/rule/store';
 import { PipelineEngine } from '../../src/core/pipeline/engine';
@@ -170,6 +170,21 @@ describe('tools', () => {
     expect(() => toolSetMapping(ws, 'seq', 1, [
       { sourceHeader: '姓名', outputName: 'name', transform: 'none' },
     ], { pattern: 'dup.xlsx', sheetName: 'Sheet1' })).toThrowError(/MAPPING_DUPLICATE_HEADER|姓名_1/);
+  });
+
+  it('toolGetFileHeaders returns canonical numbered headers for duplicate-header files', () => {
+    const f = join(dir, 'dup-hdr.xlsx');
+    const wsx = XLSX.utils.aoa_to_sheet([
+      ['姓名', '出生日期', '姓名', '账号', '姓名', '备注'],
+      ['', '1990-01-01', '张三', 'A1', '', 'x'],
+      ['', '1991-02-02', '李四', 'A2', '', 'y'],
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, wsx, 'Sheet1');
+    XLSX.writeFile(wb, f);
+    // agent 侧直接看到编号名 → 可照抄进 mapping.save,不必先撞报错才知道
+    const r = toolGetFileHeaders(f, 'Sheet1');
+    expect(r.detected.headers).toEqual(['姓名_1', '出生日期', '姓名_2', '账号', '姓名_3', '备注']);
   });
 
   it('toolAddFilesToBigTable copies files into the big table source dir', () => {
