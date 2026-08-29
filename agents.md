@@ -170,6 +170,29 @@ $lines | npm run --silent onw -- open D:/ws
 - 交互式：直接 `npm run --silent onw -- open D:/ws`，之后逐行粘贴 JSON 回车即可。
 - 若 `npm` 本身在 PowerShell 管道里有问题，退路是编译产物：`node dist/main/cli/index.js open D:/ws`（先 `npm run build:main`）。
 
+**中文路径乱码（PowerShell 5.1 编码）——调用 CLI 前必读：**
+
+工作区/文件路径含中文（如 `D:\工时表`）时，PowerShell 5.1 有**两层编码陷阱**，否则路径传成 `D:\???`、报 `ENOENT: mkdir 'D:\???.onworking\db'`：
+
+1. **脚本文件读取**：`powershell -File <脚本>.ps1` 读**无 BOM 的 UTF-8** 脚本会按 ANSI/GBK 解码 → 脚本内中文先变乱码。
+2. **管道传原生程序**：即使修好脚本编码，PS 5.1 把字符串通过管道交给原生 exe（`Onworking.exe`）时仍用默认 ASCII/系统代码页 → 中文变 `?`。
+
+**解决（三选一或组合）：**
+
+- **脚本存为 UTF-8 带 BOM**（PS 5.1 见到 BOM 才按 UTF-8 读）：
+  ```powershell
+  $c = Get-Content '<脚本.ps1>' -Raw -Encoding utf8
+  [System.IO.File]::WriteAllText('<脚本.ps1>', $c, (New-Object System.Text.UTF8Encoding $true))
+  ```
+- **脚本开头强制 UTF-8 输出**（在调用 exe 之前）：
+  ```powershell
+  $OutputEncoding = [System.Text.Encoding]::UTF8
+  [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+  ```
+- **优先当前会话内联执行**，别包 `powershell -File` 新进程：本会话（Bash 工具/当前 PS）已是 UTF-8，直接跑命令就正常；新开 `-File` 进程用默认代码页才是乱码触发点。命令/JSON 过长（如几百列 mapping）时，按 UTF-8 写临时 NDJSON 文件再喂 stdin，不要内联超长命令。
+
+排查速记：**同一条命令，当前会话能跑通、换成 `powershell -File` 就乱码 → 就是新进程代码页问题，按上面两条编码设置修。**
+
 ---
 
 ## 4. 标准工作流
