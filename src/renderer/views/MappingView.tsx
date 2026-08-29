@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useSelection } from '../state/SelectionContext';
 import type { MappingTemplate } from '../../core/template/store';
 import type { FieldMapping } from '../../core/etl/transform';
+import { canonicalizeHeaders } from '../../core/etl/headers';
 import { sendCli } from '../cli';
 import { patternToRegex } from '../../core/glob';
 
@@ -174,7 +175,7 @@ export function MappingView() {
     setHeaderRow(d.headerRow);
     setSheet(target);
     setFields(
-      d.headers.map((h) => ({
+      canonicalizeHeaders(d.headers).names.map((h) => ({
         included: true,
         sourceHeader: h,
         outputName: h,

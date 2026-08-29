@@ -6,6 +6,7 @@ import * as XLSX from 'xlsx';
 import { runInitialSetupFlow } from '../../src/core/agent/flow';
 import { toolCreateQueryPipeline, toolRunPipeline, toolQuery } from '../../src/core/agent/tools';
 import { openWorkspace } from '../../src/core/workspace/workspace';
+import { loadRules } from '../../src/core/rule/store';
 
 describe('agent flow (initial setup via AI tools)', () => {
   let root: string;
@@ -58,5 +59,34 @@ describe('agent flow (initial setup via AI tools)', () => {
     const out = toolQuery(ws, 'SELECT * FROM q_result');
     expect(out.rowCount).toBe(1);
     expect(out.rows[0].total).toBe(22345); // 123.45 + 100 元 → 分
+  });
+
+  it('initial setup on a duplicate-header file generates numbered sourceHeaders (姓名_1/姓名_2/姓名_3)', async () => {
+    rmSync(join(sourceDir, 'a.xlsx')); // 只留重复表头文件,保证 getFileHeaders 扫到它(而非 a.xlsx)
+    const wsx = XLSX.utils.aoa_to_sheet([
+      ['姓名', '出生日期', '姓名', '账号', '姓名', '备注'],
+      ['', '1990-01-01', '张三', 'A1', '', 'x'],
+      ['', '1991-02-02', '李四', 'A2', '', 'y'],
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, wsx, 'Sheet1');
+    XLSX.writeFile(wb, join(sourceDir, 'dup.xlsx'));
+
+    const result = await runInitialSetupFlow({
+      workspacePath: join(root, 'ws'),
+      bigTableFolder: '序时账',
+      sourceDir,
+      tableName: 'seq',
+    });
+    expect(result.success).toBe(true);
+    expect(result.bigTableRows).toBe(2);
+
+    // 读取保存的规则,断言 sourceHeader 用了编号名(姓名_1/姓名_2/姓名_3)
+    const ws = openWorkspace(join(root, 'ws'));
+    const rules = loadRules(ws, '序时账');
+    const headers = rules.flatMap((r) => r.fields ?? []).map((f) => f.sourceHeader);
+    expect(headers).toContain('姓名_1');
+    expect(headers).toContain('姓名_2');
+    expect(headers).toContain('姓名_3');
   });
 });

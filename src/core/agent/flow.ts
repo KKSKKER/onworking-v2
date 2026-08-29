@@ -5,6 +5,7 @@ import type { Workspace } from '../workspace/workspace';
 import type { ScannedFile } from '../ingest/scanner';
 import type { BigTableConfig, BigTableField } from '../bigtable/schema';
 import type { FieldMapping } from '../etl/transform';
+import { canonicalizeHeaders } from '../etl/headers';
 import type { RunSummary } from '../pipeline/engine';
 import { savePipeline } from '../pipeline/store';
 import {
@@ -42,7 +43,10 @@ function guessFieldsAndMappings(headers: string[]): {
 } {
   const fields: BigTableField[] = [];
   const mappings: FieldMapping[] = [];
-  headers.forEach((h, i) => {
+  // 用规范名自动映射:重复表头生成编号名(姓名_1/姓名_2/姓名_3),
+  // 与 toolSetMapping 的校验(裸名+重复 → MAPPING_DUPLICATE_HEADER)自洽
+  const { names } = canonicalizeHeaders(headers);
+  names.forEach((h, i) => {
     const isAmount = /金额|借方|贷方|余额|amount|amt/i.test(h);
     fields.push({ name: h, type: isAmount ? 'INTEGER' : 'TEXT', order: i + 1 });
     mappings.push({ sourceHeader: h, outputName: h, transform: isAmount ? 'to-cents' : 'none' });
