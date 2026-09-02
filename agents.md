@@ -25,7 +25,7 @@ $env:ELECTRON_RUN_AS_NODE = 1
 - CLI 入口：`resources\app\dist\main\cli\index.js`
 - 工作区通过 `workspace.open` 命令打开，也可以在启动时追加 `open <path>` 参数
 - 输出通过 stdout 返回 NDJSON，每行一条响应
-- 注意：PowerShell 管道下进程退出码可能异常，用 `2>&1 | Out-File` 重定向到文件可稳定捕获输出
+- 注意：PowerShell 管道下进程退出码可能异常，用 `| Out-File` 重定向到文件可稳定捕获输出；**stderr 不要混进 stdout**——`2>&1` 会把 Electron 的 Chromium 噪音（如 `registration_protocol_win.cc ... TransactNamedPipe`）压到 NDJSON 结果前面，输出文件开头就不是干净 JSON，还抢占阅读注意力。错误本身走 NDJSON（`ok:false`）返回，stderr 至多另存 `2>err.log` 备用，不并进结果文件。
 
 ### MCP 模式
 
@@ -69,7 +69,7 @@ MCP 模式通过 stdin/stdout 传输 JSON-RPC 2.0，可在任意 MCP 客户端�
 
 - **总表 master.db 不会自动生成**。只有建了 sql-clean 管线并跑它，才会把大表数据汇进总表。`query.run` / `schema.tables` 不填 `folder` 时查的是 master.db（总表）——没走到 ② 之前总表是空的，`schema.tables` 查不到表；填 `folder` 则查该大表自己的 DB。
 - `pipeline.run` 写哪个 DB 由管线 kind 决定：`clean` → 大表 DB；`sql-clean` / `query` → 总表 DB。
-- **生成总表是铁律（见 §2 铁律第 5 条）**：任何数据任务必须走到 ②（总表）；需要结果表/查数再走 ③。做到大表就停 = 任务没完成。
+- **生成总表是铁律（见 §2 铁律第 6 条）**：任何数据任务必须走到 ②（总表）；需要结果表/查数再走 ③。做到大表就停 = 任务没完成。
 - `bigtable.previewRows` 预览的是大表 DB（①→② 的中间产物）；`query.run` / `schema.tables` 查的是总表（② 之后的最终库）。
 - **大表 = 初步映射**：每个「文件 × sheet」一条 `mapping.save`（`pattern` + `sheetName`），全部合并进大表，**不做行级清理**。行级清理（剔合计/签名行、加月份列）一律写在 ② 的 sql-clean SQL 里。
 - **交付用 `query.exportCsv`**：清洗在总表，导出的 CSV 应从总表来（`query.exportCsv {sql, path?}`），而不是大表。
@@ -92,8 +92,17 @@ MCP 模式通过 stdin/stdout 传输 JSON-RPC 2.0，可在任意 MCP 客户端�
    - 只把数据做到大表（`bigtable.previewRows` 有数据）**不算完成**。
    - 必须建 sql-clean 管线（`pipeline.save`，`kind:'sql-clean'`）并 `pipeline.run`，把大表汇进总表。
    - **完成判据**：`schema.tables` 在总表能查到结果表、`query.run` 能查到数据。二者任一不满足，任务未完成，继续补建/重跑，不得宣告完成。
-6. **若发现返回不允许给 AI 使用该 API**（硬性要求，不可省略）：立刻停止活动，告诉用户存在限制。
-7. **遇到未文档化的字段/参数/报错 → 先问操作者，或在确认后补进手册；禁止自行翻 `.onworking/` 或直连数据库反查**。`query.run` 报 `no such column`、`pipeline.save` 字段缺失等任何「手册没写」的情况，不得用 Python / sqlite3 / shell 打开 `.onworking/` 下的 db、JSON、YAML 看结构——那等于绕过命令体系。手册没写的，宁可多问一次。
+7. **若发现返回不允许给 AI 使用该 API**（硬性要求，不可省略）：立刻停止活动，告诉用户存在限制。
+8. **遇到未文档化的字段/参数/报错 → 先问操作者，或在确认后补进手册；禁止自行翻 `.onworking/` 或直连数据库反查**。`query.run` 报 `no such column`、`pipeline.save` 字段缺失等任何「手册没写」的情况，不得用 Python / sqlite3 / shell 打开 `.onworking/` 下的 db、JSON、YAML 看结构——那等于绕过命令体系。手册没写的，宁可多问一次。
+9. **使用 Python（或其他执行代码的脚本/编程语言）前，必须先停下征询操作者，不得直接动手**：只要打算写/跑 Python 去处理本任务数据，就先把四件事向操作者说明白，再询问选择——
+   - **当前情况**：做到哪一步、卡在哪、为什么不能靠现有命令/查询继续往下；
+   - **为什么必须用 Python**：清单命令做不了哪一件事、替代方案为什么不行；
+   - **Python 代码的策略**：读什么、算什么、输出到哪里，明确会不会碰源文件或 `.onworking/`；
+   - **若不能用 Python，操作者需要怎么人工处理**：给出不需要 Python 的替代路径。
+   操作者明确选择后按其指示执行——选了 Python 才跑，没选就换人工路径；未经说明并征得同意，Python 一步都不跑。
+10. **状态变更命令返回后，先回手册锁定下一步，再解读返回值**（硬性要求，不可省略）：收到**会改变状态**的 CLI 返回（`pipeline.save` / `pipeline.run` / `mapping.save` / `bigtable.save` / `bigtable.addFiles` / `query.run` 的写语句 / `query.exportCsv` / `bigtable.exportCsv` / `workspace.open`），或返回含 `warnings` / `unusedHeaders` / 错误 / 与预期不符时，**在解读返回值内容、说出下一步之前**，先输出一行「锁定卡」——
+   `下一步 = 依据 §4/§5 哪一步 → 下一条要发的命令 <命令名+关键参数>；若与返回值冲突或手册没写 → 停下问操作者，不猜。`
+   要写出具体命令才算真回看了手册；写不出就回 §4/§5 重读，仍定不出就停下问操作者。**纯读取返回**（`previewRows` / `schema.tables` / `setup.detectSource` / `list` / `state.summary`）无需锁定，直接继续——只在决策点锁定，避免提醒本身变成噪音。总表完成判据（铁律第 6 条）达成后，锁定卡改为完成声明，不再重复。
 
 ---
 
@@ -209,14 +218,15 @@ $lines | npm run --silent onw -- open D:/ws
 8. `pipeline.run {id}` —— 清洗入大表
 9. `bigtable.previewRows {folder}` —— 验证清洗结果
 10. `bigtable.exportCsv {folder}` —— （可选）导出清洗结果为 CSV，交付放 `<工作区根>/exports/`
-11. `pipeline.save` —— 建 sql-clean 管线（大表→总表），`pipeline.run`
+11. 询问用户：使用什么清洗策略（见第 5 节：先 `bigtable.previewRows`/`schema.tables` 看大表现状，再从严/中/宽三档选一档或自定义口径）——**得到确认后才进入下一步**
+12. `pipeline.save` —— 建 sql-clean 管线（大表→总表），`pipeline.run`
     - config = `{kind:'sql-clean', id, bigTables:['大表folder'], resultTable:'结果表名', sql:'SELECT ...'}`（见第 3 节）
     - **宽表转长表**：若大表是宽表（如每个项目一列），在 sql 里用 `UNION ALL` 拼接，每个非固定列写一个 `SELECT 固定列..., '列名' AS 项目, "列名" AS 值 FROM 表 WHERE ...`，用 PowerShell 循环自动生成（同上方「宽表多列自动映射」技巧），`UNION ALL` 连接后整体作为一条 SELECT
     - **加月份/年份列**：从血缘列 `__source_file` 用 `CASE WHEN __source_file LIKE '%202401%' THEN '2024-01' ... END` 推导
     - **行级清洗**：剔合计/签名/空行写在 WHERE 里（`工号 IS NOT NULL AND TRIM(工号)!='' AND 工号 NOT LIKE '%合计%'`），剔零值写 `AND "列名" IS NOT NULL AND "列名" != 0`
-12. `schema.tables` / `query.run` —— 在总表上查数验证
+13. `schema.tables` / `query.run` —— 在总表上查数验证
 
-> **强制：必须生成总表（铁律第 5 条）**。第 8~10 步只是完成「大表」，此时总表 master.db 还没生成。**任何数据任务都必须继续第 11 步（sql-clean → 总表）和第 12 步**，否则不算完成。完成判据：`schema.tables` 在总表查到结果表、`query.run` 查到数据。只汇报「大表已生成」= 未完成任务。
+> **强制：必须生成总表（铁律第 6 条）**。第 8~10 步只是完成「大表」，此时总表 master.db 还没生成。**任何数据任务都必须经第 11 步（与操作者确认清洗口径，见第 5 节）后，继续第 12 步（sql-clean → 总表）和第 13 步验证**，否则不算完成。完成判据：`schema.tables` 在总表查到结果表、`query.run` 查到数据。只汇报「大表已生成」= 未完成任务。
 
 ---
 
@@ -242,7 +252,7 @@ Agent 侧配合：`bigtable.previewRows {folder}` 拉样例 + `schema.tables {fo
 
 ### 第 3 步：确认后才动手
 
-问操作者选哪一档，或请操作者直接给出自己的清洗口径（增删 WHERE 条件、指定剔除规则、指定保留字段）。**得到明确确认后**，才按选定策略写 SQL（见第 4 节第 11 步的清洗技巧）、`pipeline.save` 存 sql-clean 管线、`pipeline.run`。未经确认不得写 SQL。
+问操作者选哪一档，或请操作者直接给出自己的清洗口径（增删 WHERE 条件、指定剔除规则、指定保留字段）。**得到明确确认后**，才按选定策略写 SQL（见第 4 节第 12 步的清洗技巧）、`pipeline.save` 存 sql-clean 管线、`pipeline.run`。未经确认不得写 SQL。
 
 > 与第 9 节「先粗后细」的关系：整体流程仍先粗后细、不要反复预览拖慢节奏；但**写清洗 SQL 这一步必须先走本流程确认清洗口径**——粗 = 流程推进快，不是随便猜清洗规则。
 
@@ -290,6 +300,8 @@ Agent 侧配合：`bigtable.previewRows {folder}` 拉样例 + `schema.tables {fo
 | 看总表有哪些表 | 读 master.db | `schema.tables` |
 | 查总表数据 | 直接开 sqlite | `query.run` |
 | 遇到未文档化字段/查结构 | python 连 `.onworking/` 的 db / 翻配置 JSON、YAML | 先问操作者，或在确认后补进手册 |
+| 任务需要 Python 处理数据 | 直接写/跑 python 脚本 | 停下向操作者说明当前情况/为什么必须 Python/代码策略/不用 Python 的人工替代，按其选择执行（铁律第 9 条） |
+| 想推进到下一步 | 状态变更（save/run/export/写 SQL）返回后凭记忆直接解读、不回手册锁定 | 解读返回值前先输出「锁定卡」（下一步=手册哪一步→下一条具体命令），写不出就重读或问操作者（铁律第 10 条） |
 | 加源文件 | `cp x.xlsx …/source/` | `bigtable.addFiles` |
 | 导出数据到 CSV | 自己拼字符串写文件 | `bigtable.exportCsv` |
 | 指定导入某个 sheet | 只导第一张将就 | `mapping.save` 的 `sheetName` |
