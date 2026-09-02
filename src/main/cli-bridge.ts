@@ -67,6 +67,11 @@ export function createCliBridge(opts: CliBridgeOptions): CliBridge {
       for (const cb of errCbs) cb(`CLI 进程退出 code=${code}`);
       child = null;
     });
+    // spawn 失败(如可执行文件不存在/被占用)走 onError 回调,而不是当 uncaughtException 崩主进程
+    child.on('error', (err: Error) => {
+      for (const cb of errCbs) cb(`CLI 启动失败: ${err.message}`);
+      child = null;
+    });
   }
 
   function send(request: IpcRequest): boolean {

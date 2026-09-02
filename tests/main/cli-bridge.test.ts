@@ -62,4 +62,16 @@ describe('cli-bridge', () => {
     expect(line).toBeTruthy();
     expect(line!).toContain('AI_MODE_RESTRICTED');
   });
+
+  it('spawn failure (e.g. ENOENT) routes to onError instead of crashing the process', async () => {
+    // 回归:cli-bridge 未监听 child 'error' 时,spawn 不存在的命令会抛成 uncaughtException,
+    // 在 Electron main 里表现为弹窗崩溃(spawn node ENOENT)。此处模拟同一场景。
+    const bridge = createCliBridge({ command: 'onw-no-such-binary-for-test', args: [] });
+    const got: string[] = [];
+    bridge.onError((l) => got.push(l));
+    bridge.open('x');
+    await new Promise((r) => setTimeout(r, 800)); // 等 spawn 异步失败
+    bridge.close();
+    expect(got.some((l) => l.includes('CLI 启动失败'))).toBe(true);
+  });
 });

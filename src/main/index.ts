@@ -13,17 +13,18 @@ import type { IpcRequest } from '../ipc/contracts';
 useConsoleLogging('info');
 
 // ---- CLI 桥:前端 → onw CLI 子进程(NDJSON),main 只转发 + 回推 ----
-// 关键:better-sqlite3 只有一个 ABI。CLI/MCP 一律跑系统 node(rebuild:node 编的就是它),
-// 不再用 ELECTRON_RUN_AS_NODE(那会让子进程跑 Electron 内置 node → ABI 115,与 node-ABI 模块 137 冲突)。
-// 因此 dev 与打包共用系统 node,全链路单一 ABI,不再来回切。打包机器需装 node。
+// CLI 一律用本进程可执行文件(dev=node_modules/electron.exe,打包=Onworking.exe)并以
+// ELECTRON_RUN_AS_NODE 启动 → 应用自带 node,不依赖系统 node(机器没装 node 也不炸,
+// 与 agents.md 打包版用法一致)。better-sqlite3 由 src/core/db/sqlite.ts 双 ABI 装载:
+// 内置 node(Electron ABI)自动落到 better-sqlite3-electron 副本,无需系统 node 的 137 版。
 const CLI_ENTRY = join(app.getAppPath(), 'dist', 'main', 'cli', 'index.js');
 // 会话秘密:仅主进程与 CLI 桥子进程共享。渲染层命令经它裹信封标记为「人类」,
 // 外部 AI 自己 spawn 的 CLI 拿不到该值 → 命令一律按 AI 走 aiOpenMode 门禁。
 const AUTH_SECRET = randomBytes(16).toString('hex');
 const bridge = createCliBridge({
-  command: 'node',
+  command: process.execPath,
   args: [CLI_ENTRY, 'open'],
-  env: { [AUTH_SECRET_ENV]: AUTH_SECRET },
+  env: { ELECTRON_RUN_AS_NODE: '1', [AUTH_SECRET_ENV]: AUTH_SECRET },
   authSecret: AUTH_SECRET,
 });
 let watchTimer: NodeJS.Timeout | null = null;
