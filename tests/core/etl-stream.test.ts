@@ -27,6 +27,25 @@ describe('applyMappingRow', () => {
     const miss = applyMappingRow(['x'], buildColIndex(['x']), MAPPINGS);
     expect(miss).toEqual({ date: null, debit: null, note: null });
   });
+
+  it('CR 表头兼容:映射带 \\r(校验/SheetJS 侧)而运行时表头已 LF 归一 → 仍取到列', () => {
+    // 回归:运行时表头(字面 CR 被 XML 归成 LF)只有 "\n";映射源表头照抄校验侧含 "\r\n"。
+    // 此前 colIndex.get 漏匹配 → 该列整列 null。去掉 \r 应命中同一列。
+    const headers = ['交易信息\n交易时间', '金额'];
+    const row = ['2024-01-01', 100];
+    const out = applyMappingRow(row, buildColIndex(headers), [
+      { sourceHeader: '交易信息\r\n交易时间', outputName: 'time', transform: 'none' },
+    ]);
+    expect(out).toEqual({ time: '2024-01-01' }); // 修复前是 { time: null }
+  });
+
+  it('CR 表头精确命中:运行时表头解码后即含 \\r,与映射逐字一致', () => {
+    const headers = ['交易信息\r\n交易时间', '金额'];
+    const out = applyMappingRow(['2024-01-01', 100], buildColIndex(headers), [
+      { sourceHeader: '交易信息\r\n交易时间', outputName: 'time', transform: 'none' },
+    ]);
+    expect(out).toEqual({ time: '2024-01-01' });
+  });
 });
 
 describe('insertRowsInBatches', () => {

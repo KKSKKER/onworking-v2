@@ -31,6 +31,14 @@ export function toOutputValue(v: unknown): unknown {
   return v instanceof CellError ? (v.code === 0 ? null : '') : v;
 }
 
+/** OOXML ST_Xstring 转义解码:`_xHHHH_` → 对应码点(SheetJS 读出即解码)。
+ *  字面文本 `_xHHHH_` 被写入方编码成 `_x005F_xHHHH_`,单遍左到右扫描天然还原:
+ *  `_x005F_` 先被解成 `_`,其后紧跟的 `xHHHH_` 因缺前导 `_` 不再命中 → 保持字面。
+ *  例:交易信息\r\n 经 SheetJS 写出为 `交易信息_x000d_\n`,这里解回 `交易信息\r\n`。 */
+export function decodeOoxmlEscapes(text: string): string {
+  return text.replace(/_x([0-9A-Fa-f]{4})_/g, (_m, hex: string) => String.fromCharCode(parseInt(hex, 16)));
+}
+
 /** 裁剪尾部空单元格(与 parser.ts 同语义,避免循环依赖故本地一份)。 */
 export function trimTrailingEmpty(arr: unknown[]): unknown[] {
   let end = arr.length;

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import * as XLSX from 'xlsx';
 import { parseExcelFile } from '../../src/core/ingest/parser';
 import {
-  CellError, RBErr, resolveCellValue, toOutputValue,
+  CellError, RBErr, resolveCellValue, toOutputValue, decodeOoxmlEscapes,
   openXlsxWorkbook, listWorkbookSheets, planSheetRange, readSheetRows,
 } from '../../src/core/ingest/xlsx-reader';
 
@@ -64,6 +64,22 @@ describe('resolveCellValue / toOutputValue', () => {
     expect(toOutputValue(new CellError(7))).toBe('');
     expect(toOutputValue(3)).toBe(3);
     expect(toOutputValue('x')).toBe('x');
+  });
+});
+
+describe('decodeOoxmlEscapes', () => {
+  it('把 _xHHHH_ 转义解回对应码点', () => {
+    expect(decodeOoxmlEscapes('交易信息_x000d_\n交易时间')).toBe('交易信息\r\n交易时间');
+    expect(decodeOoxmlEscapes('a_x0041_b')).toBe('aAb');
+    expect(decodeOoxmlEscapes('plain 表头')).toBe('plain 表头');
+  });
+  it('字面 _xHHHH_(写出为 _x005F_xHHHH_)保持字面,不被二次解码', () => {
+    expect(decodeOoxmlEscapes('_x005F_x000d_')).toBe('_x000d_');
+    expect(decodeOoxmlEscapes('_x005F_x005F_')).toBe('_x005F_');
+    expect(decodeOoxmlEscapes('成本_x005F_x0001_费用')).toBe('成本_x0001_费用');
+  });
+  it('真实转义与字面转义混杂,单遍正确还原', () => {
+    expect(decodeOoxmlEscapes('a_x000d_b_x005F_x000c_')).toBe('a\rb_x000c_');
   });
 });
 

@@ -166,11 +166,24 @@ export async function runCleanPipeline(
               });
             }
           }
+          // CRLF/CR 表头兜底提示:映射的源表头含 \r(校验/SheetJS 侧原样保留),而运行时表头
+          // 已被自研流式读取器按 XML 规范把字面 CR 归成 LF。applyMappingRow 按 \r 等价仍能取到列,
+          // 数据照常导入 —— 这里只在确属该场景时提示,不让它静默发生。
+          for (const m of ruleMappings) {
+            if (canonical.names.includes(m.sourceHeader)) continue; // 精确命中(含解码后的 \r 原样表头)
+            const lf = m.sourceHeader.replace(/\r/g, '');
+            if (lf !== m.sourceHeader && canonical.names.includes(lf)) {
+              warnings.add(`源表头「${m.sourceHeader}」与运行时表头仅在回车符(\r)不同,已按行尾等价匹配导入`);
+            }
+          }
           // 未用表头检测:源表头(规范名)里没被当前规则任一映射 sourceHeader 引用的,
-          // 数据不会进大表 —— 收集起来返回给 agent(可能有映射漏写/拼写不匹配)
-          const mappedHeaders = new Set(ruleMappings.map((m) => m.sourceHeader));
+          // 数据不会进大表 —— 收集起来返回给 agent(可能有映射漏写/拼写不匹配)。
+          // 判定按 \r 等价(映射带 \r 而运行时表头 LF 也算被引用),与 applyMappingRow 取列口径一致。
           for (const h of canonical.names) {
-            if (!mappedHeaders.has(h)) unusedHeaders.add(h);
+            const used = ruleMappings.some(
+              (m) => m.sourceHeader === h || m.sourceHeader.replace(/\r/g, '') === h,
+            );
+            if (!used) unusedHeaders.add(h);
           }
           const colIndex = buildColIndex(canonical.names);
           let rowNo = 0;

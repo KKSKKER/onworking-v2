@@ -5,7 +5,7 @@
 //   "2024-01"(期间)误判成日期序列号,损坏金融数据。类型转换交给 ETL 层。
 import * as XLSX from 'xlsx';
 import { readFileSync } from 'node:fs';
-import { openXlsxWorkbook, listWorkbookSheets, planSheetRange, readSheetRows } from './xlsx-reader';
+import { openXlsxWorkbook, listWorkbookSheets, planSheetRange, readSheetRows, decodeOoxmlEscapes } from './xlsx-reader';
 
 export interface ParsedSheet {
   sheetName: string;
@@ -184,6 +184,8 @@ export async function readExcelSheetStream(
   const plan = await planSheetRange(entry, wb.sharedStrings, headerRowIdx);
   const gen = readSheetRows(entry, wb.sharedStrings, plan);
   const first = await gen.next();
-  const headers = first.done ? [] : first.value.map((h) => String(h ?? '').trim());
+  // 表头文本先做 OOXML `_xHHHH_` 解码再 trim,与 SheetJS parseExcelFile 表头逐字节一致。
+  // 否则含 \r 的表头(写出为 `_x000d_`)在校验侧保留 \r、运行时侧留字面转义 → 映射断链 → 该列全空。
+  const headers = first.done ? [] : first.value.map((h) => decodeOoxmlEscapes(String(h ?? '')).trim());
   return { sheetName: target.name, headers, rows: gen };
 }

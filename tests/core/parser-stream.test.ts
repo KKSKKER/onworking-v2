@@ -78,6 +78,24 @@ describe('readExcelSheetStream', () => {
     expect(rows).toEqual([['张三', 90], ['李四', 80]]);
   });
 
+  it('含 \\r 的表头解码后与 parseExcelFile 逐字节一致(inline 与 bookSST 双路径)', async () => {
+    // 回归:表头含 \r 时 SheetJS 写出为 OOXML 转义 _x000d_、读回 \r;自研流式读取器此前留字面
+    // `_x000d_` → 运行时表头与校验侧不一致 → 映射断链 → 该列全空("交易时间列全空"根因)。
+    const header = '交易信息\r\n交易时间';
+    const aoa = [
+      [header, '交易金额', '摘要'],
+      ['2024-01-01 09:00', 100.5, 'a'],
+    ];
+    for (const opts of [{}, { bookSST: true }]) {
+      const file = makeXlsx(opts.bookSST ? 'crlf-sst.xlsx' : 'crlf-inline.xlsx', aoa, opts);
+      const a = parseExcelFile(file)[0];
+      const s = await readExcelSheetStream(file);
+      expect(s).not.toBeNull();
+      expect(s!.headers).toEqual(a.headers); // 核心:流式表头解码 == SheetJS
+      expect(s!.headers[0]).toBe('交易信息\r\n交易时间');
+    }
+  });
+
   it('共享字符串(bookSST)整条流式读不产生 U+FFFD(覆盖自研解码器)', async () => {
     // 必须 bookSST:默认内联字符串不走 sharedStrings 解码器,测不到共享字符串路径。
     // 7000×400 字符 ≈ 3MB,保证 unzipper 分块切在多字节中间(直击流式 TextDecoder)。

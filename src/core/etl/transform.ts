@@ -32,7 +32,13 @@ export function applyMappingRow(
 ): TransformedRow {
   const out: TransformedRow = {};
   for (const m of mappings) {
-    const idx = colIndex.get(m.sourceHeader);
+    let idx = colIndex.get(m.sourceHeader);
+    // CRLF/CR 表头兼容:源表头在校验/SheetJS 侧保留 \r,自研流式读取器按 XML 规范把字面 CR 归成 LF。
+    // 映射照抄校验侧会漏匹配(该列全 null)。去掉 \r 再取一次列;无 \r 的表头是 no-op,不受影响。
+    if (idx === undefined) {
+      const lf = m.sourceHeader.replace(/\r/g, '');
+      if (lf !== m.sourceHeader) idx = colIndex.get(lf);
+    }
     const raw = idx === undefined ? undefined : row[idx];
     out[m.outputName] = applyTransform(raw, m.transform);
   }
